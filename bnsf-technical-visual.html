@@ -1,0 +1,777 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BNSF Technical Deep-Dive — Pictorial</title>
+<style>
+:root{
+  --bg:#f7f8f4; --panel:#ffffff; --panel2:#eef2e8; --ink:#181d15; --muted:#5b6557;
+  --line:#dbe1d3; --accent:#538a00; --accent-hi:#446f00; --accent-soft:#e5efd2;
+  --code-bg:#edf0e7; --ok:#2e7d32; --bad:#b3402e; --warn:#9a6b00;
+  --display:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  --body:Charter,"Bitstream Charter",Cambria,Georgia,serif;
+  --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e120b; --panel:#161b12; --panel2:#1c2317; --ink:#e9ede3; --muted:#9aa591;
+  --line:#28311f; --accent:#76b900; --accent-hi:#8fd11a; --accent-soft:#243311;
+  --code-bg:#1b2115; --ok:#7ccb6e; --bad:#e4796a; --warn:#d9a93f;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e120b; --panel:#161b12; --panel2:#1c2317; --ink:#e9ede3; --muted:#9aa591;
+  --line:#28311f; --accent:#76b900; --accent-hi:#8fd11a; --accent-soft:#243311;
+  --code-bg:#1b2115; --ok:#7ccb6e; --bad:#e4796a; --warn:#d9a93f;
+}
+:root[data-theme="light"]{
+  --bg:#f7f8f4; --panel:#ffffff; --panel2:#eef2e8; --ink:#181d15; --muted:#5b6557;
+  --line:#dbe1d3; --accent:#538a00; --accent-hi:#446f00; --accent-soft:#e5efd2;
+  --code-bg:#edf0e7; --ok:#2e7d32; --bad:#b3402e; --warn:#9a6b00;
+}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:1.05rem;line-height:1.65;margin:0}
+.wrap{max-width:76rem;margin:0 auto;padding:0 1.25rem 6rem;display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.5rem}
+@media (max-width:1000px){.wrap{grid-template-columns:minmax(0,1fr)}nav.toc{display:none}}
+nav.toc{position:sticky;top:1rem;align-self:start;font-family:var(--mono);font-size:.78rem;padding-top:2.2rem}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:.28rem .6rem;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent-hi);border-left-color:var(--accent)}
+nav.toc .toc-h{color:var(--ink);font-weight:600;margin-top:.9rem;padding:.2rem .6rem;border-left:2px solid transparent;text-transform:uppercase;letter-spacing:.08em;font-size:.68rem}
+main{min-width:0;max-width:48rem}
+h1,h2,h3,h4{font-family:var(--display);line-height:1.2;text-wrap:balance}
+h1{font-size:clamp(2rem,5vw,3rem);letter-spacing:-.02em;margin:.4rem 0 .6rem}
+h2{font-size:1.65rem;letter-spacing:-.01em;margin:0 0 .9rem;padding-top:3.2rem}
+h3{font-size:1.18rem;margin:2rem 0 .5rem}
+h4{font-size:1rem;margin:1.4rem 0 .35rem}
+p{margin:.7rem 0}
+.eyebrow{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent-hi);font-weight:600}
+.lede{font-size:1.15rem;color:var(--muted)}
+.hero{padding-top:3.2rem;border-bottom:1px solid var(--line);padding-bottom:1.8rem;margin-bottom:.5rem}
+table{border-collapse:collapse;width:100%;font-size:.92rem;margin:1rem 0}
+.tblwrap{overflow-x:auto;margin:1rem 0}
+th{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;text-align:left;color:var(--muted);border-bottom:2px solid var(--line);padding:.45rem .6rem}
+td{border-bottom:1px solid var(--line);padding:.5rem .6rem;vertical-align:top}
+td:first-child{font-weight:600;white-space:nowrap}
+code{font-family:var(--mono);font-size:.85em;background:var(--code-bg);border-radius:.25rem;padding:.1rem .35rem}
+.fig{background:var(--panel);border:1px solid var(--line);border-radius:.55rem;padding:1rem;margin:1.4rem 0;overflow-x:auto}
+.fig figcaption{font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:.7rem;letter-spacing:.03em}
+.fig svg{display:block;margin:0 auto;max-width:100%;height:auto}
+svg text{font-family:var(--mono)}
+.d-box{fill:var(--panel2);stroke:var(--line);stroke-width:1;rx:6}
+.d-hot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+.d-lab{fill:var(--ink);font-size:12px}
+.d-sub{fill:var(--muted);font-size:10px}
+.d-acc{fill:var(--accent-hi);font-size:11px;font-weight:600}
+.d-arrow{stroke:var(--muted);stroke-width:1.4;fill:none;marker-end:url(#arr)}
+.d-arrow2{stroke:var(--accent);stroke-width:1.6;fill:none;marker-end:url(#arrg)}
+.callout{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--panel);border-radius:.35rem;padding:.8rem 1rem;margin:1.2rem 0;font-size:.95rem}
+.callout .tag{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700;display:block;margin-bottom:.25rem}
+.trap{border-left-color:var(--warn)}
+.trap .tag{color:var(--warn)}
+details.deep{border:1px solid var(--line);border-left:3px solid var(--accent-hi);border-radius:.45rem;background:var(--panel);margin:1.1rem 0}
+details.deep summary{cursor:pointer;padding:.8rem 1rem;font-weight:600;font-family:var(--display);font-size:.97rem;list-style:none}
+details.deep summary::before{content:"DEEP DIVE";font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;color:var(--accent-hi);border:1px solid var(--accent);border-radius:.3rem;padding:.12rem .45rem;margin-right:.65rem;vertical-align:1px}
+details.deep summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:.45rem}
+details.deep .dd{padding:.2rem 1.1rem 1rem;font-size:.95rem;border-top:1px dashed var(--line)}
+details.deep .dd p:first-child{margin-top:.6rem}
+ul{padding-left:1.3rem}li{margin:.3rem 0}
+.formula{font-family:var(--mono);font-size:.95rem;background:var(--code-bg);border:1px solid var(--line);border-radius:.4rem;padding:.7rem .9rem;margin:.9rem 0;overflow-x:auto;white-space:nowrap}
+/* interactive data-flow diagrams (same engine as the NCA-GENL guide) */
+figure.viz{padding:0;overflow:hidden}
+.vhead{display:flex;justify-content:space-between;align-items:center;gap:.7rem;padding:.6rem .9rem;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.vtitle{font-family:var(--display);font-weight:600;font-size:.95rem}
+.vhint{font-family:var(--mono);font-size:.63rem;color:var(--muted);letter-spacing:.03em;width:100%}
+.vtoggle{display:inline-flex;border:1px solid var(--line);border-radius:.35rem;overflow:hidden;flex-shrink:0}
+.vtoggle button{font-family:var(--mono);font-size:.66rem;font-weight:600;padding:.32rem .6rem;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.vtoggle button.on{background:var(--accent);color:var(--bg)}
+.vtoggle button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.vbody{padding:.9rem .9rem .4rem;overflow-x:auto}
+.viz figcaption{padding:.5rem .9rem .8rem}
+.viz.mode-num .vcon{display:none}.viz.mode-con .vnum{display:none}
+g.vhit{cursor:pointer;outline:none}
+g.vhit:hover .hitbg,g.vhit:focus .hitbg{stroke:var(--accent-hi);stroke-width:2}
+#vtip{position:fixed;z-index:50;max-width:19rem;background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:.72rem;line-height:1.45;padding:.45rem .6rem;border-radius:.35rem;pointer-events:none;display:none}
+#vask{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:1rem;max-width:36rem;width:calc(100% - 2rem);background:var(--panel);border:1px solid var(--accent);border-radius:.55rem;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:.85rem 1rem;display:none;max-height:80vh;overflow-y:auto}
+#vask .vlbl{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700}
+#vask .vq{font-size:.93rem;margin:.35rem 0 .7rem;font-weight:600;font-family:var(--display)}
+#vask .vbtns{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+#vask .vnote{font-family:var(--mono);font-size:.64rem;color:var(--muted)}
+#vask textarea{width:100%;box-sizing:border-box;font-family:var(--body);font-size:.9rem;border:1px solid var(--line);border-radius:.4rem;padding:.5rem .6rem;background:var(--bg);color:var(--ink);resize:vertical;margin-bottom:.6rem}
+.askAnswer{display:none;margin-top:.8rem;padding:.7rem .9rem;background:var(--panel2);border-radius:.4rem;border-left:3px solid var(--accent);font-size:.92rem;white-space:pre-wrap;max-height:40vh;overflow-y:auto}
+#qaHistoryBtn{position:fixed;left:1rem;bottom:1rem;z-index:65;width:2.75rem;height:2.75rem;border-radius:50%;border:1px solid var(--accent);background:var(--panel);color:var(--accent-hi);font-size:1.25rem;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;padding:0}
+#qaHistoryBtn:hover{background:var(--accent-soft)}
+#qaHistoryPanel{position:fixed;left:1rem;bottom:4.5rem;z-index:64;width:min(26rem,calc(100vw - 2rem));max-height:65vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:.6rem;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:.75rem;display:none}
+#qaHistoryPanel.open{display:block}
+#qaHistoryPanel .qhTitle{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700;margin-bottom:.5rem;position:sticky;top:0;background:var(--panel)}
+#qaHistoryPanel .qhItem{padding:.55rem 0;border-bottom:1px solid var(--line)}
+#qaHistoryPanel .qhItem:last-child{border-bottom:none}
+#qaHistoryPanel .qhMeta{font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:.2rem}
+#qaHistoryPanel .qhQ{font-weight:600;font-size:.88rem;margin-bottom:.25rem}
+#qaHistoryPanel .qhA{font-size:.85rem;color:var(--muted);white-space:pre-wrap}
+#qaHistoryPanel .qhEmpty{font-size:.85rem;color:var(--muted);padding:.5rem 0}
+h2 .topicask,h3 .topicask,h4 .topicask{font-family:var(--mono);font-size:.6rem;font-weight:700;letter-spacing:.02em;border:1px solid var(--line);border-radius:.3rem;background:var(--panel);color:var(--accent-hi);padding:.15rem .5rem;margin-left:.6rem;cursor:pointer;vertical-align:middle;white-space:nowrap}
+h2 .topicask:hover,h3 .topicask:hover,h4 .topicask:hover{border-color:var(--accent);background:var(--accent-soft)}
+svg .vlab{fill:var(--ink);font-size:11px}
+svg .vsm{fill:var(--muted);font-size:9.5px}
+svg .vacc{fill:var(--accent-hi);font-size:10px;font-weight:600}
+svg .vwarn{fill:var(--warn);font-size:10px;font-weight:600}
+svg .vbad{fill:var(--bad);font-size:10px;font-weight:600}
+svg .vok{fill:var(--ok);font-size:10px;font-weight:600}
+svg .shape{font-size:10px;fill:var(--accent-hi);font-weight:700;font-variant-numeric:tabular-nums}
+svg .cell{fill:var(--panel2);stroke:var(--line);stroke-width:.7}
+svg .cellhot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.1}
+svg .cellblk{fill:color-mix(in srgb,var(--bad) 16%,var(--panel));stroke:color-mix(in srgb,var(--bad) 40%,var(--line))}
+svg .cellv{fill:var(--ink);font-size:9px;font-variant-numeric:tabular-nums}
+svg .cellvd{fill:var(--muted);font-size:9px;font-variant-numeric:tabular-nums}
+svg .bigbox{fill:var(--panel2);stroke:var(--line)}
+svg .frozenbox{fill:color-mix(in srgb,var(--muted) 10%,var(--panel));stroke:var(--muted);stroke-width:1.2}
+svg .chip{fill:var(--code-bg);stroke:var(--line)}
+footer{margin-top:4rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.85rem;color:var(--muted)}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-h">BNSF technical deep-dive</div>
+  <a href="#opt">1 · Optimization (LP/MILP)</a>
+  <a href="#geo">2 · Geospatial &amp; routing</a>
+  <a href="#vec">3 · Vector DBs &amp; embeddings</a>
+  <a href="#rag">4 · RAG, CoT &amp; LLM eval</a>
+  <a href="#gpu">5 · GPU optimization</a>
+</nav>
+
+<main>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker>
+<marker id="arrg" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--accent)"/></marker>
+</defs></svg>
+
+<header class="hero">
+  <span class="eyebrow">BNSF Sr/Staff Data Scientist — Core Technical Depth</span>
+  <h1>Technical Deep-Dive — Pictorial</h1>
+  <p class="lede">The five topics from BNSF's own screening questionnaire (job #95417) that aren't generic LLM-app skills — each walked through with real, verified numbers and interactive diagrams, the same way the transformer/fine-tuning/pretraining sections were built. Companion to <code>core-technical-depth.md</code>, which covers these topics in prose; this page is the pictures.</p>
+</header>
+
+<section id="opt">
+<h2>1 · Optimization Algorithms (LP / MILP)</h2>
+<p>BNSF's own screening questionnaire attaches a specific bar to this one — <strong>6+ years building optimization algorithms</strong> — the only technical item on the form with an explicit years requirement. Linear programming (LP) optimizes a linear objective under linear constraints over continuous variables; mixed-integer programming (MILP) is the same problem with some variables forced to whole numbers, which looks like a small change but makes the problem NP-hard in the worst case. Both examples below are real, solver-verified (PuLP/CBC) numbers, not illustrative ones.</p>
+
+<h3>The geometry of an LP optimum — it's always a corner</h3>
+<p>Take a concrete allocation problem: two train configurations, type A and type B, to build this period. Each type-A train needs 2 crew-hours and 1 yard-slot; each type-B needs 1 crew-hour and 1 yard-slot. Crew hours are capped at 40, yard capacity at 30. Type A nets $40 profit, type B nets $30. Maximize profit.</p>
+<div class="formula">maximize   40x + 30y<br>subject to  2x +  y ≤ 40   (crew hours)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x +  y ≤ 30   (yard capacity)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x, y ≥ 0</div>
+<figure class="fig viz" data-viz="lpgeometry" id="viz-lpgeometry"></figure>
+<p>The reason LP is solvable in polynomial time in practice (simplex) despite an enormous space of possible (x,y) pairs: the optimum of a linear objective over a convex feasible region is <em>always</em> at a vertex — never floating in the interior of a face, never strictly inside the region. Simplex exploits this directly: instead of scanning the whole shaded area, it walks vertex to vertex along the boundary, always improving, until no neighboring vertex is better. Here, that walk finds <strong>(x=10, y=20), profit=$1000</strong> — solver-verified, and visibly the last vertex the profit line touches before leaving the feasible region.</p>
+
+<h3>MILP — the same problem, with a bar it can't split</h3>
+<p>Change the numbers slightly (crew-hour coefficient 2→4 on one constraint, objective 40x+30y→5x+4y) so the LP relaxation's optimum lands on a genuinely fractional vertex — <strong>real solver output, not a contrived textbook fraction</strong>:</p>
+<div class="formula">maximize   5x + 4y<br>subject to  2x + 3y ≤ 34<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4x + 3y ≤ 48<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x, y ≥ 0,  x and y must be whole trains</div>
+<figure class="fig viz" data-viz="milptree" id="viz-milptree"></figure>
+<p>You can't dispatch 6.667 trains, so the LP relaxation's answer (x=7, y=6.667, profit=$61.667) isn't a valid plan — it's an upper bound, and the whole branch-and-bound algorithm is a search for the best integer point that never exceeds it. <strong>Branch</strong>: pick the fractional variable (y=6.667) and split into two subproblems, y≤6 and y≥7 — every integer solution lives in exactly one of these, none are lost. <strong>Bound</strong>: solve each relaxed subproblem; if its optimum is already integer, it's a candidate answer (an “incumbent”); if a subproblem's relaxed bound is already worse than the best integer answer found so far, prune the whole subtree without solving it further — this pruning is what keeps branch-and-bound from degenerating into brute-force enumeration of every integer point.</p>
+
+<div class="callout"><span class="tag">Where I'd actually use this at BNSF</span>Train blocking (which railcars group into which train to minimize re-switching), crew scheduling under hours-of-service rules, and locomotive assignment are all realistic MILP formulations — decision variables per car/crew/locomotive, capacity and regulatory constraints, an objective in cost or cars-delayed. The 2-variable example above is deliberately small enough to see the mechanism; a real formulation might have thousands of variables, solved with the same branch-and-bound idea, just with much smarter branching/cutting-plane heuristics than exhaustive search.</div>
+</section>
+
+<section id="geo">
+<h2>2 · Geospatial Analytics &amp; Route Optimization</h2>
+<p>Named explicitly in BNSF's screening questionnaire: “knowledge of geospatial analytics, route optimization, and GIS concepts.” Three distinct ideas get conflated under that heading — distance-on-a-sphere, shortest-path search, and multi-stop routing — each verified below with real computed numbers, not textbook placeholders.</p>
+
+<h3>Why a ruler on a lat/long map lies to you</h3>
+<figure class="fig viz" data-viz="haversine" id="viz-haversine"></figure>
+<p>Chicago to Los Angeles — a real BNSF transcontinental corridor — is <strong>2,804 km</strong> by great-circle (Haversine) distance. Treat latitude and longitude as if they were flat x/y coordinates on a ruler (a very common first-pass mistake), and you get <strong>3,507 km</strong> — a 25% overestimate. The reason isn't rounding error: a degree of longitude is a real physical distance only at the equator (111.3 km); by Chicago's latitude (41.9°N) it has already shrunk to 82.9 km, because longitude lines converge toward the poles while latitude lines stay parallel. Haversine accounts for this curvature directly; naive Euclidean distance on raw coordinates cannot.</p>
+
+<h3>Dijkstra vs. A* — same answer, very different amount of work</h3>
+<figure class="fig viz" data-viz="dijkstraastar" id="viz-dijkstraastar"></figure>
+<p>Both algorithms are guaranteed to find the same shortest path — 8.0 units on this real 15-node network, source to goal. The difference is <em>how much of the graph they touch to get there</em>. Dijkstra expands strictly by cumulative distance from the source, with no notion of where the goal is — so it explores the three decoy branches (small detours that go nowhere useful) before it's confident they're not shortcuts, expanding <strong>14 of 15 nodes</strong>. A* adds a heuristic (straight-line distance to the goal) that makes it prioritize nodes that seem to be heading the right direction — it never touches a single decoy, expanding exactly <strong>9 nodes</strong>, the direct path only. On a real, sparse rail network with genuine dead-end branches, that gap compounds fast.</p>
+
+<h3>TSP vs. VRP — the constraint that changes everything</h3>
+<figure class="fig viz" data-viz="tspvrp" id="viz-tspvrp"></figure>
+<p>Same 5 stops, same depot, same distance matrix — two different problems. TSP (one vehicle, visit everyone, return to depot) finds a single tour of <strong>223 distance-units</strong>. The moment each stop has a demand (a real shipment size) and each vehicle has a real capacity limit, that single-tour answer may not even be <em>feasible</em> — here, total demand (17 units) exceeds one vehicle's capacity (9), so it's not optional to split the work. The capacity-respecting VRP answer uses <strong>2 vehicles, 303 distance-units total</strong> — genuinely more total distance than the capacity-blind TSP number, and that's not a worse answer, it's the actual best <em>feasible</em> one. Reaching for a bare TSP formulation on a real capacity-constrained routing problem produces a number that looks better and describes a plan that can't be executed.</p>
+
+<div class="callout"><span class="tag">Where I'd actually use this at BNSF</span>Haversine (or a proper projected coordinate system) underlies any distance/ETA calculation across the network. Dijkstra/A*-style search underlies dispatch and routing decision support at the track-segment level. TSP-vs-VRP is the exact shape of real fleet/crew routing — capacity, time windows, and hours-of-service rules are what make it a VRP, not a toy TSP, and OR-Tools (§ optimization above) is the standard tool for solving it at real scale.</div>
+</section>
+
+<section id="vec">
+<h2>3 · Vector Databases &amp; Embeddings</h2>
+<p>Item 17 on BNSF's screening form, by name. Three mechanics worth being able to draw from memory: what an embedding actually captures, why nearest-neighbor search needs to be approximate at real scale, and how chunk boundaries can silently break retrieval.</p>
+
+<h3>What similarity actually looks like, with a real model</h3>
+<figure class="fig viz" data-viz="embedsim" id="viz-embedsim"></figure>
+<p>Four real sentences, embedded with a real pretrained model (<code>all-MiniLM-L6-v2</code>, 384 dimensions) — not hand-picked toy numbers. The two brake-wear sentences, worded completely differently, score <strong>0.792</strong> cosine similarity; every pairing against the unrelated revenue-report and crew-scheduling sentences scores <strong>near zero</strong>, including one slightly <em>negative</em> pairing. Nobody told the model these two sentences were about the same topic — that clustering fell out entirely from how the model was trained, which is exactly why embeddings power semantic search where keyword overlap alone would miss the paraphrase.</p>
+
+<h3>Why nearest-neighbor search has to be approximate</h3>
+<figure class="fig viz" data-viz="annscale" id="viz-annscale"></figure>
+<p>Brute-force search compares a query against every stored vector — exact, and fine at small scale. At real corpus sizes it stops being fine: 10 million stored chunks means 10 million comparisons, every query. An approximate index (HNSW is the common one) organizes vectors into a navigable graph so a query only has to hop through roughly <strong>log(N)</strong> comparisons to find a very-likely-correct nearest neighbor — the trade is a small, tunable chance of missing the true single-best match in exchange for a search that stays fast as the corpus grows by orders of magnitude.</p>
+
+<h3>Where a fact can get lost — chunk boundaries</h3>
+<figure class="fig viz" data-viz="chunkoverlap" id="viz-chunkoverlap"></figure>
+<p>A real 27-word sentence, fixed-size chunked at 10 words with no overlap, splits the deadline (“92 days”, chunk 1) from its consequence (“must be | immediately removed…”, split across chunks 2 and 3) — a query asking what happens if the deadline is missed can retrieve a chunk with half the fact and never surface the other half. A 5-word overlap creates a chunk that spans the boundary and contains the complete clause. This is the exact same failure mode named in <code>core-technical-depth.md</code>'s RAG pitfalls, now shown on real word-for-word text instead of asserted abstractly.</p>
+
+<div class="callout"><span class="tag">Where I'd actually use this at BNSF</span>The vector-DB choice (FAISS/pgvector/Pinecone/MongoDB Atlas) matters far less than getting chunking and embedding-model fit right for the actual document set — maintenance manuals, safety procedures, engineering specs — which is exactly the “build vs. buy” framing already in <code>core-technical-depth.md</code>'s RAG section.</div>
+</section>
+
+<section id="rag">
+<h2>4 · RAG, Chain-of-Thought &amp; LLM Evaluation Methodologies</h2>
+<p>Item 16 on BNSF's screening form bundles these three together. RAG's chunking/retrieval mechanics are covered above (§3) and in <code>core-technical-depth.md</code>; this section covers the other two with something stronger than a claim — a real, reproducible failure and a real judge verdict, both run live through the same Azure OpenAI deployment powering this guide's click-to-ask feature.</p>
+
+<h3>Chain-of-Thought — a real, reproducible failure it fixes</h3>
+<figure class="fig viz" data-viz="cotcompare" id="viz-cotcompare"></figure>
+<p>A genuine multi-step word problem, run through the same model three separate times at temperature 0 (fully deterministic): asked for only the final number, it returns <strong>406 — wrong, every single time</strong>. Asked to show its work step by step first, it correctly gets <strong>417</strong>, with every intermediate calculation traceable. Nothing about the underlying model changed between the two calls — only whether it was allowed to spend tokens on intermediate reasoning before committing to an answer. This is why CoT's benefit concentrates on genuinely multi-step problems and does nothing for a single-lookup question — there's no intermediate reasoning to externalize.</p>
+
+<h3>Multi-agent debate — FinSight's actual architecture</h3>
+<figure class="fig viz" data-viz="multiagent" id="viz-multiagent"></figure>
+<p>The pattern behind the CoT result generalizes: instead of one model reasoning silently, split the reasoning across roles that check each other. This is the literal architecture of FinSight, the multi-agent platform described in <code>behavioral-partnership-star-stories.md</code> and <code>core-technical-depth.md</code> — a Portfolio agent proposes, a Market agent challenges with current conditions, a Critic agent is specifically prompted to find what the other two missed, before anything reaches the user.</p>
+
+<h3>LLM-as-judge — a real faithfulness verdict</h3>
+<figure class="fig viz" data-viz="llmjudge" id="viz-llmjudge"></figure>
+<p>A real maintenance-bulletin context, a real generated answer that mixes two true claims with one fabricated one (a made-up axle-replacement rule), scored by a real LLM-as-judge call using the exact rubric from <code>core-technical-depth.md</code>. The judge didn't just say “mostly good” — it identified the <em>specific</em> unsupported sentence by name and scored it 2/5, exactly the granularity a real faithfulness pipeline needs to be useful rather than a vague pass/fail.</p>
+
+<div class="callout"><span class="tag">Where I'd actually use this at BNSF</span>CoT is nearly free — always try it first on any multi-step reasoning task before reaching for something heavier. Multi-agent patterns cost real latency and API spend (see GPU/serving discussion elsewhere), so they're worth it specifically when a single pass is genuinely error-prone, not by default. LLM-as-judge faithfulness scoring is exactly what I'd want gating any RAG system before it reaches a maintenance crew or safety-adjacent decision, given the same reasoning already in <code>system-design-prep.md</code>'s RAG design section.</div>
+</section>
+
+<section id="gpu">
+<h2>5 · GPU Optimization</h2>
+<p>Item 19 on BNSF's screening form. Four techniques, each solving a different constraint, each shown here with exact arithmetic on the same concrete model — GPT-2 small's real dimensions (d<sub>model</sub>=768, 12 layers), already established in the NCA-GENL transformer walkthrough — not made-up round numbers.</p>
+
+<h3>Mixed precision — where the memory actually gets saved</h3>
+<figure class="fig viz" data-viz="mixedprecision" id="viz-mixedprecision"></figure>
+<p>A common misconception: mixed precision mainly shrinks parameter/optimizer memory. It doesn't — optimizer states (Adam's momentum and variance) are kept in fp32 regardless, for numerical stability (“master weights”). The real savings are in <strong>activations</strong> — every intermediate tensor kept around for the backward pass. For one concrete, batch=8, sequence=1024 forward pass through GPT-2 small's 12 layers: <strong>288 MB</strong> of hidden-state activations in fp32, exactly <strong>144 MB</strong> in fp16/bf16 — a precise halving, because it's the same numbers stored in half the bytes, nothing more mysterious than that.</p>
+
+<h3>Gradient accumulation — simulating a bigger batch than memory allows</h3>
+<figure class="fig viz" data-viz="gradaccum" id="viz-gradaccum"></figure>
+<p>If your GPU can only fit a micro-batch of 4 sequences, but training is more stable at batch 32: run 8 micro-batches of forward+backward <em>without</em> zeroing gradients between them, letting them sum, then take exactly one optimizer step. 4 × 8 = <strong>32</strong> — the same effective batch, at the cost of 8× the wall-clock steps to see the same number of sequences, not extra memory.</p>
+
+<h3>Gradient checkpointing — trading compute for memory</h3>
+<figure class="fig viz" data-viz="gradcheckpoint" id="viz-gradcheckpoint"></figure>
+<p>Instead of keeping all 12 layers' activations (288 MB), checkpoint only 4 evenly-spaced layers and <strong>recompute</strong> the other 8 during the backward pass by re-running the forward computation for that segment. Stored activation memory drops to <strong>96 MB — a third</strong> — at the cost of re-running roughly a third of the forward pass again, which is exactly where the commonly-cited “20–30% more compute” figure for checkpointing comes from: it's not a rule of thumb pulled from nowhere, it's the direct consequence of how many layers you chose to recompute.</p>
+
+<h3>DDP — the same math, run on N GPUs at once</h3>
+<figure class="fig viz" data-viz="ddp" id="viz-ddp"></figure>
+<p>Each GPU holds a full model replica and a different shard of the data, computes gradients independently, then an <strong>all-reduce</strong> step averages gradients across every replica before any optimizer step runs — so all replicas apply the identical update and stay in sync, behaving as if trained on one big batch, computed in parallel. This is a collective operation: every rank must call it the same number of times, in the same order, or the whole group deadlocks waiting for a peer that never shows up — the single most common real DDP bug.</p>
+
+<div class="callout"><span class="tag">Where I'd actually use this at BNSF</span>These four compose, in this order of complexity: mixed precision essentially always on for anything GPU-trained; gradient accumulation the moment batch size is memory-constrained; gradient checkpointing only once activation memory specifically (not batch size) is the bottleneck; DDP only once single-GPU training is confirmed to actually be the limiting factor — reaching for multi-GPU before that is solving a problem you don't have yet.</div>
+</section>
+
+<section id="qa">
+<h2>6 · Practice Q&amp;A — Self-Test</h2>
+<p>Ten recall questions across all five sections above, grounded in the same real, solver-verified and model-verified numbers already worked through on this page — no new figures, just testing whether they stuck.</p>
+
+<h3>Q: In the LP train-allocation example, what's the profit-maximizing mix of type-A and type-B trains, and why is that answer guaranteed to sit at a corner of the feasible region rather than somewhere in the interior?</h3>
+<p><strong>A:</strong> The solver-verified optimum is (x=10, y=20), profit $1000 — the last vertex the $40x+$30y isoprofit line still touches before leaving the shaded feasible region. The optimum of a linear objective over a convex feasible region is always at a vertex, never floating inside a face, which is exactly what lets simplex walk vertex-to-vertex instead of scanning the whole region.</p>
+
+<h3>Q: Why isn't the MILP example's LP-relaxation answer (x=7, y=6.667, profit=61.667) a usable plan, and what's the actual final integer answer once branch-and-bound finishes?</h3>
+<p><strong>A:</strong> You can't dispatch 6.667 trains, so the fractional relaxation is only a valid upper bound on any integer solution, not an executable plan. Branch-and-bound splits on the fractional variable and prunes subtrees whose bound can't beat the best integer answer found so far, eventually landing on the provably optimal integer solution x=9, y=4, profit=61.</p>
+
+<h3>Q: How far off is naive Euclidean distance on raw lat/long coordinates for the Chicago-to-LA route, and what's the geometric reason for the error?</h3>
+<p><strong>A:</strong> Real great-circle (Haversine) distance is 2,804 km; treating latitude/longitude as flat x/y coordinates gives 3,507 km, a 25% overestimate. The cause is that longitude lines converge toward the poles — a degree of longitude is 111.3 km at the equator but only 82.9 km at Chicago's 41.9°N latitude — while latitude lines stay parallel, so flat-ruler math systematically inflates east-west distance.</p>
+
+<h3>Q: Why does the VRP answer for the 5-stop example (303 distance-units, 2 vehicles) end up longer than the TSP answer (223 distance-units, 1 vehicle) — and why is that not actually a worse result?</h3>
+<p><strong>A:</strong> The TSP tour assumes one vehicle can carry unlimited demand, but total demand across the 5 stops is 17 units against a real per-vehicle capacity of 9, so the single-tour answer is infeasible in practice. The capacity-respecting VRP solution splits the work across 2 vehicles for 303 units total — more distance, but it's the best plan that can actually be executed.</p>
+
+<h3>Q: Two paraphrased brake-wear sentences and two unrelated sentences (a revenue report, a crew-scheduling note) were embedded with a real 384-dim model. What similarity pattern resulted, and why does it matter for RAG?</h3>
+<p><strong>A:</strong> The two brake-wear sentences, worded completely differently, scored 0.792 cosine similarity, while every pairing against the unrelated sentences scored near zero (one slightly negative). Nothing was hand-tuned to produce that clustering — it fell out of how the model was trained — which is exactly why embedding-based retrieval can match a paraphrase that keyword search would miss.</p>
+
+<h3>Q: In the chunk-boundary example, what specifically went wrong with the no-overlap 10-word chunking of the brake-inspection sentence, and how did adding overlap fix it?</h3>
+<p><strong>A:</strong> With no overlap, the consequence clause was split across chunk boundaries — chunk 2 ended at "must be" and chunk 3 picked up with "immediately removed…" — so neither chunk alone answered what happens if the deadline is missed. Adding a 5-word overlap created a chunk spanning that exact boundary, containing the complete clause in one place.</p>
+
+<h3>Q: In the Chain-of-Thought comparison, what answer did the model give when forced to respond with only the final number, versus when asked to show its work, and what does that reveal about why CoT helps?</h3>
+<p><strong>A:</strong> Asked for only the final number at temperature 0, the model returned 406 — wrong, all three trials. Asked to show intermediate steps first, the same model correctly reached 417, matching ground truth. Nothing about the model changed between calls; the difference was purely whether it could spend tokens on intermediate reasoning before committing to an answer, which is why CoT's benefit concentrates on genuinely multi-step problems.</p>
+
+<h3>Q: In the LLM-as-judge faithfulness example, what score did the judge give the generated maintenance-bulletin answer, and what specifically triggered that score?</h3>
+<p><strong>A:</strong> The judge scored the answer 2/5 and named the specific unsupported sentence: a fabricated claim about a 5-year axle-replacement rule that didn't appear anywhere in the source context, even though the answer's other two claims (the 92-day inspection interval and 24-hour removal at >40% wear) were genuinely grounded. That claim-level granularity — not just a pass/fail — is what a real faithfulness-gating pipeline needs to act on.</p>
+
+<h3>Q: For a batch=8, sequence=1024 forward pass through GPT-2 small's 12 layers, how much activation memory does mixed precision actually save, and what memory does it leave untouched?</h3>
+<p><strong>A:</strong> Hidden-state activations drop from 288 MB in fp32 to exactly 144 MB in fp16/bf16 — a precise halving, since it's the same numbers stored in half the bytes. Optimizer states (Adam's momentum and variance) stay in fp32 regardless for numerical stability, so mixed precision's real savings are in activations, not the commonly assumed parameter/optimizer memory.</p>
+
+<h3>Q: In the gradient checkpointing example, how much does checkpointing 4 of GPT-2 small's 12 layers reduce stored activation memory, and what's the compute cost?</h3>
+<p><strong>A:</strong> Checkpointing 4 evenly-spaced layers instead of keeping all 12 layers' activations drops stored memory from 288 MB down to 96 MB — a third — by recomputing the other 8 layers' activations during the backward pass. That recomputation is the direct source of the commonly cited "20-30% more compute" cost for checkpointing, not an arbitrary rule of thumb.</p>
+</section>
+
+<footer>Built alongside <code>core-technical-depth.md</code> — click-to-ask powered by the same local Azure OpenAI proxy (<code>python server.py</code>).</footer>
+</main>
+</div>
+
+<script>
+(function(){
+"use strict";
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const fm=(v,d)=>{const s=v.toFixed(d===undefined?2:d);return (s==="-0.00"?"0.00":s).replace("-","−");};
+const txt=(x,y,cls,s,anch)=>`<text x="${x}" y="${y}" class="${cls}"${anch?` text-anchor="${anch}"`:""}>${s}</text>`;
+const DEFS='<defs><marker id="vah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker><marker id="vahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>';
+function arr(x1,y1,x2,y2,lab,sub,acc){
+  const mx=(x1+x2)/2,my=(y1+y2)/2;
+  let s=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--${acc?"accent":"muted"})" stroke-width="1.4" marker-end="url(#${acc?"vahA":"vah"})"/>`;
+  if(lab)s+=txt(mx,my-16,"vacc",lab,"middle");
+  if(sub)s+=txt(mx,my-5,"vsm",sub,"middle");
+  return s;}
+function grid(o){
+  const cw=o.cw||34,ch=o.ch||17,R=o.vals.length,C=o.vals[0].length;let s="";
+  if(o.lab)s+=txt(o.x+C*cw/2,o.y-(o.cl?26:9),"vlab",o.lab,"middle");
+  if(o.cl)o.cl.forEach((c,j)=>s+=txt(o.x+j*cw+cw/2,o.y-4,"vsm",c,"middle"));
+  if(o.rl)o.rl.forEach((r,i)=>s+=txt(o.x-6,o.y+i*ch+ch/2+3.5,"vsm",r,"end"));
+  for(let i=0;i<R;i++)for(let j=0;j<C;j++){
+    const v=o.vals[i][j],ell=(v==="…"||v==="⋮"||v==="⋱");
+    const blk=o.blk&&o.blk(i,j),hot=!blk&&o.hot&&o.hot(i,j);
+    s+=`<rect class="${blk?"cellblk":hot?"cellhot":"cell"}" x="${o.x+j*cw}" y="${o.y+i*ch}" width="${cw}" height="${ch}"/>`;
+    if(v!==""){
+      const t=txt(o.x+j*cw+cw/2,o.y+i*ch+ch/2+3.5,blk?"vbad":hot?"cellv":"cellvd",v,"middle");
+      s+=(ell||blk||o.always)?t:`<g class="vnum">${t}</g>`;}}
+  if(o.shape)s+=txt(o.x+C*cw/2,o.y+R*ch+14,"shape",o.shape,"middle");
+  return s;}
+const box=(x,y,w,h,cls,title,sub,sub2)=>`<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/>`
+  +(title?txt(x+w/2,y+h/2+(sub?-4:4),"vlab",title,"middle"):"")
+  +(sub?txt(x+w/2,y+h/2+10,"vsm",sub,"middle"):"")
+  +(sub2?txt(x+w/2,y+h/2+22,"vsm",sub2,"middle"):"");
+const hit=(bx,by,bw,bh,tip,ask,inner)=>`<g class="vhit" tabindex="0" role="button" aria-label="${esc(tip)}" data-tip="${esc(tip)}" data-ask="${esc(ask)}"><rect class="hitbg" x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6" fill="transparent" stroke="transparent" stroke-width="2"/>${inner}</g>`;
+function toy(x,y,w,title,lines,concept){
+  const n=Math.max(lines.length,(concept||[]).length),h=n*14+28;
+  let s=`<rect class="chip" x="${x}" y="${y}" width="${w}" height="${h}" rx="6"/>`+txt(x+10,y+17,"vacc","✎ WORKED EXAMPLE — "+title);
+  s+=`<g class="vnum" style="font-family:var(--mono);font-size:10px;fill:var(--ink)">`;
+  lines.forEach((l,i)=>s+=txt(x+12,y+33+i*14,"",l));s+="</g>";
+  if(concept){s+=`<g class="vcon">`;concept.forEach((l,i)=>s+=txt(x+12,y+33+i*14,"vsm",l));s+="</g>";}
+  return s;}
+const con=(cx,cy,lines,w)=>{const h=lines.length*13+10;let s=`<g class="vcon"><rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="4" fill="var(--panel)" opacity="0.93"/>`;lines.forEach((l,i)=>s+=txt(cx,cy-h/2+16+i*13,"vsm",l,"middle"));return s+"</g>";};
+const VIZ={};
+
+/* ====== TOPIC 1: OPTIMIZATION (LP / MILP) ====== */
+VIZ.lpgeometry={t:"The LP feasible region — the optimum is always a corner",hint:"maximize 40x+30y; solver-verified optimum at (10,20), profit $1000",w:980,h:400,
+  cap:"Every point in the shaded region satisfies both constraints. The dashed lines are the SAME objective (40x+30y) at increasing profit levels — sweep it up and to the right, and the last point it touches before leaving the feasible region is the optimum: vertex (10,20), profit $1000. It is never optimal to stop in the interior of a face — only at a corner.",
+  svg(){
+    let s="";
+    s+='<polygon points="80,340 400,340 240,180 80,100" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5" opacity="0.55"/>';
+    s+='<line x1="80" y1="20" x2="400" y2="340" stroke="var(--warn)" stroke-width="2"/>';
+    s+='<line x1="80" y1="100" x2="560" y2="340" stroke="var(--bad)" stroke-width="2"/>';
+    s+='<line x1="80" y1="73" x2="480" y2="340" stroke="var(--accent-hi)" stroke-width="2" stroke-dasharray="7 4"/>';
+    s+='<line x1="80" y1="233" x2="240" y2="340" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 4"/>';
+    s+='<line x1="60" y1="340" x2="620" y2="340" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#vah)"/>';
+    s+='<line x1="80" y1="360" x2="80" y2="10" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#vah)"/>';
+    s+=txt(600,335,"vsm","x (type-A trains)");
+    s+=txt(50,20,"vsm","y (type-B)");
+    s+=txt(160,325,"vsm","profit=$400","middle");
+    s+=txt(400,355,"vsm","(20,0)","middle");
+    s+=txt(60,95,"vsm","(0,30)","end");
+    s+=hit(276,104,120,22,"2x + y ≤ 40 — the crew-hours constraint. Every point on or below this line uses 40 or fewer crew-hours.",
+      "Why does the crew-hours constraint 2x+y≤40 form a straight line, and what does a point above that line actually mean operationally?",
+      txt(336,120,"vwarn","2x+y=40 (crew hrs)","middle"));
+    s+=hit(370,208,130,22,"x + y ≤ 30 — the yard-capacity constraint. Every point on or below this line uses 30 or fewer yard slots.",
+      "Why does adding the yard-capacity constraint shrink the feasible region compared to the crew-hours constraint alone?",
+      txt(435,224,"vbad","x+y=30 (yard cap.)","middle"));
+    s+=hit(300,208,140,22,"The optimal isoprofit line: 40x+30y=1000. Slide it up-right from the $400 line and this is the LAST line still touching the feasible region.",
+      "Why is the optimal isoprofit line always the one that just barely still touches the feasible region, rather than one further out?",
+      txt(370,224+0,"vacc","profit=$1000 (optimal)","middle"));
+    s+=hit(215,155,50,45,"The optimum: (x=10, y=20), profit $1000 — a solver-verified vertex, not an approximation.",
+      "Why does simplex only ever need to check vertices of the feasible region, never interior points or edge midpoints?",
+      '<circle cx="240" cy="180" r="6" fill="var(--accent-hi)" stroke="var(--panel)" stroke-width="1.5"/>'+txt(240,166,"vacc","(10,20)","middle"));
+    return s;}};
+VIZ.milptree={t:"Branch and bound — search the integers, prune what can't win",hint:"maximize 5x+4y s.t. 2x+3y≤34, 4x+3y≤48, x,y integer; real CBC solver output at every node",w:980,h:430,
+  cap:"The LP relaxation's answer (root) is fractional and unusable as a plan, but it's a valid UPPER BOUND on any integer answer. Branching splits on the fractional variable; bounding prunes a whole subtree the moment its own relaxed bound can't beat the best integer answer already found — real solver behavior, not simplified for the diagram.",
+  svg(){
+    let s="";
+    s+=hit(390,20,200,64,"Root: the LP relaxation, ignoring integrality. x=7, y=6.667 — fractional, so not a usable plan, but its profit (61.667) is a hard upper bound on any integer solution.",
+      "Why is the LP relaxation's objective value always an upper bound on the best possible integer solution?",
+      box(390,20,200,60,"bigbox","LP relaxation","x=7, y=6.667","profit=61.667  ← fractional"));
+    s+=arr(440,80,270,140,"y≤6","");
+    s+=arr(540,80,700,140,"y≥7","");
+    s+=hit(180,140,190,62,"Branch y≤6: still fractional (x=7.5), but its bound (61.5) is better than any integer answer found so far — worth exploring further.",
+      "Why does this branch get explored further even though its solution is still fractional?",
+      box(180,140,190,60,"bigbox","y ≤ 6","x=7.5, y=6","profit=61.5  ← fractional"));
+    s+=hit(610,140,190,62,"Branch y≥7: fractional (x=6.5), bound 60.5 — lower than the other branch's bound, but still above zero incumbent so far, so not yet prunable.",
+      "Why can't this branch be pruned yet, even though its bound (60.5) is worse than the other branch's (61.5)?",
+      box(610,140,190,60,"bigbox","y ≥ 7","x=6.5, y=7","profit=60.5  ← fractional"));
+    s+=arr(230,200,120,260,"x≤7","");
+    s+=arr(320,200,420,260,"x≥8","");
+    s+=arr(660,200,570,260,"x≤6","");
+    s+=arr(750,200,830,260,"x≥7","");
+    s+=hit(30,260,180,58,"y≤6, x≤7: INTEGER — x=7, y=6, profit=59. This is the first incumbent: the best confirmed integer answer so far.",
+      "Why does finding one integer-feasible solution matter even if it's not the final answer?",
+      box(30,260,180,56,"cellhot","x=7, y=6 — INTEGER","profit = 59","first incumbent"));
+    s+=hit(320,260,190,58,"y≤6, x≥8: x=8, y=5.333 — still fractional, bound 61.333 > incumbent 59, so this branch keeps going (further branching, not shown, eventually reaches x=9, y=4, profit=61 — the final answer).",
+      "This branch's bound (61.333) beats the current incumbent (59) — what happens next in the search?",
+      box(320,260,190,56,"bigbox","x=8, y=5.333","profit=61.333  ← fractional","→ eventually: x=9,y=4, profit=61"));
+    s+=hit(520,260,190,58,"y≥7, x≤6: x=6, y=7.333 — fractional, bound 59.333. Once the incumbent becomes 61 (from the branch on the left), this bound (59.333 < 61) means the branch can be PRUNED without solving it further.",
+      "Once a better incumbent (61) is found elsewhere in the tree, why can this branch be abandoned immediately?",
+      box(520,260,190,56,"bigbox","x=6, y=7.333","profit=59.333  ← fractional","pruned once incumbent=61"));
+    s+=hit(750,260,180,58,"y≥7, x≥7: INFEASIBLE. 4(7)+3(7)=49 > 48 — violates the second constraint outright. A real, verified dead end, not a simplification.",
+      "Why does adding two branching constraints together sometimes make a subproblem infeasible rather than just fractional?",
+      box(750,260,180,56,"cellblk","x≥6, y≥7","INFEASIBLE","4x+3y=49 > 48"));
+    s+=txt(490,400,"vacc","final answer: x=9, y=4, profit=61 — an integer solution, provably optimal once every other branch is pruned or solved","middle");
+    return s;}};
+
+/* ====== TOPIC 2: GEOSPATIAL / ROUTE OPTIMIZATION ====== */
+VIZ.haversine={t:"Longitude lines converge — why a flat ruler overestimates distance",hint:"Chicago→LA: 2,804 km real (Haversine) vs 3,507 km naive (25% over)",w:980,h:340,
+  cap:"Latitude lines stay parallel (111 km/degree everywhere); longitude lines converge toward the poles, so a degree of longitude is only 111 km at the equator and shrinks with cos(latitude). Treating both as equal-sized flat axes — the naive-Euclidean mistake — overestimates any mostly-east-west distance.",
+  svg(){
+    let s="";
+    for(let i=0;i<5;i++){
+      const topX=120+i*70, botX=250+i*40;
+      s+=`<line x1="${topX}" y1="20" x2="${botX}" y2="200" stroke="var(--muted)" stroke-width="1.2"/>`;
+    }
+    s+='<line x1="60" y1="60" x2="700" y2="60" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>'+txt(715,64,"vsm","equator: 111.3 km/°");
+    s+='<line x1="150" y1="150" x2="610" y2="150" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>'+txt(625,154,"vsm","41.9°N (Chicago): 82.9 km/°");
+    s+=hit(50,10,700,200,"Longitude lines (meridians) converge toward the poles — the geometric reason a degree of longitude is NOT a constant distance.",
+      "Why do longitude lines converge toward the poles while latitude lines stay parallel, and how does that break naive Euclidean distance on raw coordinates?",
+      "");
+    const rows=[["0° (equator)","111.3 km"],["30°","96.4 km"],["41.9° (Chicago)","82.9 km"],["60°","55.7 km"]];
+    rows.forEach((r,i)=>{
+      s+=txt(60,240+i*20,"vsm",r[0]+":");
+      s+=txt(220,240+i*20,"vacc",r[1]);
+    });
+    s+=hit(500,225,420,90,"Two real cities, two ways to measure: great-circle (correct) vs. flat-ruler-on-lat/long (wrong).",
+      "Given the Chicago-to-LA numbers, derive roughly what percentage error naive Euclidean distance introduces, and why that error would be even worse for a more north-south route.",
+      box(500,225,190,36,"cellhot","Haversine (real)","2,804 km")+box(710,225,200,36,"cellblk","Naive Euclidean","3,507 km  (+25%)"));
+    return s;}};
+/* ---------- Dijkstra vs A* ---------- */
+VIZ.dijkstraastar={t:"Dijkstra vs. A* — same shortest path, different amount of search",hint:"real 15-node graph; Dijkstra expands 14 nodes, A* expands 9, both find distance 8.0",w:980,h:330,
+  cap:"Same graph, same source (left) and goal (right) on the main chain, three decoy branches going nowhere useful. Filled circles = nodes the algorithm actually expanded before finding the goal. Dijkstra (left) has no sense of direction and explores every decoy; A* (right), guided by straight-line distance to the goal, never touches one.",
+  svg(){
+    const mainN=9,baseX=[40,520],baseY=280,sx=42,sy=42;
+    const dijkstraVisited=new Set(['P0','P1','P2','P3','D2a','P4','P5','D2b','D4a','P6','P7','D4b','D6a','P8']);
+    const astarVisited=new Set(['P0','P1','P2','P3','P4','P5','P6','P7','P8']);
+    function panel(ox,visited,label,labelCls){
+      let s="";
+      s+=txt(ox+180,20,labelCls,label,"middle");
+      const pos={};
+      for(let i=0;i<mainN;i++)pos['P'+i]=[ox+i*sx,baseY];
+      [2,4,6].forEach(b=>{pos['D'+b+'a']=[ox+b*sx,baseY-sy];pos['D'+b+'b']=[ox+b*sx,baseY-2*sy];});
+      // edges
+      for(let i=0;i<mainN-1;i++)s+=`<line x1="${pos['P'+i][0]}" y1="${pos['P'+i][1]}" x2="${pos['P'+(i+1)][0]}" y2="${pos['P'+(i+1)][1]}" stroke="var(--line)" stroke-width="1.2"/>`;
+      [2,4,6].forEach(b=>{
+        s+=`<line x1="${pos['P'+b][0]}" y1="${pos['P'+b][1]}" x2="${pos['D'+b+'a'][0]}" y2="${pos['D'+b+'a'][1]}" stroke="var(--line)" stroke-width="1.2"/>`;
+        s+=`<line x1="${pos['D'+b+'a'][0]}" y1="${pos['D'+b+'a'][1]}" x2="${pos['D'+b+'b'][0]}" y2="${pos['D'+b+'b'][1]}" stroke="var(--line)" stroke-width="1.2"/>`;
+      });
+      Object.keys(pos).forEach(k=>{
+        const [x,y]=pos[k],on=visited.has(k),isEnd=(k==='P0'||k==='P8');
+        s+=`<circle cx="${x}" cy="${y}" r="${isEnd?8:6}" class="${on?'cellhot':'cell'}"/>`;
+        if(isEnd)s+=txt(x,y-14,"vacc",k==='P0'?"start":"goal","middle");
+      });
+      return s;}
+    let s="";
+    s+=hit(20,10,440,300,"Dijkstra: expands nodes purely by cumulative distance from the source — it has no idea where the goal is, so it can't tell a decoy branch from a useful one until it's explored.",
+      "Why does Dijkstra have no way to avoid exploring the decoy branches, given only the information it tracks?",
+      panel(baseX[0],dijkstraVisited,"Dijkstra — 14 of 15 nodes expanded","vbad"));
+    s+=hit(500,10,440,300,"A*: adds a heuristic (straight-line distance to goal) to prioritize the search queue — decoy branches always look worse than continuing along the main chain, so they're never even popped.",
+      "Why is straight-line distance a valid (admissible) heuristic here, and what would happen to A*'s guarantee of finding the shortest path if the heuristic sometimes overestimated?",
+      panel(baseX[1],astarVisited,"A* — 9 of 15 nodes expanded","vok"));
+    return s;}};
+/* ---------- TSP vs VRP ---------- */
+VIZ.tspvrp={t:"TSP vs. VRP — the capacity constraint that changes the answer",hint:"same 5 stops, same depot; TSP=223 units (1 vehicle), VRP=303 units (2 vehicles, capacity-feasible)",w:980,h:340,
+  cap:"Identical stops, identical distances. The TSP tour (left) is shorter — 223 units — but assumes one vehicle can carry all 17 units of demand. The VRP answer (right) respects a real capacity of 9 per vehicle, forcing two trips at 303 units total: more total distance, but the TSP number was never actually achievable once capacity is real.",
+  svg(){
+    const pts={Depot:[0,0],S1:[2,3],S2:[5,4],S3:[7,1],S4:[3,-2],S5:[-2,2]};
+    const demand={Depot:0,S1:3,S2:4,S3:2,S4:5,S5:3};
+    function map(ox,oy,p){return [ox+p[0]*22, oy-p[1]*22];}
+    function panel(ox,oy,routes,label,labelCls,total){
+      let s=txt(ox+80,oy-140,labelCls,label,"middle");
+      Object.keys(pts).forEach(k=>{
+        const [x,y]=map(ox+80,oy,pts[k]);
+        s+=`<circle cx="${x}" cy="${y}" r="${k==='Depot'?9:7}" class="${k==='Depot'?'bigbox':'cell'}"/>`;
+        s+=txt(x,y-12,"vsm",k+(k!=='Depot'?" ("+demand[k]+")":""),"middle");
+      });
+      const colors=["var(--accent-hi)","var(--bad)"];
+      routes.forEach((r,ri)=>{
+        for(let i=0;i<r.length-1;i++){
+          const [x1,y1]=map(ox+80,oy,pts[r[i]]),[x2,y2]=map(ox+80,oy,pts[r[i+1]]);
+          s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${colors[ri%2]}" stroke-width="2"/>`;
+        }
+      });
+      s+=txt(ox+80,oy+110,"vacc","total distance = "+total,"middle");
+      return s;}
+    let s="";
+    s+=hit(20,20,440,300,"TSP: one vehicle, visit every stop once, return to depot. Shortest such tour: 223 units — but this assumes unlimited vehicle capacity.",
+      "Why can a TSP tour be the mathematically shortest route and still be operationally impossible?",
+      panel(20,190,[['Depot','S5','S1','S2','S3','S4','Depot']],"TSP — 1 vehicle, no capacity limit","vlab",223));
+    s+=hit(500,20,440,300,"VRP: 2 vehicles, capacity 9 each. Demand totals 17, so one vehicle physically cannot carry it all — the route MUST split.",
+      "Why does the VRP solution have a higher total distance than the TSP solution, and why is that an acceptable, even necessary, tradeoff?",
+      panel(500,190,[['Depot','S4','S5','Depot'],['Depot','S1','S2','S3','Depot']],"VRP — 2 vehicles, capacity 9 each","vlab",303));
+    return s;}};
+
+/* ====== TOPIC 3: VECTOR DATABASES & EMBEDDINGS ====== */
+VIZ.embedsim={t:"Cosine similarity — real embeddings, real clustering",hint:"all-MiniLM-L6-v2, 384-dim, normalized; values are actual model output",w:980,h:280,
+  cap:"Real embeddings from a real pretrained model, four real sentences. The two brake-wear paraphrases (worded completely differently) land at 0.792 similarity — high, correct — while every pairing against the unrelated sentences sits near zero, one even slightly negative. Nothing here was hand-tuned; this is what the model actually returned.",
+  svg(){
+    let s="";
+    const labels=["brake-wear-A","brake-wear-B","revenue-report","crew-sched."];
+    const M=[[1.0,0.792,0.049,0.165],[0.792,1.0,-0.035,0.218],[0.049,-0.035,1.0,0.04],[0.165,0.218,0.04,1.0]];
+    s+=hit(20,30,900,190,"Cosine similarity between every pair of 4 real sentence embeddings. Diagonal =1 (a sentence is identical to itself); off-diagonal shows real semantic distance.",
+      "Why does cosine similarity, not Euclidean distance, become the standard comparison for embeddings — what does normalizing the vectors buy you?",
+      grid({x:260,y:66,vals:M.map(r=>r.map(v=>fm(v))),cl:labels,rl:labels,hot:(i,j)=>i!==j&&M[i][j]>0.5,cw:150,ch:36,lab:"cosine similarity — 384-dim real embeddings",shape:""}));
+    return s;}};
+VIZ.annscale={t:"Brute force vs. approximate search — why ANN exists",hint:"brute force = N comparisons; HNSW ≈ log(N) — the gap that makes billion-scale search possible",w:980,h:300,
+  cap:"Brute force is exact but scales linearly — 10 million stored chunks means 10 million comparisons, every single query. An HNSW-style graph index trades a small, tunable chance of missing the literal single-best match for a search that only grows logarithmically with corpus size. This is an order-of-magnitude argument (the standard justification for ANN indexing), not a literal timed benchmark.",
+  svg(){
+    let s="";
+    const rows=[["1,000 chunks","1,000","~10"],["1,000,000 chunks","1,000,000","~20"],["10,000,000 chunks","10,000,000","~23"]];
+    rows.forEach((r,i)=>{
+      const y=50+i*80;
+      s+=txt(20,y+10,"vlab",r[0]);
+      const bfW=Math.min(600,Math.log10(+r[1].replace(/,/g,""))*90);
+      s+=hit(220,y-14,600,50,"Brute force at "+r[0]+": "+r[1]+" comparisons, every query, guaranteed exact.",
+        "Why does brute-force search remain exact while ANN search only offers a high-probability guarantee of finding the true nearest neighbor?",
+        `<rect x="220" y="${y}" width="${bfW}" height="18" rx="3" class="cellblk"/>`+txt(230+bfW,y+13,"vbad",r[1]+" (brute force)"));
+      s+=hit(220,y+22,600,30,"HNSW-style index at "+r[0]+": roughly "+r[2]+" comparisons — logarithmic, not linear, in corpus size.",
+        "Why does an HNSW graph only need roughly log(N) hops to find a near-best match, instead of scanning every stored vector?",
+        `<rect x="220" y="${y+26}" width="${Math.log10(+r[1].replace(/,/g,""))*10}" height="14" rx="3" class="cellhot"/>`+txt(230+Math.log10(+r[1].replace(/,/g,""))*10,y+37,"vok",r[2]+" (HNSW, approx.)"));
+    });
+    return s;}};
+/* ---------- chunk overlap ---------- */
+VIZ.chunkoverlap={t:"Chunk boundaries — where a fact can get split in half",hint:"real 27-word sentence, fixed 10-word chunks, with and without 5-word overlap",w:980,h:320,
+  cap:"Same sentence, same chunk size (10 words). Without overlap (top), the consequence clause is cut exactly between chunks 2 and 3 — “must be” ends chunk 2, “immediately removed…” starts chunk 3, so neither chunk alone states the full consequence. With a 5-word overlap (bottom), one chunk spans the boundary and contains the complete clause.",
+  svg(){
+    let s="";
+    const words="Locomotive brake inspections are required every 92 days per FRA regulation, and any unit that misses this window must be immediately removed from active service until inspected.".split(" ");
+    function renderChunk(x,y,w,startI,endI,hotFrom,hotTo,cls){
+      const slice=words.slice(startI-1,endI).join(" ");
+      return `<rect x="${x}" y="${y}" width="${w}" height="34" rx="6" class="${cls}"/>`+txt(x+10,y+21,"cellv",slice);
+    }
+    s+=txt(20,26,"vsm","WITHOUT overlap — 3 fixed chunks, boundary lands inside the consequence clause");
+    s+=hit(20,36,290,44,"Chunk 1: contains the deadline (92 days) but not what happens if you miss it.",
+      "Why doesn't chunk 1 alone answer 'what happens if the brake inspection deadline is missed'?",
+      renderChunk(20,40,290,1,10,0,0,"cell"));
+    s+=hit(320,36,290,44,"Chunk 2: ends mid-clause at 'must be' — the consequence is cut off exactly here.",
+      "What specifically about fixed-size chunking caused the cut to land in the middle of this clause?",
+      renderChunk(320,40,290,11,20,0,0,"cellblk"));
+    s+=hit(620,36,300,44,"Chunk 3: starts with 'immediately removed...' — the back half of a clause whose front half is in chunk 2.",
+      "If a retrieval system returns only chunk 3 for a question about consequences, what will the answer be missing?",
+      renderChunk(620,40,300,21,27,0,0,"cellblk"));
+    s+=txt(20,116,"vsm","WITH 5-word overlap — one chunk now spans the boundary");
+    s+=hit(20,126,290,44,"Chunk 1 is unchanged by adding overlap — overlap only affects where the NEXT chunk starts, not this one.",
+      "Why does adding overlap only change where subsequent chunks start, not the first chunk itself?",
+      renderChunk(20,130,290,1,10,0,0,"cell"));
+    s+=hit(320,126,460,44,"This overlap-shifted chunk (words 16–25) fully contains 'misses this window must be immediately removed from active service' — the complete consequence clause, in one chunk.",
+      "Why does a 5-word overlap specifically fix this particular split, and how would you pick the right overlap size for a real document set?",
+      renderChunk(320,130,460,16,25,0,0,"cellhot"));
+    s+=txt(490,340-10,"vsm","(remaining words 26-27 continue in the next overlapping chunk, not shown)");
+    return s;}};
+
+/* ====== TOPIC 4: RAG, COT & LLM EVALUATION ====== */
+VIZ.cotcompare={t:"Direct answer vs. Chain-of-Thought — a real, repeatable difference",hint:"same model, temperature=0, same question; only whether reasoning is shown differs",w:980,h:340,
+  cap:"A real rail-yard arithmetic word problem (start 240 cars, 3 inbound trains of 38, 2 outbound trains of 45 and 31, 1 inbound train of half the post-dispatch total). Ground truth: 417. Run three times at temperature 0, the direct-answer prompt returns 406 every time — deterministically wrong. Asked to show its work, the same model gets exactly 417.",
+  svg(){
+    let s="";
+    s+='<rect x="30" y="30" width="430" height="270" rx="10" fill="color-mix(in srgb,var(--bad) 5%,var(--panel))" stroke="color-mix(in srgb,var(--bad) 35%,var(--line))"/>';
+    s+=txt(245,54,"vbad","Direct answer — no reasoning shown","middle");
+    s+=hit(50,70,390,130,"Asked for only the final number, the model returns 406, three times in a row at temperature 0 — deterministically wrong, not a fluke.",
+      "Why would a capable model get a multi-step arithmetic problem wrong when forced to answer immediately, but right when allowed to show work?",
+      txt(245,110,"vlab","“Answer with only the final number.”","middle")+txt(245,140,"vbad","406","middle")+txt(245,160,"vbad","406","middle")+txt(245,180,"vbad","406  ← wrong, all 3 trials","middle"));
+    s+=txt(245,270,"vsm","ground truth = 417","middle");
+    s+='<rect x="510" y="30" width="440" height="270" rx="10" fill="color-mix(in srgb,var(--ok) 5%,var(--panel))" stroke="color-mix(in srgb,var(--ok) 35%,var(--line))"/>';
+    s+=txt(730,54,"vok","Chain-of-Thought — reasoning shown first","middle");
+    s+=hit(530,70,400,220,"Asked to think step by step, the same model correctly computes 354 after morning arrivals, 278 after noon dispatches, 139 for the afternoon train, and 417 final — matching ground truth exactly.",
+      "What computational resource does showing intermediate steps actually give the model that answering immediately doesn't?",
+      txt(730,100,"vsm","240 + 3×38 = 354  (after morning)","middle")
+      +txt(730,120,"vsm","354 − 45 − 31 = 278  (after noon)","middle")
+      +txt(730,140,"vsm","278 ÷ 2 = 139  (afternoon train)","middle")
+      +txt(730,160,"vsm","278 + 139 = 417","middle")
+      +txt(730,195,"vok","FINAL: 417 ✓ — matches ground truth","middle"));
+    return s;}};
+VIZ.multiagent={t:"Multi-agent debate — FinSight's real 3-agent architecture",hint:"Portfolio proposes, Market challenges, Critic checks both — before the user ever sees an answer",w:980,h:260,
+  cap:"Real production pattern, not a hypothetical: a Portfolio agent proposes an allocation, a Market agent brings in current conditions that might argue against it, and a Critic agent — prompted specifically to find flaws — reviews both before anything reaches the user. Same underlying idea as Chain-of-Thought: reasoning split across steps instead of committed to in one pass, just with the steps played by different roles instead of one model's internal monologue.",
+  svg(){
+    let s="";
+    s+=hit(40,60,240,90,"Portfolio agent: proposes an initial recommendation based on the user's holdings and goals.",
+      "What's the risk of stopping after just this agent's output, without the Market and Critic agents?",
+      box(40,60,240,86,"bigbox","Portfolio agent","proposes an allocation"));
+    s+=arr(280,103,340,103,"","");
+    s+=hit(340,60,240,90,"Market agent: brings in current market conditions that might argue against the Portfolio agent's proposal.",
+      "Why is it useful to have a SEPARATE agent responsible for market context, instead of asking the Portfolio agent to consider it itself?",
+      box(340,60,240,86,"bigbox","Market agent","challenges with current conditions"));
+    s+=arr(580,103,640,103,"","");
+    s+=hit(640,60,300,90,"Critic agent: specifically prompted to find flaws or missing considerations in what the other two produced — not to propose anything new.",
+      "Why does the Critic agent need a different prompt/role than the other two, rather than just running the Portfolio agent twice?",
+      box(640,60,300,86,"d-hot","Critic agent","finds what the other two missed"));
+    s+=arr(790,150,790,190,"","");
+    s+=hit(670,195,240,50,"Only after all three steps does a recommendation reach the user — the same latency-vs-reliability tradeoff as every multi-agent pattern.",
+      "Every extra agent round adds real latency — how would you decide whether a task actually needs this pattern versus a single pass?",
+      box(670,195,240,46,"cellhot","→ user","final, critiqued recommendation"));
+    return s;}};
+VIZ.llmjudge={t:"LLM-as-judge — a real faithfulness verdict, not a hypothetical one",hint:"real context, real generated answer, real judge call — the judge named the exact fabricated sentence",w:980,h:340,
+  cap:"A real maintenance-bulletin context and a real generated answer containing one fabricated claim, scored by an actual LLM-as-judge call using the faithfulness rubric from core-technical-depth.md. The judge scored 2/5 and named the exact unsupported sentence — the granularity a real gating pipeline needs.",
+  svg(){
+    let s="";
+    s+=hit(20,30,460,110,"The source context — a real maintenance bulletin, the only ground truth the answer is allowed to draw from.",
+      "Why does faithfulness evaluation compare the answer only against this context, not against outside knowledge of what's generally true?",
+      box(20,30,460,105,"bigbox","CONTEXT","brake-shoe inspection every 92 days;","remove from service within 24hrs if >40% wear"));
+    s+=hit(500,30,460,150,"The generated answer — two claims genuinely from the context, one fabricated claim invented by the model.",
+      "How would you automatically decompose an answer like this into separate checkable claims before scoring each one?",
+      box(500,30,460,60,"cellhot","✓ grounded: 92-day inspection interval","","")
+      +box(500,96,460,40,"cellhot","✓ grounded: 24hr removal at >40% wear","",""));
+    s+=hit(500,142,460,40,"This claim about a 5-year axle replacement does not appear anywhere in the source context — the judge correctly flagged it as fabricated.",
+      "What real-world harm could this specific kind of fabricated maintenance claim cause if it reached a technician unchecked?",
+      box(500,142,460,36,"cellblk","✗ fabricated: 5-yr axle replacement rule","",""));
+    s+=hit(150,220,680,90,"The real judge output: SCORE 2/5, the fabricated claim named specifically, one-sentence justification — exactly what a gating pipeline needs to act on.",
+      "Why is naming the SPECIFIC unsupported claim more useful for a gating pipeline than just a single 1-5 faithfulness number?",
+      box(150,220,680,84,"d-hot","JUDGE VERDICT — real Azure OpenAI call","SCORE: 2/5","unsupported: “...axle replacement every 5 years...” — not in context"));
+    return s;}};
+
+/* ====== TOPIC 5: GPU OPTIMIZATION ====== */
+VIZ.mixedprecision={t:"Mixed precision — the savings are in activations, not parameters",hint:"GPT-2 small, batch=8, seq=1024, 12 layers: 288MB (fp32) vs 144MB (fp16) of stored activations",w:980,h:280,
+  cap:"Optimizer states (Adam's momentum + variance) stay fp32 for stability regardless of mixed precision — that memory doesn't shrink. What DOES shrink, exactly in half: every intermediate activation tensor kept for backward. Same batch=8, seq=1024, GPT-2 small's 12 layers, computed as raw byte counts, not estimated.",
+  svg(){
+    let s="";
+    s+=hit(30,40,300,60,"Adam's momentum and variance buffers are kept in fp32 even under mixed precision — this is the 'master weights' scheme, and this memory does NOT shrink from using fp16/bf16 compute.",
+      "Why do Adam's optimizer states stay in fp32 even when the rest of training uses fp16/bf16?",
+      box(30,40,300,56,"agatebox","Optimizer states (Adam m, v)","stay fp32 — unaffected by mixed precision"));
+    s+=txt(20,130,"vsm","Activation memory — batch=8, seq=1024, GPT-2 small, 12 layers:");
+    s+=hit(20,145,430,50,"288 MB of hidden-state activations, stored in fp32 (4 bytes per number) for the backward pass.",
+      "What exactly is being stored here, and why does the backward pass need it at all?",
+      `<rect x="20" y="150" width="400" height="30" rx="4" class="cellblk"/>`+txt(220,170,"vbad","288 MB — fp32 (4 bytes/value)","middle"));
+    s+=hit(20,205,220,50,"144 MB — the exact same numbers, stored in fp16/bf16 (2 bytes per number) instead. Precisely half, because it's a byte-width change, nothing else.",
+      "Why is this exactly half, not just 'roughly less'?",
+      `<rect x="20" y="210" width="200" height="30" rx="4" class="cellhot"/>`+txt(120,230,"vok","144 MB — fp16 (2 bytes/value)","middle"));
+    return s;}};
+VIZ.gradaccum={t:"Gradient accumulation — 8 micro-batches, one optimizer step",hint:"micro-batch=4 × accumulation_steps=8 = effective batch 32",w:980,h:230,
+  cap:"Memory only ever holds one micro-batch (4 sequences) at a time — gradients from each micro-batch simply add into the same buffers instead of being applied immediately. Only after all 8 have accumulated does the optimizer take a single step, using the SUM of gradients from all 32 sequences — mathematically the same update a true batch-32 run would produce.",
+  svg(){
+    let s="";
+    for(let i=0;i<8;i++){
+      const x=30+i*115;
+      s+=hit(x,30,100,90,"Micro-batch "+(i+1)+" of 8: forward + backward on 4 sequences, gradients ADD into the existing buffer (no zero_grad yet).",
+        "Why must optimizer.zero_grad() be skipped between these 8 micro-batches for accumulation to work correctly?",
+        box(x,30,95,86,"cell","micro-batch "+(i+1),"4 sequences","grads +="));
+      if(i<7)s+=arr(x+95,73,x+115,73,"","");
+    }
+    s+=arr(500,120,500,160,"","");
+    s+=hit(340,165,320,50,"After 8 micro-batches, the accumulated gradient reflects all 32 sequences — exactly one optimizer.step() now runs.",
+      "Why is this mathematically equivalent to a true batch-32 run, given the loss was normalized by accumulation_steps along the way?",
+      box(340,165,320,46,"cellhot","ONE optimizer.step()","effective batch = 4 × 8 = 32",""));
+    return s;}};
+VIZ.gradcheckpoint={t:"Gradient checkpointing — recompute instead of store",hint:"store 4 of 12 layers' activations (96MB), recompute the other 8 during backward",w:980,h:280,
+  cap:"Instead of keeping all 12 layers' activations in memory (288MB), only 4 evenly-spaced checkpoints are stored; the 8 layers between checkpoints are recomputed from the nearest checkpoint during backward. Memory drops to a third (96MB); compute rises because roughly a third of the forward pass runs twice — the exact source of the commonly-quoted '20-30% more compute' tradeoff.",
+  svg(){
+    let s="";
+    const layers=12,checkpointed=[0,3,6,9];
+    for(let i=0;i<layers;i++){
+      const x=30+i*76,hot=checkpointed.includes(i);
+      s+=hit(x,30,70,50,hot?"Layer "+(i+1)+": checkpointed — its activations ARE kept in memory.":"Layer "+(i+1)+": NOT checkpointed — recomputed from the nearest earlier checkpoint during backward, not stored.",
+        hot?"Why does keeping this specific layer's activations let the layers after it be recomputed cheaply?":"What has to happen at backward time to get this layer's activations back, since they weren't stored?",
+        box(x,30,68,46,hot?"cellhot":"cell","L"+(i+1),hot?"stored":"recompute"));
+    }
+    s+=hit(20,110,430,50,"288 MB if every layer's activations were stored — the no-checkpointing baseline.",
+      "Why does storing every layer's activation become the memory bottleneck as the network gets deeper?",
+      `<rect x="20" y="115" width="400" height="30" rx="4" class="cellblk"/>`+txt(220,135,"vbad","no checkpointing: 288 MB stored","middle"));
+    s+=hit(20,170,300,50,"96 MB with only 4 of 12 layers checkpointed — a third of the memory, since 4/12 = 1/3.",
+      "Why is the memory reduction here almost exactly proportional to the fraction of layers checkpointed?",
+      `<rect x="20" y="175" width="270" height="30" rx="4" class="cellhot"/>`+txt(155,195,"vok","4/12 checkpointed: 96 MB stored","middle"));
+    s+=txt(20,240,"vsm","trade: ~8 of 12 layers' forward computation happens twice during training — the source of the ~20-30% extra compute figure.");
+    return s;}};
+VIZ.ddp={t:"DistributedDataParallel — same math, N GPUs, one synchronized update",hint:"4 GPUs, each a full model replica + a data shard; all-reduce keeps every replica identical",w:980,h:300,
+  cap:"Every GPU computes gradients independently on its own data shard — genuinely parallel work. The all-reduce step then averages those gradients across every replica before any optimizer step runs, so all 4 replicas apply the identical update and never drift apart. All-reduce is a COLLECTIVE operation: every rank must call it, the same number of times, in the same order — the most common real DDP bug is one rank silently skipping a call and the whole job hanging forever, waiting for a peer that never shows up.",
+  svg(){
+    let s="";
+    for(let i=0;i<4;i++){
+      const x=40+i*230;
+      s+=hit(x,30,190,90,"GPU "+i+": full model replica, its own data shard, computes gradients locally — independent, parallel work.",
+        "Why does each GPU need a full copy of the model, rather than splitting the model itself across GPUs?",
+        box(x,30,185,86,"bigbox","GPU "+i,"full model replica","shard "+i+"/4 of the batch"));
+      s+=arr(x+92,116,x+92,150,"","",true);
+    }
+    s+=hit(60,155,860,50,"all_reduce: every GPU's gradient is averaged across all 4 replicas — a collective operation every rank must call identically.",
+      "Why does all_reduce deadlock the entire job if even one rank takes a different code path and skips the call?",
+      `<rect x="60" y="160" width="860" height="40" rx="6" class="cellhot"/>`+txt(490,185,"vacc","all_reduce — average gradients across all 4 replicas","middle"));
+    for(let i=0;i<4;i++){
+      const x=40+i*230;
+      s+=arr(x+92,200,x+92,235,"","",true);
+    }
+    s+=hit(60,240,860,45,"Every replica now has the identical, averaged gradient — each takes the same optimizer step, so all 4 stay in sync.",
+      "Why is it essential that every replica applies the exact same averaged gradient, rather than each keeping its own local one?",
+      txt(490,264,"vsm","every replica applies the SAME averaged update — 4 GPUs, still one consistent model","middle"));
+    return s;}};
+
+/* ---------- boot ---------- */
+const vtip=document.createElement("div");vtip.id="vtip";document.body.appendChild(vtip);
+const vask=document.createElement("div");vask.id="vask";document.body.appendChild(vask);
+const qaBtn=document.createElement("button");qaBtn.id="qaHistoryBtn";qaBtn.type="button";qaBtn.title="Q&A history";qaBtn.textContent="📜";document.body.appendChild(qaBtn);
+const qaPanel=document.createElement("div");qaPanel.id="qaHistoryPanel";document.body.appendChild(qaPanel);
+function escQA(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function renderHistory(items){
+  if(!items.length){qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">No questions asked yet.</div>';return;}
+  qaPanel.innerHTML='<div class="qhTitle">Q&A History</div>'+items.map(it=>{
+    const d=new Date(it.created_at);
+    return '<div class="qhItem"><div class="qhMeta">'+escQA(d.toLocaleString())+' &middot; '+escQA(it.topic||it.source||"")+'</div>'
+      +'<div class="qhQ">'+escQA(it.question)+'</div>'
+      +'<div class="qhA">'+escQA(it.answer)+'</div></div>';
+  }).join("");
+}
+async function openHistory(){
+  qaPanel.classList.add("open");
+  qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">Loading…</div>';
+  try{const res=await fetch("/api/history");const data=await res.json();renderHistory(data.items||[]);}
+  catch(e){qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">Could not load history: '+escQA(e.message)+'</div>';}
+}
+qaBtn.addEventListener("click",e=>{e.stopPropagation();qaPanel.classList.contains("open")?qaPanel.classList.remove("open"):openHistory();});
+document.addEventListener("click",e=>{if(e.target.closest("#qaHistoryPanel")||e.target.closest("#qaHistoryBtn"))return;qaPanel.classList.remove("open");});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")qaPanel.classList.remove("open");});
+document.querySelectorAll("figure.viz").forEach(f=>{
+  const d=VIZ[f.dataset.viz];if(!d)return;
+  f.classList.add("mode-num");
+  f.innerHTML=`<div class="vhead"><span class="vtitle">${d.t}</span><span class="vtoggle" role="group" aria-label="switch between numbers and concept labels"><button type="button" class="on" data-m="num">123 numbers</button><button type="button" data-m="con">Aa concepts</button></span><span class="vhint">hover a box = one-line definition · click a box = follow-up question for Claude · ${d.hint||""}</span></div><div class="vbody"><svg viewBox="0 0 ${d.w} ${d.h}" width="${d.w}" style="max-width:none;height:auto;display:block" role="img" aria-label="${esc(d.t)}">${DEFS}${d.svg()}</svg></div><figcaption>${d.cap}</figcaption>`;});
+let askTopic="",askContext="",askHistory=[];
+function showAsk(q,topic,context){
+  askTopic=topic||"";askContext=context||"";askHistory=[];
+  vask.innerHTML='<div class="vlbl">Ask about: <span id="askTopicLbl"></span></div>'
+    +'<textarea id="askInput" rows="2"></textarea>'
+    +'<div class="vbtns"><button class="btn" type="button" data-vcopy>Copy question</button>'
+    +'<button class="btn" type="button" data-vaskllm>Ask Azure OpenAI</button>'
+    +'<button class="btn ghost" type="button" data-vclose>Close</button><span class="vnote"></span></div>'
+    +'<div class="askAnswer" id="askAnswer"></div>';
+  vask.querySelector("#askTopicLbl").textContent=askTopic||"this";
+  vask.querySelector("#askInput").value=q||"";
+  vask.style.display="block";
+  vask.querySelector("#askInput").focus();}
+function doCopy(){
+  const q=vask.querySelector("#askInput").value,note=vask.querySelector(".vnote");
+  const ok=()=>{note.textContent="copied ✓ — now paste it in the chat";};
+  const fb=()=>{const ta=document.createElement("textarea");ta.value=q;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");ok();}catch(e){note.textContent="select the text above and copy manually";}ta.remove();};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(q).then(ok,fb);else fb();}
+async function doAskLLM(){
+  const input=vask.querySelector("#askInput"),q=input.value.trim(),ans=vask.querySelector("#askAnswer"),
+    btn=vask.querySelector("[data-vaskllm]"),note=vask.querySelector(".vnote");
+  if(!q)return;
+  ans.style.display="block";ans.textContent="Thinking…";btn.disabled=true;note.textContent="";
+  try{
+    const res=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({topic:askTopic,context:askContext,question:q,history:askHistory,source:"bnsf-interview-prep"})});
+    const data=await res.json();
+    if(data.error){ans.textContent="Error: "+data.error;}
+    else{ans.textContent=data.answer;askHistory.push({role:"user",content:q});askHistory.push({role:"assistant",content:data.answer});
+      note.textContent="ask a follow-up above and click again — this panel remembers the thread";
+      if(qaPanel.classList.contains("open"))openHistory();}
+  }catch(e){ans.textContent="Request failed: "+e.message+" — is the local server running? (python server.py, then open http://localhost:5000)";}
+  btn.disabled=false;}
+document.addEventListener("click",e=>{
+  const tb=e.target.closest(".vtoggle button");
+  if(tb){const f=tb.closest("figure.viz");f.classList.toggle("mode-num",tb.dataset.m==="num");f.classList.toggle("mode-con",tb.dataset.m==="con");f.querySelectorAll(".vtoggle button").forEach(x=>x.classList.toggle("on",x===tb));return;}
+  if(e.target.closest("[data-vcopy]")){doCopy();return;}
+  if(e.target.closest("[data-vaskllm]")){doAskLLM();return;}
+  if(e.target.closest("[data-vclose]")){vask.style.display="none";return;}
+  if(e.target.closest("#vask"))return;
+  const h=e.target.closest("g.vhit");
+  if(h&&h.dataset.ask){const fig=h.closest("figure.viz"),t=fig&&fig.querySelector(".vtitle");showAsk(h.dataset.ask,t?t.textContent:"this diagram",h.dataset.tip||"");return;}
+  vask.style.display="none";});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){vask.style.display="none";vtip.style.display="none";return;}
+  if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("vhit")){e.preventDefault();if(e.target.dataset.ask){const fig=e.target.closest("figure.viz"),t=fig&&fig.querySelector(".vtitle");showAsk(e.target.dataset.ask,t?t.textContent:"this diagram",e.target.dataset.tip||"");}}});
+function collectContext(heading){
+  let ctx="",el=heading.nextElementSibling;const level=+heading.tagName[1];
+  while(el&&!(/^H[1-4]$/.test(el.tagName)&&+el.tagName[1]<=level)){
+    if(el.textContent)ctx+=el.textContent.trim()+"\n";
+    el=el.nextElementSibling;
+    if(ctx.length>1500)break;}
+  return ctx.slice(0,1500);}
+document.querySelectorAll("main h2, main h3, main h4").forEach(h=>{
+  const b=document.createElement("button");
+  b.type="button";b.className="topicask";b.textContent="💬 ask";
+  b.addEventListener("click",ev=>{ev.stopPropagation();showAsk("",h.textContent.replace("💬 ask","").trim(),collectContext(h));});
+  h.appendChild(document.createTextNode(" "));h.appendChild(b);});
+document.addEventListener("mousemove",e=>{
+  const h=e.target.closest?e.target.closest("g.vhit"):null;
+  if(h&&h.dataset.tip){
+    vtip.textContent=h.dataset.tip;vtip.style.display="block";
+    const r=vtip.getBoundingClientRect();
+    let x=e.clientX+14,y=e.clientY+18;
+    if(x+r.width>innerWidth-8)x=innerWidth-r.width-8;
+    if(y+r.height>innerHeight-8)y=e.clientY-r.height-10;
+    vtip.style.left=x+"px";vtip.style.top=y+"px";
+  }else vtip.style.display="none";});
+document.addEventListener("focusin",e=>{
+  if(e.target.classList&&e.target.classList.contains("vhit")&&e.target.dataset.tip){
+    const r=e.target.getBoundingClientRect();
+    vtip.textContent=e.target.dataset.tip;vtip.style.display="block";
+    vtip.style.left=Math.max(8,Math.min(r.left,innerWidth-300))+"px";vtip.style.top=(r.bottom+6)+"px";}});
+document.addEventListener("focusout",()=>{vtip.style.display="none";});
+})();
+</script>
+</html>

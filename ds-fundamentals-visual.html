@@ -1,0 +1,804 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Data Science Fundamentals — Pictorial</title>
+<style>
+:root{
+  --bg:#f7f8f4; --panel:#ffffff; --panel2:#eef2e8; --ink:#181d15; --muted:#5b6557;
+  --line:#dbe1d3; --accent:#538a00; --accent-hi:#446f00; --accent-soft:#e5efd2;
+  --code-bg:#edf0e7; --ok:#2e7d32; --bad:#b3402e; --warn:#9a6b00;
+  --display:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  --body:Charter,"Bitstream Charter",Cambria,Georgia,serif;
+  --mono:"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e120b; --panel:#161b12; --panel2:#1c2317; --ink:#e9ede3; --muted:#9aa591;
+  --line:#28311f; --accent:#76b900; --accent-hi:#8fd11a; --accent-soft:#243311;
+  --code-bg:#1b2115; --ok:#7ccb6e; --bad:#e4796a; --warn:#d9a93f;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e120b; --panel:#161b12; --panel2:#1c2317; --ink:#e9ede3; --muted:#9aa591;
+  --line:#28311f; --accent:#76b900; --accent-hi:#8fd11a; --accent-soft:#243311;
+  --code-bg:#1b2115; --ok:#7ccb6e; --bad:#e4796a; --warn:#d9a93f;
+}
+:root[data-theme="light"]{
+  --bg:#f7f8f4; --panel:#ffffff; --panel2:#eef2e8; --ink:#181d15; --muted:#5b6557;
+  --line:#dbe1d3; --accent:#538a00; --accent-hi:#446f00; --accent-soft:#e5efd2;
+  --code-bg:#edf0e7; --ok:#2e7d32; --bad:#b3402e; --warn:#9a6b00;
+}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:1.05rem;line-height:1.65;margin:0}
+.wrap{max-width:76rem;margin:0 auto;padding:0 1.25rem 6rem;display:grid;grid-template-columns:15rem minmax(0,1fr);gap:2.5rem}
+@media (max-width:1000px){.wrap{grid-template-columns:minmax(0,1fr)}nav.toc{display:none}}
+nav.toc{position:sticky;top:1rem;align-self:start;font-family:var(--mono);font-size:.78rem;padding-top:2.2rem}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:.28rem .6rem;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent-hi);border-left-color:var(--accent)}
+nav.toc .toc-h{color:var(--ink);font-weight:600;margin-top:.9rem;padding:.2rem .6rem;border-left:2px solid transparent;text-transform:uppercase;letter-spacing:.08em;font-size:.68rem}
+main{min-width:0;max-width:48rem}
+h1,h2,h3,h4{font-family:var(--display);line-height:1.2;text-wrap:balance}
+h1{font-size:clamp(2rem,5vw,3rem);letter-spacing:-.02em;margin:.4rem 0 .6rem}
+h2{font-size:1.65rem;letter-spacing:-.01em;margin:0 0 .9rem;padding-top:3.2rem}
+h3{font-size:1.18rem;margin:2rem 0 .5rem}
+h4{font-size:1rem;margin:1.4rem 0 .35rem}
+p{margin:.7rem 0}
+.eyebrow{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent-hi);font-weight:600}
+.lede{font-size:1.15rem;color:var(--muted)}
+.hero{padding-top:3.2rem;border-bottom:1px solid var(--line);padding-bottom:1.8rem;margin-bottom:.5rem}
+table{border-collapse:collapse;width:100%;font-size:.92rem;margin:1rem 0}
+.tblwrap{overflow-x:auto;margin:1rem 0}
+th{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;text-align:left;color:var(--muted);border-bottom:2px solid var(--line);padding:.45rem .6rem}
+td{border-bottom:1px solid var(--line);padding:.5rem .6rem;vertical-align:top}
+td:first-child{font-weight:600;white-space:nowrap}
+code{font-family:var(--mono);font-size:.85em;background:var(--code-bg);border-radius:.25rem;padding:.1rem .35rem}
+.fig{background:var(--panel);border:1px solid var(--line);border-radius:.55rem;padding:1rem;margin:1.4rem 0;overflow-x:auto}
+.fig figcaption{font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:.7rem;letter-spacing:.03em}
+.fig svg{display:block;margin:0 auto;max-width:100%;height:auto}
+svg text{font-family:var(--mono)}
+.callout{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--panel);border-radius:.35rem;padding:.8rem 1rem;margin:1.2rem 0;font-size:.95rem}
+.callout .tag{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700;display:block;margin-bottom:.25rem}
+ul{padding-left:1.3rem}li{margin:.3rem 0}
+.formula{font-family:var(--mono);font-size:.95rem;background:var(--code-bg);border:1px solid var(--line);border-radius:.4rem;padding:.7rem .9rem;margin:.9rem 0;overflow-x:auto;white-space:nowrap}
+/* interactive data-flow diagrams (same engine as the NCA-GENL guide / BNSF deep-dive) */
+figure.viz{padding:0;overflow:hidden}
+.vhead{display:flex;justify-content:space-between;align-items:center;gap:.7rem;padding:.6rem .9rem;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.vtitle{font-family:var(--display);font-weight:600;font-size:.95rem}
+.vhint{font-family:var(--mono);font-size:.63rem;color:var(--muted);letter-spacing:.03em;width:100%}
+.vtoggle{display:inline-flex;border:1px solid var(--line);border-radius:.35rem;overflow:hidden;flex-shrink:0}
+.vtoggle button{font-family:var(--mono);font-size:.66rem;font-weight:600;padding:.32rem .6rem;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.vtoggle button.on{background:var(--accent);color:var(--bg)}
+.vtoggle button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.vbody{padding:.9rem .9rem .4rem;overflow-x:auto}
+.viz figcaption{padding:.5rem .9rem .8rem}
+.viz.mode-num .vcon{display:none}.viz.mode-con .vnum{display:none}
+g.vhit{cursor:pointer;outline:none}
+g.vhit:hover .hitbg,g.vhit:focus .hitbg{stroke:var(--accent-hi);stroke-width:2}
+#vtip{position:fixed;z-index:50;max-width:19rem;background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:.72rem;line-height:1.45;padding:.45rem .6rem;border-radius:.35rem;pointer-events:none;display:none}
+#vask{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:1rem;max-width:36rem;width:calc(100% - 2rem);background:var(--panel);border:1px solid var(--accent);border-radius:.55rem;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:.85rem 1rem;display:none;max-height:80vh;overflow-y:auto}
+#vask .vlbl{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700}
+#vask .vq{font-size:.93rem;margin:.35rem 0 .7rem;font-weight:600;font-family:var(--display)}
+#vask .vbtns{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+#vask .vnote{font-family:var(--mono);font-size:.64rem;color:var(--muted)}
+#vask textarea{width:100%;box-sizing:border-box;font-family:var(--body);font-size:.9rem;border:1px solid var(--line);border-radius:.4rem;padding:.5rem .6rem;background:var(--bg);color:var(--ink);resize:vertical;margin-bottom:.6rem}
+.askAnswer{display:none;margin-top:.8rem;padding:.7rem .9rem;background:var(--panel2);border-radius:.4rem;border-left:3px solid var(--accent);font-size:.92rem;white-space:pre-wrap;max-height:40vh;overflow-y:auto}
+#qaHistoryBtn{position:fixed;left:1rem;bottom:1rem;z-index:65;width:2.75rem;height:2.75rem;border-radius:50%;border:1px solid var(--accent);background:var(--panel);color:var(--accent-hi);font-size:1.25rem;line-height:1;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;padding:0}
+#qaHistoryBtn:hover{background:var(--accent-soft)}
+#qaHistoryPanel{position:fixed;left:1rem;bottom:4.5rem;z-index:64;width:min(26rem,calc(100vw - 2rem));max-height:65vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:.6rem;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:.75rem;display:none}
+#qaHistoryPanel.open{display:block}
+#qaHistoryPanel .qhTitle{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent-hi);font-weight:700;margin-bottom:.5rem;position:sticky;top:0;background:var(--panel)}
+#qaHistoryPanel .qhItem{padding:.55rem 0;border-bottom:1px solid var(--line)}
+#qaHistoryPanel .qhItem:last-child{border-bottom:none}
+#qaHistoryPanel .qhMeta{font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:.2rem}
+#qaHistoryPanel .qhQ{font-weight:600;font-size:.88rem;margin-bottom:.25rem}
+#qaHistoryPanel .qhA{font-size:.85rem;color:var(--muted);white-space:pre-wrap}
+#qaHistoryPanel .qhEmpty{font-size:.85rem;color:var(--muted);padding:.5rem 0}
+h2 .topicask,h3 .topicask,h4 .topicask{font-family:var(--mono);font-size:.6rem;font-weight:700;letter-spacing:.02em;border:1px solid var(--line);border-radius:.3rem;background:var(--panel);color:var(--accent-hi);padding:.15rem .5rem;margin-left:.6rem;cursor:pointer;vertical-align:middle;white-space:nowrap}
+h2 .topicask:hover,h3 .topicask:hover,h4 .topicask:hover{border-color:var(--accent);background:var(--accent-soft)}
+svg .vlab{fill:var(--ink);font-size:11px}
+svg .vsm{fill:var(--muted);font-size:9.5px}
+svg .vacc{fill:var(--accent-hi);font-size:10px;font-weight:600}
+svg .vwarn{fill:var(--warn);font-size:10px;font-weight:600}
+svg .vbad{fill:var(--bad);font-size:10px;font-weight:600}
+svg .vok{fill:var(--ok);font-size:10px;font-weight:600}
+svg .cell{fill:var(--panel2);stroke:var(--line);stroke-width:.7}
+svg .cellhot{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.1}
+svg .cellblk{fill:color-mix(in srgb,var(--bad) 16%,var(--panel));stroke:color-mix(in srgb,var(--bad) 40%,var(--line))}
+footer{margin-top:4rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.85rem;color:var(--muted)}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-h">Data science fundamentals</div>
+  <a href="#gd">1 · Gradient descent</a>
+  <a href="#loss">2 · Loss functions</a>
+  <a href="#opt">3 · Optimizers</a>
+  <a href="#pipeline">4 · The training pipeline</a>
+  <a href="#bv">5 · Bias-variance &amp; overfitting</a>
+  <a href="#reg">6 · L1 / L2 regularization</a>
+  <a href="#hyper">7 · Hyperparameters</a>
+  <a href="#qa">8 · Practice Q&amp;A</a>
+</nav>
+
+<main>
+<header class="hero">
+  <span class="eyebrow">Data Science &amp; NCA-GENL Basics — Pictorial</span>
+  <h1>Data Science Fundamentals — Pictorial</h1>
+  <p class="lede">The small, load-bearing ideas underneath almost everything else — shown with a formula, a real computed example, and a hand-built interactive diagram each, same engine as the NCA-GENL transformer walkthrough and the BNSF technical deep-dive. Train/val/test split &amp; cross-validation, precision/recall/confusion matrix, and normalization/standardization are queued for a follow-up session.</p>
+</header>
+
+<section id="gd">
+<h2>1 · Gradient Descent</h2>
+<p>The single mechanism nearly every model-fitting procedure in this guide reduces to: nudge the parameters a little in the direction that makes the loss smaller, repeat.</p>
+<div class="formula">θ := θ − α · ∇L(θ)</div>
+<p><code>θ</code> is the parameter being learned, <code>∇L(θ)</code> is the gradient of the loss with respect to it (which way is "uphill"), and <code>α</code> is the learning rate — how big a step to take each time. Below, the exact same loss surface <code>L(θ)=(θ−5)²</code> (minimum at θ=5), the exact same starting point (θ=−3), and the exact same 6 steps — only α changes. Every number is a real computed value from that recurrence, not illustrative.</p>
+<figure class="fig viz" data-viz="graddescent" id="viz-graddescent"></figure>
+<p>The middle panel is the one worth internalizing: a well-chosen learning rate isn't the fastest theoretically possible descent, it's the one that actually converges — too small and you're technically doing gradient descent but running out of patience (or compute budget) before it matters; too large and each step doesn't just fail to help, it actively overshoots the minimum by more than the previous step did, so the loss <em>grows</em>, unboundedly, every single time. This is why learning-rate schedules (start larger, shrink over time) exist: get the speed of a large α early, the stability of a small α once you're close.</p>
+<div class="callout"><span class="tag">Where this shows up</span>Every neural-network optimizer (SGD, Adam, AdamW — all of them) is gradient descent with a different rule for choosing/adapting α and for how much of the past gradient to remember. If a training loss curve is flat, α is probably too small; if it's spiking or NaN-ing, α is probably too large — the three panels above are literally what those two failure modes look like on a loss curve, just isolated down to one parameter so the mechanism is visible.</div>
+</section>
+
+<section id="loss">
+<h2>2 · Loss Functions — MSE, Cross-Entropy &amp; Huber</h2>
+<p>The loss function is what "wrong" means to the optimizer above — its shape decides which mistakes get punished hardest, which is why picking the right one for the task (regression vs. classification vs. outlier-prone regression) matters as much as picking the right model.</p>
+<div class="formula">MSE    =  (1/n) Σ (yᵢ − ŷᵢ)²
+BCE    =  −[ y·ln(p) + (1−y)·ln(1−p) ]
+Huber  =  0.5·e²           if |e| ≤ δ
+       =  δ·(|e| − 0.5·δ)  otherwise   (e = y − ŷ)</div>
+<figure class="fig viz" data-viz="lossfns" id="viz-lossfns"></figure>
+<p>All three panels plot real evaluations of their formula, not sketches. MSE (left) is symmetric and quadratic — being off by 5 costs <strong>25</strong>, being off by 2 costs <strong>4</strong>, a little over 6× the penalty for a little over 2× the error, which is exactly what "squared" means. Cross-entropy (middle) is built for probabilities specifically: predicting <code>p=0.99</code> when the true label is 1 costs almost nothing (<strong>0.010</strong>); predicting <code>p=0.01</code> — confidently and wrong — costs <strong>4.605</strong>, over 400× as much, because <code>−ln(p)</code> heads toward infinity as a confident prediction turns out to be false. Huber (right) is what you reach for when your regression targets have real outliers: at a normal-sized error (e=1.5) it behaves almost like MSE (1.00 vs. MSE's 2.25), but at a genuine outlier (e=8) it charges only <strong>7.5</strong> where MSE would charge <strong>64</strong> — beyond the threshold δ, the penalty switches from quadratic to linear, so one bad outlier can't dominate the whole training loss the way it would under pure MSE.</p>
+<div class="callout"><span class="tag">Where this shows up</span>Regression tasks (predict a number: price, ETA, temperature) default to MSE, or Huber specifically when the labels are known to be noisy/outlier-prone (sensor glitches, fat-fingered data entry). Classification tasks (predict a class or probability) default to cross-entropy — and this is also the same shape of idea behind an LLM's training loss (next-token cross-entropy) and behind perplexity, which is just <code>e^(average cross-entropy)</code>.</div>
+</section>
+
+<section id="opt">
+<h2>3 · Optimizers — SGD vs. Momentum vs. Adam</h2>
+<p>Gradient descent (§1) says "step downhill"; an optimizer is the specific rule for how big a step and in what adjusted direction. All three below take the exact same 16 steps from the exact same starting point on the exact same loss surface — a real, computed "ravine" (steep in one direction, shallow in the other, the shape that makes optimizer choice actually matter) — only the update rule changes.</p>
+<div class="formula">SGD:       w := w − α·∇L(w)
+Momentum:  v := β·v + ∇L(w);   w := w − α·v
+Adam:      m := β₁·m + (1−β₁)·∇L(w)     (momentum on the gradient)
+           v := β₂·v + (1−β₂)·∇L(w)²    (momentum on the squared gradient)
+           w := w − α · m̂ / (√v̂ + ε)     (per-parameter adaptive step size)</div>
+<figure class="fig viz" data-viz="optimizers" id="viz-optimizers"></figure>
+<p>Real, computed trajectories on <code>L(x,y)=10x²+y²</code> from <code>(x,y)=(−3.5,−3.0)</code>: vanilla SGD zigzags in the steep x-direction (crossing zero 6 times) while crawling in the shallow y-direction, ending at loss <strong>0.151</strong>. Momentum overshoots even <em>further</em> at first (x swings to +1.25, more than SGD's +0.7) because it's carrying velocity from previous steps — but that same velocity carries it through the shallow direction faster, ending at the lowest loss of the three, <strong>0.039</strong>. Adam's path is smooth in both directions at once, zero sign flips anywhere, because it rescales each parameter's step by its own gradient history — no hand-tuning of a separate learning rate per direction required — ending at <strong>0.119</strong>, respectable without any manual tuning at all.</p>
+<div class="callout"><span class="tag">Where this shows up</span>AdamW (Adam + a decoupled weight-decay term) is the default optimizer for essentially every modern transformer/LLM training run. Plain SGD (often with momentum) is still common in classic computer-vision training, where its slightly worse convergence speed is traded for better final generalization in some regimes — a real, debated tradeoff, not a strict "Adam always wins."</div>
+</section>
+
+<section id="pipeline">
+<h2>4 · The Training Pipeline — Init → Data → Compile → Train → Evaluate</h2>
+<p>Sections 1–3 each isolated one mechanism (the update rule, what "wrong" means, how the step is adapted). This section is the scaffolding all three sit inside — the same five stages, in the same order, whether the model is a tiny logistic regression, a ResNet, or a transformer. Only the specific pieces plugged into each stage change.</p>
+<div class="formula">1. Initialize   — build the model, random starting weights
+2. Data         — Dataset + DataLoader: shuffle, batch, feed
+3. Compile      — attach a loss function + an optimizer (+ metrics to watch)
+4. Train        — for each epoch: for each batch: forward → loss → backward → step → zero_grad
+5. Evaluate     — eval mode, no gradient tracking, forward pass only (inference)</div>
+<figure class="fig viz" data-viz="trainpipeline" id="viz-trainpipeline"></figure>
+<p>"Compile" is literally Keras's word for stage 3 — <code>model.compile(optimizer=..., loss=..., metrics=...)</code> attaches those three pieces before <code>model.fit()</code> can run. PyTorch has no equivalent call — you just construct <code>criterion = nn.CrossEntropyLoss()</code> and <code>optimizer = torch.optim.AdamW(model.parameters(), ...)</code> as plain objects, then reference them yourself inside the loop you write. (Careful: PyTorch 2.x also has a function literally named <code>torch.compile()</code> — that's an unrelated feature, a JIT/graph optimizer that makes an existing model run faster, not a stage-3 wiring step. Same word, two different meanings, one framework.)</p>
+<div class="formula">### PyTorch — you write the loop yourself
+model = torchvision.models.resnet18(num_classes=10)
+train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+
+criterion = nn.CrossEntropyLoss()                        # stage 3: loss
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)  # stage 3: optimizer
+
+for epoch in range(n_epochs):                # stage 4: TRAIN
+    model.train()
+    for xb, yb in train_loader:              #   loop over batches
+        optimizer.zero_grad()                #   clear old gradients
+        logits = model(xb)                   #   forward pass
+        loss = criterion(logits, yb)         #   compute loss
+        loss.backward()                      #   backward pass (autograd)
+        optimizer.step()                     #   update weights
+
+model.eval()                                  # stage 5: EVALUATE / INFERENCE
+with torch.no_grad():                         #   no autograd bookkeeping needed
+    preds = model(x_test).argmax(dim=1)
+
+### Keras — the same 5 stages, framework does the loop for you
+model = keras.applications.ResNet18(...)                     # stage 1: init
+model.compile(optimizer="adamw", loss="sparse_categorical_crossentropy",
+              metrics=["accuracy"])                          # stage 3: compile
+model.fit(x_train, y_train, epochs=n_epochs, batch_size=8)    # stage 2+4: data + train
+preds = model.predict(x_test)                                 # stage 5: evaluate/inference</div>
+<figure class="fig viz" data-viz="epochloss" id="viz-epochloss"></figure>
+<p>Real run, not illustrative: 32 samples, <code>batch_size=8</code> → 4 batches per epoch, an Adam-updated logistic regression with binary cross-entropy loss, trained for 8 real epochs. Loss falls <strong>0.6438 → 0.3707</strong>, monotonically, ending at <strong>90.6%</strong> training accuracy — this is stage 4 of the pipeline above, concretely, with an actual epoch axis and an actual per-epoch loss number, the same quantity a real training log prints every epoch.</p>
+<div class="callout"><span class="tag">Where this shows up</span>"Epoch" = one full pass over every batch in the dataset. "Batch size" = how many samples get averaged into one gradient/update. Small batches → noisier but more frequent updates (more steps per epoch); large batches → smoother but fewer updates per epoch, and a much bigger memory footprint (see the KV-cache/QLoRA memory math elsewhere in this guide for why memory is the usual limiter). <code>DataLoader(shuffle=True)</code> reshuffles the batch order every epoch specifically so the model doesn't learn a spurious pattern tied to sample order.</div>
+
+<h3>Optimizer options — Adam vs. AdamW, the decoupled-decay difference</h3>
+<p>§3 already showed SGD/Momentum/Adam differ in how they use gradient history. AdamW differs from Adam in something else entirely: <em>where weight decay (L2-style shrinkage toward zero, used to fight overfitting) gets applied.</em> Plain "Adam + L2" folds the decay into the gradient before Adam's per-parameter <code>1/√v̂</code> rescaling — so the SAME nominal decay ends up shrinking different parameters by very different real amounts, depending on each one's own gradient history. AdamW applies decay directly, outside that rescaling.</p>
+<figure class="fig viz" data-viz="adamw" id="viz-adamw"></figure>
+<p>Real recurrence, both starting at w=1.0, both given the identical nominal <code>weight_decay=0.1</code>, 5 steps, zero task-gradient (isolating decay alone): a parameter with a small gradient-history (small <code>v̂</code>) shrinks to <strong>0.5092</strong> under Adam+L2 but a parameter with a large gradient-history (large <code>v̂</code>) only shrinks to <strong>0.8466</strong> — a real <strong>0.337</strong> gap between two parameters given the exact same decay setting. Under AdamW, both shrink to exactly <strong>0.9510</strong> — a <strong>0.000</strong> gap. This unpredictable coupling is the specific, published reason (Loshchilov &amp; Hutter, 2017) AdamW replaced Adam+L2 as the default for transformer/LLM training.</p>
+
+<h3>Loss options — Binary vs. Categorical Cross-Entropy</h3>
+<p>§2 covered BCE for a 2-class (yes/no) output. Most real classifiers — including a ResNet trained on 10 or 1000 classes — output a probability over <em>many</em> classes at once, via softmax, and use Categorical Cross-Entropy (CCE): the exact same <code>−ln(p)</code> shape as BCE, just applied to the probability the softmax assigned the one correct class.</p>
+<div class="formula">CCE  =  −ln( p_true_class )        where p = softmax(logits)</div>
+<figure class="fig viz" data-viz="cce" id="viz-cce"></figure>
+<p>Real 3-class softmax, logits <code>[2.0, 0.5, −1.0]</code>, true class = index 0: softmax gives that class <strong>78.56%</strong> probability, so CCE = <strong>0.2413</strong> — cheap, because the model was right. Flip the logits to <code>[−1.0, 0.5, 2.0]</code> (same true class, now confidently predicted wrong): that class's probability collapses to <strong>3.91%</strong>, and CCE jumps over 13× higher to <strong>3.2413</strong> — exactly the same "confidently wrong costs enormously more" shape BCE showed in §2, just extended across more than 2 outcomes.</p>
+<div class="callout"><span class="tag">Where this shows up</span><code>nn.BCELoss</code> / <code>"binary_crossentropy"</code> → single output neuron + sigmoid, 2 classes (or independent multi-label flags). <code>nn.CrossEntropyLoss</code> / <code>"sparse_categorical_crossentropy"</code> → one output neuron per class + softmax, exactly one correct class — this is what a ResNet classifying 1000 ImageNet categories, or an LLM predicting the next token over its whole vocabulary, actually trains against. PyTorch's <code>nn.CrossEntropyLoss</code> is a genuine convenience, not a separate algorithm — it fuses softmax + CCE into one numerically-stable call, which is why real PyTorch code passes raw logits into it directly rather than pre-computing softmax first.</div>
+</section>
+
+<section id="bv">
+<h2>5 · Bias-Variance Tradeoff &amp; Overfitting/Underfitting</h2>
+<p>One curve explains both ideas at once, because they're the same phenomenon looked at from two angles.</p>
+<div class="formula">Total Error  ≈  Bias²  +  Variance  +  Irreducible Noise</div>
+<figure class="fig viz" data-viz="biasvariance" id="viz-biasvariance"></figure>
+<p><strong>Bias</strong> is error from a model too simple to capture the real pattern — it makes the same kind of mistake consistently, on training data and new data alike, which is why the underfitting zone (left) has both curves high and close together. <strong>Variance</strong> is error from a model so flexible it starts fitting noise specific to the training set — it memorizes quirks that don't generalize, which is why the overfitting zone (right) shows training error still falling while test error climbs back up: the model is getting <em>better at the training set specifically</em>, not better in general. The sweet spot isn't "as complex as possible" or "as simple as possible" — it's the point where the two failure modes cross over, and it's found empirically (via a validation curve exactly like this one), not by formula.</p>
+<div class="callout"><span class="tag">Where this shows up</span>This is the entire justification for a held-out validation set: training loss alone can't distinguish "learning the real pattern" from "memorizing the training set" — only error on data the model never trained on can, which is exactly the gap plotted here.</div>
+</section>
+
+<section id="reg">
+<h2>6 · L1 vs. L2 Regularization</h2>
+<p>Both penalize large weights to fight the overfitting/high-variance side of the tradeoff above — the difference is <em>how</em> they penalize, and that difference has a real geometric consequence, verified below by actually solving both constrained optimization problems (grid search over the boundary), not asserted.</p>
+<div class="formula">L1 (Lasso):  minimize Loss(w) + λ Σ|wᵢ|    ⟺   constrain Σ|wᵢ| ≤ t
+L2 (Ridge):  minimize Loss(w) + λ Σwᵢ²    ⟺   constrain Σwᵢ² ≤ t²</div>
+<figure class="fig viz" data-viz="regularization" id="viz-regularization"></figure>
+<p>Same loss surface (elliptical contours centered on the true unconstrained optimum, w=(0.3, 2.0)), same constraint budget (t=0.9) — two different constraint shapes, two different real solutions. L1's diamond has corners sitting exactly on the axes; the closest point on that diamond to the true optimum turns out to <em>be</em> one of those corners, computed here as exactly <strong>(0, 0.9)</strong> — w₁ isn't nearly zero, it's exactly zero. L2's circle has no corners anywhere, so its closest boundary point is a generic point on the curve, computed as <strong>(0.18, 0.88)</strong> — both weights shrink toward zero, but neither one reaches it. This is the literal mechanism behind "L1 does feature selection, L2 just shrinks" — not a rule of thumb, a direct consequence of one shape having corners and the other not.</p>
+<div class="callout"><span class="tag">Where this shows up</span>L1 (Lasso) is the right call when you suspect most features are irrelevant and want the model to zero them out automatically. L2 (Ridge) is the right call when features are correlated and you'd rather shrink them all a bit than arbitrarily pick which one survives. Elastic Net (both penalties, weighted) exists specifically because real problems often want a bit of each.</div>
+</section>
+
+<section id="hyper">
+<h2>7 · Hyperparameters — Classical ML, Boosting &amp; LLMs</h2>
+<p>Everything above (loss, optimizer, regularization strength) is controlled by numbers you set <em>before</em> training starts, not learned from data — that's what "hyper" means. Three real examples, one from each world, each with an actual before/after result, not a definition.</p>
+
+<h3>Classical ML — k in k-Nearest-Neighbors</h3>
+<p>Real dataset (scikit-learn <code>make_moons</code>, 300 points, 30% held out as test), real <code>KNeighborsClassifier</code> runs at three values of k.</p>
+<figure class="fig viz" data-viz="hyperknn" id="viz-hyperknn"></figure>
+<p><strong>k=1</strong> memorizes the training set exactly (100% train accuracy) but generalizes worst of the three (86.7% test) — classic overfitting, each prediction driven by a single, possibly-noisy neighbor. <strong>k=9</strong> is the real sweet spot found by this exact sweep: lower train accuracy (90.5%) than k=1, but the <em>best</em> test accuracy of any k tried (94.4%). <strong>k=150</strong> — half the training set — underfits: both train (78.1%) and test (80.0%) accuracy drop and sit close together, the bias-variance signature from §4 showing up again, this time on one concrete, real hyperparameter.</p>
+
+<h3>Advanced ML — learning_rate in Gradient Boosting</h3>
+<p>Real dataset (scikit-learn <code>make_regression</code>, 400 samples, 10 features, real noise), real <code>GradientBoostingRegressor</code> with <code>n_estimators=100</code> held fixed while <code>learning_rate</code> varies.</p>
+<figure class="fig viz" data-viz="hyperboosting" id="viz-hyperboosting"></figure>
+<p><strong>learning_rate=0.01</strong>, too small for only 100 trees: the ensemble hasn't converged yet, so both train (R²=0.636) and test (R²=0.511) are mediocre — this is underfitting from a learning-rate/n_estimators mismatch, not from the model being too simple. <strong>learning_rate=0.1</strong> is the sweet spot at this tree count: train R²=0.993, test R²=<strong>0.870</strong>, the best test score of the three. <strong>learning_rate=1.0</strong> overshoots: the ensemble fits the training set perfectly (R²=1.000) but test R² collapses to 0.661 — each tree is now correcting the full residual instead of a damped fraction of it, so early trees overfit hard and later trees can't recover.</p>
+
+<h3>LLMs — Temperature</h3>
+<p>Real softmax computed at three temperatures over the same 5 next-token logits (a toy but real example: completing "The capital of France is").</p>
+<figure class="fig viz" data-viz="hyperllmtemp" id="viz-hyperllmtemp"></figure>
+<p>At <strong>T=0.5</strong>, "Paris" takes essentially all the probability mass (99.97%) — near-deterministic, low-diversity output. At <strong>T=1.0</strong> (the logits' natural scale), "Paris" still dominates (97.19%) but the other tokens have real, nonzero probability. At <strong>T=2.0</strong>, "Paris" drops to 75.44% and every other token gains meaningfully — entropy (a real measure of "how spread out" a distribution is) rises from <strong>0.003 nats</strong> at T=0.5 to <strong>0.887 nats</strong> at T=2.0, over 300× higher. Temperature doesn't change which token the model thinks is most likely — the logits are identical in all three panels — it only changes how much probability mass gets shared with the runners-up.</p>
+
+<div class="callout"><span class="tag">Where this shows up</span>The pattern repeats across all three: there's rarely a hyperparameter value that's "correct" in the abstract, only one that's correct for a specific dataset/model-size/budget, found empirically — exactly the same lesson as the learning-rate panels in §1 and the model-complexity curve in §4, just wearing a different hyperparameter's name each time.</div>
+</section>
+
+<section id="qa">
+<h2>8 · Practice Q&amp;A — Self-Test</h2>
+<p>Ten recall questions covering every topic above, grounded in the exact real numbers already computed and shown in the diagrams — no new claims, just active-recall practice.</p>
+
+<h3>Q1. In the three-panel gradient descent diagram, why did the "too big" learning rate (α=1.05) cause the loss to GROW from 64 to 201 instead of just converging slowly like the "too small" case?</h3>
+<p><strong>A:</strong> The update coefficient (1−2α) exceeded 1 in absolute value (|1−2.1|=1.1&gt;1) for this quadratic loss, so each step overshot the minimum by more than the previous distance — a true divergence, not slowness. Loss went 64→77→94→113→137→166→201, growing every single step.</p>
+
+<h3>Q2. What was the exact recurrence used to compute every gradient descent step, and why does it matter that these numbers were computed rather than sketched?</h3>
+<p><strong>A:</strong> θ := θ − α·∇L(θ) on L(θ)=(θ−5)², run for real for 6 steps from θ=−3 at three learning rates. Because the numbers are actually computed, the diagram can show a genuine divergence at α=1.05 rather than an idealized picture that might accidentally look plausible either way.</p>
+
+<h3>Q3. At the outlier error e=8, what's the exact numeric gap between MSE and Huber loss (δ=1), and why does that gap exist?</h3>
+<p><strong>A:</strong> MSE(8)=64, Huber(8)=7.5 — an 8.5× difference. Beyond the threshold δ=1, Huber's penalty switches from quadratic (0.5e²) to linear (δ·(|e|−0.5δ)), so one large outlier can't dominate the total loss the way it would under pure MSE.</p>
+
+<h3>Q4. Why does binary cross-entropy for a true label y=1 approach infinity as predicted probability p→0, and what real numbers demonstrate that?</h3>
+<p><strong>A:</strong> Because BCE = −ln(p) for y=1, and −ln(p)→∞ as p→0. Real computed values: p=0.99 costs 0.010, p=0.01 costs 4.605 — over 400× more, even though the raw prediction only moved 0.98 in probability space.</p>
+
+<h3>Q5. In the SGD vs. Momentum vs. Adam diagram, why did Momentum overshoot even FURTHER than plain SGD (x swinging to +1.25 vs. SGD's +0.7) and still end up with the lowest final loss?</h3>
+<p><strong>A:</strong> Momentum accumulates velocity from past gradients (v:=βv+∇L(w)), so it can overshoot more in high-curvature directions early on — but that same accumulated velocity carries it through the shallow direction faster, giving it the lowest final loss (0.039) of the three after 16 steps, versus SGD's 0.151.</p>
+
+<h3>Q6. Why did Adam's trajectory show zero sign flips in either coordinate, unlike SGD's visible zigzag in the steep direction?</h3>
+<p><strong>A:</strong> Adam rescales each parameter's effective step size using its own running gradient-magnitude history (the second-moment estimate v̂), automatically normalizing the steep and shallow directions without any manual per-direction learning-rate tuning — eliminating the zigzag SGD shows on the identical ravine-shaped loss surface. Final loss: 0.119, no oscillation anywhere in the path.</p>
+
+<h3>Q7. In the model-complexity curve, what specifically defines the "sweet spot," and why isn't it just "as complex as possible"?</h3>
+<p><strong>A:</strong> The sweet spot (complexity≈4 in the diagram) is where test/validation error hits its minimum (0.382) — even though training error keeps falling past that point, down to 0.016 at complexity=10. Past the sweet spot the model is fitting training-set noise (variance), not learning more of the real pattern, so test error climbs back up even as training error keeps improving.</p>
+
+<h3>Q8. What real, computed values proved that L1 produces a sparse solution while L2 doesn't, on the same loss surface and same budget?</h3>
+<p><strong>A:</strong> With loss=2(w1−0.3)²+(w2−2.0)² and budget t=0.9, a grid search found the L1 diamond's closest boundary point at exactly (0, 0.9) — w1 exactly zero — while the L2 circle's closest point was (0.183, 0.881) — both weights nonzero. This was verified by numeric optimization, not just asserted from the textbook rule.</p>
+
+<h3>Q9. In the real kNN sweep, why did k=1 get the WORST test accuracy despite getting the BEST (100%) training accuracy?</h3>
+<p><strong>A:</strong> k=1 lets a single, possibly-noisy neighbor decide every prediction, so it memorizes the training set exactly (100% train accuracy) but that memorization doesn't generalize — test accuracy was only 86.7%, worse than k=9's 94.4%, which averages over more neighbors and smooths out individual noisy points.</p>
+
+<h3>Q10. Why did the Gradient Boosting run with learning_rate=1.0 achieve perfect training R² (1.000) but the worst test R² (0.661) of the three rates tried?</h3>
+<p><strong>A:</strong> At learning_rate=1.0, each new tree corrects the FULL residual instead of a damped fraction of it, so early trees overfit hard to training-set noise and later trees can't recover — the same overshoot-and-overfit failure mode as too large a learning rate in plain gradient descent, just expressed through an ensemble instead of a single parameter update.</p>
+
+<h3>Q11. In the real 8-epoch training run, what specifically does "one epoch" correspond to given batch_size=8 and 32 total samples?</h3>
+<p><strong>A:</strong> One epoch = one full pass over every sample in the dataset, split into batches. With 32 samples and batch_size=8, that's exactly 4 batches per epoch — each epoch's reported loss (e.g. 0.6438 for epoch 1) is the average BCE loss across those 4 batches, not a single batch's loss.</p>
+
+<h3>Q12. Why did the small-gradient-history parameter shrink MORE under Adam+L2 (to 0.5092) than under AdamW (to 0.9510), given the identical nominal weight_decay=0.1 in both?</h3>
+<p><strong>A:</strong> Adam+L2 divides the decay term by that parameter's own √v̂ (its second-moment gradient history) as part of Adam's normal adaptive-step-size math. A small v̂ means dividing by a small number, which amplifies the effective decay far beyond the nominal 0.1 — a real, computed side effect, not a labeling difference. AdamW never divides the decay term by anything, so it always shrinks by the same proportional amount regardless of that parameter's gradient history.</p>
+
+<h3>Q13. In the categorical cross-entropy example, both panels used logits of the exact same three magnitudes (2.0, 0.5, -1.0) — why did reordering which class got which logit change the loss by over 13×?</h3>
+<p><strong>A:</strong> CCE only cares about the probability mass softmax assigns to the TRUE class, not the raw logit magnitudes themselves. Assigning the true class the highest logit gives it 78.56% probability (CCE=0.2413); assigning that same true class the lowest logit gives it only 3.91% probability (CCE=3.2413) — same three numbers, completely different loss, because what matters is which class each number ends up attached to.</p>
+
+<h3>Q14. Why does PyTorch's <code>nn.CrossEntropyLoss</code> expect raw logits as input instead of pre-computed softmax probabilities?</h3>
+<p><strong>A:</strong> It fuses the softmax and the −ln(p) cross-entropy computation into one numerically-stable operation internally (avoiding computing exp() of large numbers and then a separate log() that could lose precision). Passing in already-softmaxed probabilities and a separate loss would double-apply softmax-like squashing and produce a mathematically wrong gradient — the fused version is a correctness requirement, not just a convenience.</p>
+</section>
+
+<footer>Built alongside <code>NCA-GENL-study-guide.html</code> and <code>bnsf-technical-visual.html</code> — click-to-ask powered by the same local Azure OpenAI proxy (<code>python server.py</code>). Every number on this page is either a direct evaluation of the stated formula, a real numeric optimization (grid search), or a real scikit-learn/NumPy run — computed and checked before being drawn, not hand-picked to look clean.</footer>
+</main>
+</div>
+
+<script>
+(function(){
+"use strict";
+const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const txt=(x,y,cls,s,anch)=>`<text x="${x}" y="${y}" class="${cls}"${anch?` text-anchor="${anch}"`:""}>${s}</text>`;
+const DEFS='<defs><marker id="vah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker><marker id="vahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>';
+const hit=(bx,by,bw,bh,tip,ask,inner)=>`<g class="vhit" tabindex="0" role="button" aria-label="${esc(tip)}" data-tip="${esc(tip)}" data-ask="${esc(ask)}"><rect class="hitbg" x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6" fill="transparent" stroke="transparent" stroke-width="2"/>${inner}</g>`;
+const VIZ={};
+
+/* shared: axes + curve helpers for the plot-style diagrams below */
+function axes(ox,oy,pw,ph,xlabel,ylabel){
+  let s=`<line x1="${ox}" y1="${oy+ph}" x2="${ox+pw+12}" y2="${oy+ph}" stroke="var(--muted)" stroke-width="1.1" marker-end="url(#vah)"/>`;
+  s+=`<line x1="${ox}" y1="${oy+ph}" x2="${ox}" y2="${oy-10}" stroke="var(--muted)" stroke-width="1.1" marker-end="url(#vah)"/>`;
+  if(xlabel)s+=txt(ox+pw+16,oy+ph+4,"vsm",xlabel);
+  if(ylabel)s+=txt(ox-8,oy-14,"vsm",ylabel,"end");
+  return s;}
+function curvePath(fn,x0,x1,mapX,mapY,yCap){
+  let d="",N=50;
+  for(let i=0;i<=N;i++){
+    const x=x0+(x1-x0)*i/N;
+    const y=Math.min(fn(x),yCap===undefined?1e9:yCap);
+    d+=(i===0?"M":"L")+mapX(x).toFixed(1)+","+mapY(y).toFixed(1)+" ";
+  }
+  return d;}
+function barGroup(x,y,w,h,bars,ymax){
+  let s=`<line x1="${x}" y1="${y+h}" x2="${x+w}" y2="${y+h}" stroke="var(--muted)" stroke-width="1"/>`;
+  const n=bars.length,gap=10,bw=(w-(n-1)*gap)/n;
+  bars.forEach((b,i)=>{
+    const bx=x+i*(bw+gap),bh=Math.max(1,(b.value/ymax)*h);
+    s+=`<rect x="${bx.toFixed(1)}" y="${(y+h-bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" class="${b.cls}"/>`;
+    s+=txt(bx+bw/2,y+h-bh-6,"vsm",b.valueLabel!==undefined?b.valueLabel:b.value.toFixed(3),"middle");
+    s+=txt(bx+bw/2,y+h+13,"vsm",b.label,"middle");
+  });
+  return s;}
+
+/* ====== TOPIC 1: GRADIENT DESCENT ====== */
+VIZ.graddescent={t:"Gradient descent — same slope, three learning rates, three outcomes",
+  hint:"L(θ)=(θ−5)², real computed values every step — θ₀=−3, 6 steps, only α changes",w:980,h:350,
+  cap:"Too small (α=0.03): converges, but crawls — loss 64→30.5 in 6 steps. Just right (α=0.3): clean convergence, loss 64→0.001. Too big (α=1.05): overshoots the minimum every step, bouncing further away each time — loss 64→201, real divergence, not slowness.",
+  svg(){
+    function panel(px,title,titleCls,seq,loss,xr,yr,dotCls,tip,ask){
+      const ox=px+38,oy=64,pw=222,ph=170;
+      const mapX=t=>ox+(t-xr[0])/(xr[1]-xr[0])*pw;
+      const mapY=l=>oy+ph-(Math.min(l,yr[1])-yr[0])/(yr[1]-yr[0])*ph;
+      let s=txt(px+134,42,titleCls,title,"middle");
+      s+=axes(ox,oy,pw,ph,"θ","L(θ)");
+      const mx=mapX(5);
+      s+=`<line x1="${mx.toFixed(1)}" y1="${(oy+ph).toFixed(1)}" x2="${mx.toFixed(1)}" y2="${oy}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>`;
+      s+=txt(mx,oy-2,"vsm","min","middle");
+      s+=`<path d="${curvePath(x=>(x-5)*(x-5),xr[0],xr[1],mapX,mapY,yr[1])}" fill="none" stroke="var(--line)" stroke-width="1.6"/>`;
+      let stepD="";
+      seq.forEach((t,i)=>{stepD+=(i===0?"M":"L")+mapX(t).toFixed(1)+","+mapY(loss[i]).toFixed(1)+" ";});
+      s+=`<path d="${stepD}" fill="none" stroke="var(--accent-hi)" stroke-width="1.3" stroke-dasharray="4 3"/>`;
+      seq.forEach((t,i)=>{
+        const cls=i===0?"cell":i===seq.length-1?dotCls:"cellhot";
+        s+=`<circle cx="${mapX(t).toFixed(1)}" cy="${mapY(loss[i]).toFixed(1)}" r="${i===0||i===seq.length-1?4.5:3}" class="${cls}"/>`;});
+      const last=loss[loss.length-1];
+      s+=txt(px+134,oy+ph+34,"vsm",`loss: ${loss[0].toFixed(1)} → ${last<1?last.toFixed(3):last.toFixed(1)}`,"middle");
+      return hit(px,22,270,ph+72,tip,ask,s);}
+    let s="";
+    s+=panel(20,"too small — α=0.03","vwarn",
+      [-3.0,-2.52,-2.069,-1.645,-1.246,-0.871,-0.519],[64.0,56.55,49.968,44.152,39.012,34.471,30.459],
+      [-5,10],[0,70],"cell",
+      "Learning rate α=0.03, starting θ=−3, 6 steps: loss only drops from 64 to 30.5 — technically converging, just far too slowly to be practical.",
+      "Why does a very small learning rate still guarantee eventual convergence, just impractically slowly — what's actually being traded off?");
+    s+=panel(350,"just right — α=0.3","vok",
+      [-3.0,1.8,3.72,4.488,4.795,4.918,4.967],[64.0,10.24,1.638,0.262,0.042,0.007,0.001],
+      [-5,10],[0,70],"cellhot",
+      "Learning rate α=0.3, same start, same 6 steps: loss drops from 64 to 0.001 — each step lands closer to the minimum without overshooting past it.",
+      "Why does a well-chosen learning rate cause θ to approach the minimum smoothly instead of oscillating around it?");
+    s+=panel(680,"too big — α=1.05","vbad",
+      [-3.0,13.8,-4.68,15.648,-6.713,17.884,-9.172],[64.0,77.44,93.702,113.38,137.19,166.0,200.859],
+      [-10,19],[0,215],"cellblk",
+      "Learning rate α=1.05, same start: every step overshoots the minimum onto the opposite side, and the loss actually GROWS — 64→77→94→113→137→166→201. This is divergence, not slow progress.",
+      "Why does too large a learning rate cause the loss to increase instead of decrease, even though the gradient direction is still correct at every step?");
+    return s;}};
+
+/* ====== TOPIC 2: LOSS FUNCTIONS ====== */
+VIZ.lossfns={t:"Loss functions — MSE, cross-entropy, and Huber, and why the shape matters",
+  hint:"real formula evaluations: MSE=(y−ŷ)², BCE=−ln(p) for true label y=1, Huber(δ=1) vs. MSE at an outlier",w:980,h:330,
+  cap:"MSE (y=10): pred 8 costs 4, pred 15 costs 25 — quadratic, symmetric. Cross-entropy (y=1): p=0.99 costs 0.010, p=0.01 costs 4.605 — over 400× the penalty for confidently wrong vs. confidently right. Huber vs MSE at an outlier (e=8): Huber charges 7.5, MSE charges 64.",
+  svg(){
+    function panel(px,title,fn,xr,yr,xlabel,ylabel,points,tip,ask){
+      const ox=px+38,oy=58,pw=200,ph=170;
+      const mapX=x=>ox+(x-xr[0])/(xr[1]-xr[0])*pw;
+      const mapY=y=>oy+ph-(Math.min(y,yr[1])-yr[0])/(yr[1]-yr[0])*ph;
+      let s=txt(px+128,38,"vlab",title,"middle");
+      s+=axes(ox,oy,pw,ph,xlabel,ylabel);
+      s+=`<path d="${curvePath(fn,xr[0],xr[1],mapX,mapY,yr[1])}" fill="none" stroke="var(--accent-hi)" stroke-width="1.8"/>`;
+      points.forEach(([x,y,cls])=>{
+        s+=`<circle cx="${mapX(x).toFixed(1)}" cy="${mapY(y).toFixed(1)}" r="4.5" class="${cls}"/>`;
+        s+=txt(mapX(x),mapY(y)-9,"vsm",(y<1?y.toFixed(3):y.toFixed(1)),"middle");});
+      return hit(px,20,255,ph+62,tip,ask,s);}
+    let s="";
+    s+=panel(15,"MSE — regression, y=10",x=>(10-x)*(10-x),[0,20],[0,100],"ŷ (prediction)","loss",
+      [[8,4,"cell"],[10,0,"cellhot"],[15,25,"cellblk"]],
+      "MSE for a true value y=10: prediction 8 costs 4, exact prediction 10 costs 0, prediction 15 costs 25 — the penalty grows with the SQUARE of the error.",
+      "Why does squaring the error in MSE penalize large mistakes disproportionately more than small ones, and when is that actually the right behavior to want?");
+    s+=panel(365,"BCE — classification, y=1",x=>-Math.log(Math.max(x,0.001)),[0.02,1],[0,5],"p (predicted prob.)","loss",
+      [[0.99,-Math.log(0.99),"cellhot"],[0.5,-Math.log(0.5),"cell"],[0.01,Math.min(-Math.log(0.01),5),"cellblk"]],
+      "Binary cross-entropy, true label y=1: p=0.99 (confidently right) costs 0.010; p=0.5 (uncertain) costs 0.693; p=0.01 (confidently WRONG) costs 4.605 — because −ln(p) blows up toward infinity as p→0.",
+      "Why does cross-entropy loss approach infinity as a confident prediction turns out to be wrong, and why is that specifically the right penalty shape for a probability output?");
+    const huber=e=>{const a=Math.abs(e);return a<=1?0.5*a*a:1*(a-0.5);};
+    const ox3=715+38,oy3=58,pw3=200,ph3=170,xr3=[-9,9],yr3=[0,20];
+    const mapX3=x=>ox3+(x-xr3[0])/(xr3[1]-xr3[0])*pw3, mapY3=y=>oy3+ph3-(Math.min(y,yr3[1])-yr3[0])/(yr3[1]-yr3[0])*ph3;
+    let s3=txt(715+128,38,"vlab","Huber (δ=1) vs. MSE","middle");
+    s3+=axes(ox3,oy3,pw3,ph3,"e (error)","loss");
+    s3+=`<path d="${curvePath(e=>e*e,xr3[0],xr3[1],mapX3,mapY3,yr3[1])}" fill="none" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 3"/>`;
+    s3+=`<path d="${curvePath(huber,xr3[0],xr3[1],mapX3,mapY3,yr3[1])}" fill="none" stroke="var(--accent-hi)" stroke-width="1.8"/>`;
+    s3+=txt(mapX3(-7),mapY3(20)+10,"vsm","MSE (dashed) →");
+    [[0.5,huber(0.5),"cell"],[1.5,huber(1.5),"cellhot"],[8,huber(8),"cellblk"]].forEach(([x,y,cls])=>{
+      s3+=`<circle cx="${mapX3(x).toFixed(1)}" cy="${mapY3(y).toFixed(1)}" r="4.5" class="${cls}"/>`;
+      s3+=txt(mapX3(x),mapY3(y)-9,"vsm",y.toFixed(2),"middle");});
+    s3+=txt(715+128,oy3+ph3+34,"vsm","MSE(8)=64 — off this chart's scale","middle");
+    s+=hit(715,20,255,ph3+62,
+      "Huber (δ=1) vs. MSE at the same errors: at e=0.5, Huber≈MSE (0.12 vs 0.25); at the outlier e=8, MSE charges 64 while Huber charges only 7.5 — beyond δ the penalty is LINEAR, not quadratic.",
+      "Why does making the loss linear beyond a threshold δ specifically fix MSE's oversensitivity to outliers, without losing the smooth quadratic behavior near zero that helps optimization converge?",
+      s3);
+    return s;}};
+
+/* ====== TOPIC 3: OPTIMIZERS ====== */
+VIZ.optimizers={t:"Optimizers — SGD vs. Momentum vs. Adam on the same ravine",
+  hint:"L(x,y)=10x²+y², same start (−3.5,−3.0), same 16 steps — real recurrence, not illustrative",w:980,h:320,
+  cap:"SGD zigzags in the steep x-direction, final loss 0.151. Momentum overshoots even further at first but converges to the lowest final loss, 0.039. Adam's path is smooth with zero sign flips in either coordinate, final loss 0.119 — without any manual per-direction tuning.",
+  svg(){
+    function panel(px,title,titleCls,path,finalLoss,tip,ask){
+      const ox=px+40,oy=54,pw=210,ph=190,xr=[-4,2],yr=[-3.5,1.2];
+      const mapX=x=>ox+(x-xr[0])/(xr[1]-xr[0])*pw;
+      const mapY=y=>oy+ph-(y-yr[0])/(yr[1]-yr[0])*ph;
+      let s=txt(px+130,36,titleCls,title,"middle");
+      s+=`<rect x="${ox}" y="${oy}" width="${pw}" height="${ph}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
+      s+=`<line x1="${mapX(0).toFixed(1)}" y1="${oy}" x2="${mapX(0).toFixed(1)}" y2="${oy+ph}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 3"/>`;
+      s+=`<line x1="${ox}" y1="${mapY(0).toFixed(1)}" x2="${ox+pw}" y2="${mapY(0).toFixed(1)}" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 3"/>`;
+      [3,10].forEach(k=>{
+        const rx=Math.sqrt(k/10)/(xr[1]-xr[0])*pw, ry=Math.sqrt(k)/(yr[1]-yr[0])*ph;
+        s+=`<ellipse cx="${mapX(0).toFixed(1)}" cy="${mapY(0).toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="none" stroke="var(--line)" stroke-width="0.8"/>`;});
+      let d="";
+      path.forEach((w,i)=>{d+=(i===0?"M":"L")+mapX(w[0]).toFixed(1)+","+mapY(w[1]).toFixed(1)+" ";});
+      s+=`<path d="${d}" fill="none" stroke="var(--accent-hi)" stroke-width="1.3"/>`;
+      path.forEach((w,i)=>{
+        const isEnd=i===path.length-1;
+        s+=`<circle cx="${mapX(w[0]).toFixed(1)}" cy="${mapY(w[1]).toFixed(1)}" r="${i===0?4.5:isEnd?4.5:2}" class="${i===0?'cell':isEnd?'cellhot':'cellhot'}"/>`;});
+      s+=txt(px+130,oy+ph+22,"vsm",`final loss (16 steps): ${finalLoss}`,"middle");
+      return hit(px,16,270,ph+58,tip,ask,s);}
+    let s="";
+    s+=panel(20,"SGD — α=0.06","vwarn",
+      [[-3.5,-3.0],[0.7,-2.64],[-0.14,-2.3232],[0.028,-2.0444],[-0.0056,-1.7991],[0.0011,-1.5832],[-0.0002,-1.3932],[0.0,-1.226],[0.0,-1.0789],[0.0,-0.9494],[0.0,-0.8355],[0.0,-0.7352],[0.0,-0.647],[0.0,-0.5694],[0.0,-0.501],[0.0,-0.4409],[0.0,-0.388]],
+      "0.151",
+      "Vanilla SGD, α=0.06: the x-direction (curvature 10x higher than y) overshoots past zero and back 6 times before settling — visible zigzag. Final loss after 16 steps: 0.151.",
+      "Why does vanilla SGD oscillate in the steep direction of a ravine-shaped loss surface, and why does that oscillation waste steps instead of making progress?");
+    s+=panel(350,"Momentum — β=0.5","vok",
+      [[-3.5,-3.0],[-1.05,-2.79],[0.91,-2.4897],[1.253,-2.1653],[0.5474,-1.8515],[-0.1886,-1.565],[-0.4246,-1.3122],[-0.2454,-1.0939],[0.016,-0.9082],[0.1355,-0.7518],[0.1004,-0.621],[0.0126,-0.5121],[-0.0401,-0.4218],[-0.0384,-0.3471],[-0.0106,-0.2855],[0.0107,-0.2347],[0.0139,-0.1929]],
+      "0.039",
+      "Momentum (β=0.5), same α: builds velocity from accumulated past gradients, overshooting even FURTHER at first (x swings to +1.25, more than SGD's +0.7) but that same accumulated velocity carries it through the shallow y-direction faster — final loss 0.039, the lowest of the three.",
+      "Why can momentum overshoot MORE than vanilla SGD early on, and still end up converging faster overall?");
+    s+=panel(680,"Adam — lr=0.25","vacc",
+      [[-3.5,-3.0],[-3.25,-2.75],[-3.0007,-2.5008],[-2.7525,-2.2531],[-2.506,-2.0075],[-2.262,-1.765],[-2.0211,-1.5266],[-1.7841,-1.2933],[-1.552,-1.0665],[-1.3256,-0.8473],[-1.106,-0.6374],[-0.8944,-0.4382],[-0.6918,-0.2513],[-0.4995,-0.0782],[-0.3185,0.0797],[-0.15,0.221],[0.0049,0.3448]],
+      "0.119",
+      "Adam, lr=0.25: adapts its effective step size PER PARAMETER using each direction's own gradient history — the path is completely smooth, zero sign flips in either coordinate, despite no manual tuning of separate step sizes for the steep vs. shallow direction. Final loss 0.119.",
+      "Why does Adam's per-parameter adaptive step size eliminate the zigzag that vanilla SGD shows on the same loss surface, without needing the steep and shallow directions tuned separately?");
+    return s;}};
+
+/* ====== TOPIC 3.1: TRAINING PIPELINE FLOW ====== */
+VIZ.trainpipeline={t:"The training pipeline — five stages, same order in every framework",
+  hint:"schematic: click any box for the code/formula that belongs to that stage",w:980,h:230,
+  cap:"Initialize → Data (DataLoader batching) → Compile (attach loss+optimizer) → Train (loop epochs × batches: forward, loss, backward, step) → Evaluate (no-grad forward pass only). The loop-back arrow on Train is the epoch loop itself — stage 4 repeats in full n_epochs times.",
+  svg(){
+    const stages=[
+      ["Initialize","random\nweights","cell"],
+      ["Data","DataLoader:\nshuffle+batch","cell"],
+      ["Compile","loss fn +\noptimizer","cellhot"],
+      ["Train","∀ epoch ∀ batch:\nfwd→loss→bwd→step","cellhot"],
+      ["Evaluate","no_grad,\nforward only","cell"]];
+    const tips=[
+      ["Stage 1 — Initialize: build the model architecture and give it random starting weights (e.g. Kaiming/He init for a ResNet's conv layers) — before any data has been seen, predictions are essentially noise.",
+       "Why do we start with random weights instead of all-zeros — what would go wrong with an all-zero initialization?"],
+      ["Stage 2 — Data: a Dataset knows how to fetch one sample; a DataLoader wraps it to yield shuffled, batched groups of samples every epoch, so the model trains on many small groups rather than the full dataset at once.",
+       "Why does DataLoader reshuffle the batch order every epoch instead of using the same order each time?"],
+      ["Stage 3 — Compile: attach the two pieces every training loop needs before it can run — a loss function (what \"wrong\" means, §2) and an optimizer (how to use the gradient of that loss, §3). Keras calls this step model.compile(...) explicitly; PyTorch just constructs criterion and optimizer as plain objects.",
+       "What exactly gets passed into model.compile() in Keras, and what are the plain-object equivalents in PyTorch?"],
+      ["Stage 4 — Train: the actual learning loop. For every epoch, loop over every batch from the DataLoader: forward pass (predict), compute loss, backward pass (autograd computes every gradient), optimizer.step() (apply the update rule from §3), then zero_grad() before the next batch.",
+       "Why must zero_grad() be called before every batch's backward pass — what breaks if it's skipped?"],
+      ["Stage 5 — Evaluate/Inference: switch off training-only behavior (model.eval() disables dropout, freezes batch-norm stats) and wrap the forward pass in torch.no_grad() — no gradients are needed, so skipping autograd bookkeeping saves real memory and time.",
+       "Why does torch.no_grad() during inference save memory — what is autograd tracking during a normal forward pass that it doesn't need to here?"]];
+    const n=stages.length,bw=150,bh=90,gap=(980-n*bw)/(n+1),by=70;
+    let s="";
+    for(let i=0;i<n;i++){
+      const bx=gap+i*(bw+gap);
+      const cls=stages[i][2];
+      let inner=`<rect x="0" y="0" width="${bw}" height="${bh}" rx="10" class="${cls}"/>`
+        +txt(bw/2,30,"vlab",stages[i][0],"middle")
+        +stages[i][1].split("\n").map((l,li)=>txt(bw/2,52+li*16,"vsm",l,"middle")).join("");
+      s+=`<g transform="translate(${bx},${by})">`+hit(0,0,bw,bh,tips[i][0],tips[i][1],inner)+`</g>`;
+      if(i<n-1){
+        const x1=bx+bw,x2=gap+(i+1)*(bw+gap),ym=by+bh/2;
+        s+=`<line x1="${x1}" y1="${ym}" x2="${x2}" y2="${ym}" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#vah)"/>`;}
+    }
+    // loop-back arrow over the Train box (stage index 3)
+    const tbx=gap+3*(bw+gap);
+    s+=`<path d="M${tbx+bw*0.15} ${by} C ${tbx-10} ${by-38}, ${tbx+bw+10} ${by-38}, ${tbx+bw*0.85} ${by}" fill="none" stroke="var(--accent-hi)" stroke-width="1.4" marker-end="url(#vahA)"/>`;
+    s+=txt(tbx+bw/2,by-44,"vsm","repeat n_epochs times","middle");
+    return s;}};
+
+/* ====== TOPIC 3.2: REAL EPOCH/BATCH LOSS CURVE ====== */
+VIZ.epochloss={t:"Stage 4, made concrete — real per-epoch loss on a real Adam-trained model",
+  hint:"32 real samples, batch_size=8 (4 batches/epoch), BCE loss, Adam updates, 8 real epochs",w:900,h:280,
+  cap:"Real per-epoch BCE loss: 0.6438 → 0.5203 → 0.4557 → 0.4198 → 0.3986 → 0.3853 → 0.3765 → 0.3707 — monotonically falling, ending at 90.6% training accuracy. This is stage 4 of the pipeline diagram above, as an actual number every epoch, not a schematic.",
+  svg(){
+    const ox=70,oy=40,pw=760,ph=190;
+    const losses=[0.6438,0.5203,0.4557,0.4198,0.3986,0.3853,0.3765,0.3707];
+    const mapX=e=>ox+(e/(losses.length-1))*pw, mapY=l=>oy+ph-((l-0.3)/(0.7-0.3))*ph;
+    let s=axes(ox,oy,pw,ph,"epoch","BCE loss");
+    let d="";losses.forEach((l,i)=>{d+=(i===0?"M":"L")+mapX(i).toFixed(1)+","+mapY(l).toFixed(1)+" ";});
+    s+=`<path d="${d}" fill="none" stroke="var(--accent-hi)" stroke-width="2"/>`;
+    losses.forEach((l,i)=>{
+      s+=hit(mapX(i)-16,mapY(l)-16,32,32,
+        `Epoch ${i+1}: real BCE loss = ${l.toFixed(4)} (averaged over all 4 batches this epoch, batch_size=8, 32 samples total).`,
+        `Why does the loss keep dropping epoch over epoch here instead of plateauing immediately?`,
+        `<circle cx="${mapX(i).toFixed(1)}" cy="${mapY(l).toFixed(1)}" r="4.5" class="${i===losses.length-1?'cellhot':'cell'}"/>`);
+      s+=txt(mapX(i),mapY(l)-10,"vsm",l.toFixed(3),"middle");});
+    s+=txt(ox+pw-4,oy+ph+34,"vsm","final: 90.6% train accuracy","end");
+    return s;}};
+
+/* ====== TOPIC 3.3: ADAM vs ADAMW — DECOUPLED WEIGHT DECAY ====== */
+VIZ.adamw={t:"Adam+L2 vs. AdamW — the same weight_decay=0.1, two very different real outcomes",
+  hint:"real recurrence, 5 steps, zero task-gradient (decay isolated), both params start w=1.0",w:900,h:300,
+  cap:"Adam+L2: small-gradient-history param shrinks to 0.5092, large-gradient-history param only to 0.8466 — a 0.337 gap from IDENTICAL nominal decay. AdamW: both shrink to exactly 0.9510 — 0.000 gap. This is the real, published reason AdamW replaced Adam+L2 for transformer training.",
+  svg(){
+    function panel(px,title,titleCls,v1,v2,gap,tip,ask){
+      const bx=px+25,by=40,bw=200,bh=190;
+      let s=txt(px+135,26,titleCls,title,"middle");
+      s+=barGroup(bx,by,bw,bh,[{label:"small v̂ history",value:v1,cls:"cell"},{label:"large v̂ history",value:v2,cls:"cellhot"}],1.0);
+      s+=txt(px+135,by+bh+34,"vsm",`gap = ${gap}`,"middle");
+      return hit(px,10,270,by+bh+50,tip,ask,s);}
+    let s="";
+    s+=panel(20,"Adam + L2 (coupled)","vbad",0.5092,0.8466,"0.337",
+      "Adam+L2 folds weight_decay into the gradient BEFORE the 1/√v̂ rescaling — so a parameter with a small gradient-history v̂ gets divided by a small number, amplifying its effective decay (shrinks to 0.5092), while a parameter with a large v̂ gets its decay muted (shrinks only to 0.8466). Same nominal decay, very different real outcomes.",
+      "Why does dividing the decay term by 1/√v̂ make its effective strength depend on a parameter's own gradient history?");
+    s+=panel(470,"AdamW (decoupled)","vok",0.9510,0.9510,"0.000",
+      "AdamW applies weight_decay directly (w -= lr·wd·w), completely outside the 1/√v̂ adaptive-step-size machinery — so every parameter gets the exact same proportional shrinkage regardless of its own gradient history. Real result: both parameters land on exactly 0.9510.",
+      "Why does applying decay outside the adaptive-step-size calculation make it uniform across parameters, when applying it inside doesn't?");
+    return s;}};
+
+/* ====== TOPIC 3.4: CATEGORICAL CROSS-ENTROPY ====== */
+VIZ.cce={t:"Categorical cross-entropy — real 3-class softmax, correct vs. confidently-wrong",
+  hint:"same 3 logit magnitudes, reordered — true class is always index 0",w:900,h:300,
+  cap:"Confidently correct: true class gets 78.56% probability, CCE=0.2413. Confidently wrong: true class gets only 3.91% probability (mass moved to the other classes), CCE=3.2413 — over 13× the loss for the same magnitude of confidence, just aimed the wrong way.",
+  svg(){
+    const labels=["class 0 (true)","class 1","class 2"];
+    function panel(px,title,titleCls,vals,cce,tip,ask){
+      const bx=px+15,by=40,bw=250,bh=190;
+      let s=txt(px+140,26,titleCls,title,"middle");
+      s+=barGroup(bx,by,bw,bh,labels.map((l,i)=>({label:l,value:vals[i],cls:i===0?"cellhot":"cell",valueLabel:(vals[i]*100).toFixed(2)+"%"})),1.0);
+      s+=txt(px+140,by+bh+34,"vsm",`CCE = ${cce}`,"middle");
+      return hit(px,10,280,by+bh+50,tip,ask,s);}
+    let s="";
+    s+=panel(20,"confidently correct","vok",[0.7856,0.1753,0.0391],"0.2413",
+      "Logits [2.0, 0.5, -1.0], true class = 0: softmax gives the true class 78.56% probability. CCE = −ln(0.7856) = 0.2413 — cheap, because the model was right and reasonably confident about it.",
+      "Why is CCE for the correct class still nonzero (0.2413) even though the model got the right answer?");
+    s+=panel(320,"confidently wrong","vbad",[0.0391,0.1753,0.7856],"3.2413",
+      "Same 3 logit magnitudes, reassigned so the true class (index 0) now gets the SMALLEST logit: its softmax probability collapses to 3.91%. CCE = −ln(0.0391) = 3.2413 — over 13x higher than the confidently-correct case, for the same underlying magnitude of confidence, just pointed at the wrong class.",
+      "Why does CCE penalize a confidently-wrong prediction so much more heavily than an unconfident wrong one would be penalized?");
+    return s;}};
+
+/* ====== TOPIC 4: BIAS-VARIANCE / OVERFITTING ====== */
+VIZ.biasvariance={t:"Bias-variance tradeoff — one curve, both failure modes",
+  hint:"illustrative smooth curves (characteristic shape of any real complexity sweep, not one specific trained model)",w:980,h:400,
+  cap:"Training error keeps falling as complexity grows (0.9→0.016) — a more flexible model can always fit the training set better. Test error falls, bottoms out near complexity≈4 (0.382), then climbs back up (→0.767) as the model starts fitting training-set noise instead of the real pattern. The gap that opens up on the right IS variance; the height both curves share on the left IS bias.",
+  svg(){
+    const ox=90,oy=50,pw=760,ph=260;
+    const train=x=>0.9*Math.exp(-0.4*x), test=x=>0.15+0.55*Math.exp(-0.35*x)+0.006*x*x;
+    const mapX=x=>ox+(x/10)*pw, mapY=y=>oy+ph-(y/0.95)*ph;
+    let s=axes(ox,oy,pw,ph,"model complexity →","error");
+    s+=`<path d="${curvePath(train,0,10,mapX,mapY)}" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-dasharray="5 3"/>`;
+    s+=`<path d="${curvePath(test,0,10,mapX,mapY)}" fill="none" stroke="var(--accent-hi)" stroke-width="2.2"/>`;
+    s+=txt(mapX(9.6),mapY(train(9.6))-8,"vsm","training error","end");
+    s+=txt(mapX(9.6),mapY(test(9.6))+14,"vacc","test / validation error","end");
+    const sx=mapX(4);
+    s+=`<line x1="${sx.toFixed(1)}" y1="${(oy+ph).toFixed(1)}" x2="${sx.toFixed(1)}" y2="${mapY(test(4)).toFixed(1)}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 3"/>`;
+    s+=hit(sx-55,mapY(test(4))-40,110,40,
+      "The sweet spot: complexity≈4, test error at its minimum (0.382). Training error is still dropping past this point — but test error, the one that matters, is about to turn back up.",
+      "Why is the point where test error stops decreasing the right stopping point, even though training error could still be driven lower?",
+      `<circle cx="${sx.toFixed(1)}" cy="${mapY(test(4)).toFixed(1)}" r="5" class="cellhot"/>`+txt(sx,mapY(test(4))-12,"vacc","sweet spot","middle"));
+    s+=hit(ox-10,oy-10,mapX(2.2)-ox+10,ph+20,
+      "Underfitting zone: both training AND test error are high and close together (complexity 0-1.5, errors ~0.9→0.6, ~0.7→0.5) — the model is too simple to capture the pattern even on data it trained on. This gap-free high error IS bias.",
+      "Why does underfitting show up as both curves being high and close together, rather than as a gap between them?",
+      txt(mapX(0.7),oy+16,"vwarn","← underfitting","start")+txt(mapX(0.7),oy+30,"vsm","(high bias)","start"));
+    const gx=mapX(8);
+    s+=hit(mapX(6.3),oy-10,pw-(mapX(6.3)-ox),ph+20,
+      "Overfitting zone: training error keeps falling (down to 0.037 at complexity=8) while test error climbs back up (to 0.567) — the model is getting better at THIS training set specifically, not at the underlying pattern. The growing gap IS variance.",
+      "Why does training error continuing to fall while test error rises indicate the model is memorizing noise rather than learning?",
+      txt(mapX(7.6),oy+16,"vbad","overfitting →","start")+txt(mapX(7.6),oy+30,"vsm","(high variance)","start")
+      +`<line x1="${gx.toFixed(1)}" y1="${mapY(train(8)).toFixed(1)}" x2="${gx.toFixed(1)}" y2="${mapY(test(8)).toFixed(1)}" stroke="var(--bad)" stroke-width="1.6" marker-end="url(#vahA)" marker-start="url(#vahA)"/>`
+      +txt(gx+8,(mapY(train(8))+mapY(test(8)))/2,"vbad","variance"));
+    return s;}};
+
+/* ====== TOPIC 5: L1 / L2 REGULARIZATION ====== */
+VIZ.regularization={t:"L1 vs. L2 — the geometry of sparsity",
+  hint:"real grid-search optimum: loss=2(w1−0.3)²+(w2−2.0)², budget t=0.9 for both",w:980,h:360,
+  cap:"Same loss surface, same budget t=0.9. L1's diamond: closest boundary point to the true optimum (0.3,2.0) is exactly (0, 0.9) — w1 is EXACTLY zero. L2's circle: closest point is (0.18, 0.88) — both weights shrink, neither reaches zero.",
+  svg(){
+    function panel(px,title,isL1,touch,touchLossLabel,tip,ask){
+      const ox=px+50,oy=50,pw=230,ph=230;
+      const xr=[-1.3,1.3],yr=[-0.3,2.3];
+      const mapX=x=>ox+(x-xr[0])/(xr[1]-xr[0])*pw;
+      const mapY=y=>oy+ph-(y-yr[0])/(yr[1]-yr[0])*ph;
+      const px2u=pw/(xr[1]-xr[0]);
+      let s=txt(px+140,32,"vlab",title,"middle");
+      s+=`<line x1="${mapX(xr[0]).toFixed(1)}" y1="${mapY(0).toFixed(1)}" x2="${mapX(xr[1]).toFixed(1)}" y2="${mapY(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+      s+=`<line x1="${mapX(0).toFixed(1)}" y1="${mapY(yr[0]).toFixed(1)}" x2="${mapX(0).toFixed(1)}" y2="${mapY(yr[1]).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+      s+=txt(mapX(xr[1])+2,mapY(0)+3,"vsm","w1");
+      s+=txt(mapX(0)-6,mapY(yr[1])-2,"vsm","w2","end");
+      // loss contours (ellipses), loss = 2(w1-0.3)^2 + (w2-2.0)^2
+      [0.3,1.0,touchLossLabel].forEach(k=>{
+        const rx=Math.sqrt(k/2)*px2u, ry=Math.sqrt(k/1)*px2u;
+        s+=`<ellipse cx="${mapX(0.3).toFixed(1)}" cy="${mapY(2.0).toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="none" stroke="var(--line)" stroke-width="1"/>`;});
+      s+=`<circle cx="${mapX(0.3).toFixed(1)}" cy="${mapY(2.0).toFixed(1)}" r="3.5" class="cell"/>`+txt(mapX(0.3)+8,mapY(2.0)+3,"vsm","unconstrained optimum");
+      // constraint boundary
+      if(isL1){
+        const t=0.9,pts=[[t,0],[0,t],[-t,0],[0,-t]].map(([a,b])=>mapX(a).toFixed(1)+","+mapY(b).toFixed(1));
+        s+=`<polygon points="${pts.join(" ")}" fill="var(--accent-soft)" fill-opacity="0.35" stroke="var(--accent)" stroke-width="1.6"/>`;
+      }else{
+        const t=0.9;
+        s+=`<circle cx="${mapX(0).toFixed(1)}" cy="${mapY(0).toFixed(1)}" r="${(t*px2u).toFixed(1)}" fill="var(--accent-soft)" fill-opacity="0.35" stroke="var(--accent)" stroke-width="1.6"/>`;
+      }
+      s+=`<circle cx="${mapX(touch[0]).toFixed(1)}" cy="${mapY(touch[1]).toFixed(1)}" r="5" class="cellhot"/>`;
+      s+=txt(mapX(touch[0]),mapY(touch[1])+16,"vacc",`touch = (${touch[0].toFixed(2)}, ${touch[1].toFixed(2)})`,"middle");
+      return hit(px,20,280,ph+70,tip,ask,s);}
+    let s="";
+    s+=panel(20,"L1 (Lasso) — diamond constraint",true,[0,0.9],1.39,
+      "L1 constraint |w1|+|w2|≤0.9: grid-search-verified closest point on the diamond to the unconstrained optimum (0.3,2.0) is exactly (0, 0.9) — w1 lands EXACTLY on zero, not approximately.",
+      "Why does the diamond-shaped L1 constraint region tend to produce solutions that land exactly on a corner, where one weight is exactly zero?");
+    s+=panel(490,"L2 (Ridge) — circle constraint",false,[0.183,0.881],1.28,
+      "L2 constraint w1²+w2²≤0.81 (same budget t=0.9): grid-search-verified closest point on the circle is (0.18, 0.88) — both weights shrink toward zero, but neither one reaches it.",
+      "Why does the smooth, round L2 constraint region almost never produce a solution with an exactly-zero weight, unlike L1?");
+    return s;}};
+
+/* ====== TOPIC 6a: HYPERPARAMETERS — CLASSICAL ML (kNN) ====== */
+VIZ.hyperknn={t:"Hyperparameter — k in k-Nearest-Neighbors (classical ML)",
+  hint:"real scikit-learn KNeighborsClassifier runs, make_moons dataset, 300 pts, 30% held out",w:980,h:320,
+  cap:"k=1 memorizes the training set (100% train) but generalizes worst (86.7% test) — overfitting. k=9 is the real sweet spot found by this sweep: lower train accuracy, best test accuracy (94.4%). k=150 underfits: both accuracies drop and converge (78.1% / 80.0%).",
+  svg(){
+    function panel(px,title,titleCls,trainV,testV,note,tip,ask){
+      const bx=px+30,by=40,bw=200,bh=190;
+      let s=txt(px+135,26,titleCls,title,"middle");
+      s+=barGroup(bx,by,bw,bh,[{label:"train",value:trainV,cls:"cell"},{label:"test",value:testV,cls:"cellhot"}],1.0);
+      s+=txt(px+135,by+bh+34,"vsm",note,"middle");
+      return hit(px,10,270,by+bh+50,tip,ask,s);}
+    let s="";
+    s+=panel(20,"k=1 (overfit)","vbad",1.000,0.867,"train 100.0% · test 86.7%",
+      "k=1: each prediction is decided by a single, possibly-noisy neighbor — 100% train accuracy (it literally memorized the training set) but the worst test accuracy of the three (86.7%).",
+      "Why does k=1 achieve perfect training accuracy but not the best test accuracy — what specifically is it memorizing that doesn't generalize?");
+    s+=panel(350,"k=9 (sweet spot)","vok",0.905,0.944,"train 90.5% · test 94.4%",
+      "k=9: LOWER train accuracy than k=1 (90.5%) but the BEST test accuracy of any k tried in this real sweep (94.4%) — averaging over 9 neighbors smooths out individual noisy points without losing the real signal.",
+      "Why does a k that gets worse training accuracy than k=1 end up with better test accuracy — what is k=1 sacrificing that k=9 recovers?");
+    s+=panel(680,"k=150 (underfit)","vwarn",0.781,0.800,"train 78.1% · test 80.0%",
+      "k=150 — half the training set — underfits: both train (78.1%) and test (80.0%) accuracy drop and sit close together, the same bias-variance signature from the model-complexity curve, now on a real, concrete hyperparameter.",
+      "Why do train and test accuracy converge to similarly low values at very large k, instead of test accuracy staying high while train accuracy drops?");
+    return s;}};
+
+/* ====== TOPIC 6b: HYPERPARAMETERS — ADVANCED ML (GRADIENT BOOSTING) ====== */
+VIZ.hyperboosting={t:"Hyperparameter — learning_rate in Gradient Boosting (advanced ML)",
+  hint:"real scikit-learn GradientBoostingRegressor runs, make_regression dataset, n_estimators=100 fixed",w:980,h:320,
+  cap:"lr=0.01: underfits given only 100 trees (train R²=0.636, test=0.511). lr=0.1: sweet spot (train=0.993, test=0.870). lr=1.0: overfits (train=1.000, test collapses to 0.661).",
+  svg(){
+    function panel(px,title,titleCls,trainV,testV,note,tip,ask){
+      const bx=px+30,by=40,bw=200,bh=190;
+      let s=txt(px+135,26,titleCls,title,"middle");
+      s+=barGroup(bx,by,bw,bh,[{label:"train R²",value:trainV,cls:"cell"},{label:"test R²",value:testV,cls:"cellhot"}],1.0);
+      s+=txt(px+135,by+bh+34,"vsm",note,"middle");
+      return hit(px,10,270,by+bh+50,tip,ask,s);}
+    let s="";
+    s+=panel(20,"lr=0.01 (too small)","vwarn",0.636,0.511,"train R²=0.636 · test R²=0.511",
+      "learning_rate=0.01 with only 100 trees: the ensemble hasn't converged yet — both train (R²=0.636) and test (R²=0.511) are mediocre. This is underfitting caused by a learning_rate/n_estimators MISMATCH, not by the model architecture being too simple.",
+      "Why would giving the model MORE training iterations (more trees, same low learning_rate) fix this specific underfitting, rather than needing a fundamentally different model?");
+    s+=panel(350,"lr=0.1 (sweet spot)","vok",0.993,0.870,"train R²=0.993 · test R²=0.870",
+      "learning_rate=0.1, same 100 trees: train R²=0.993, test R²=0.870 — the best test score of the three real values tried in this sweep.",
+      "Why does a learning_rate of 0.1 outperform both 0.01 and 1.0 at the SAME number of trees, rather than more trees always being better regardless of learning_rate?");
+    s+=panel(680,"lr=1.0 (too big)","vbad",1.000,0.661,"train R²=1.000 · test R²=0.661",
+      "learning_rate=1.0: the ensemble fits the training set perfectly (R²=1.000) but test R² collapses to 0.661 — each tree now corrects the FULL residual instead of a damped fraction of it, so early trees overfit hard and later trees can't recover.",
+      "Why does having each boosting round correct the full residual, rather than a damped fraction of it, lead to overfitting — in a way that's analogous to too-large a learning rate in plain gradient descent?");
+    return s;}};
+
+/* ====== TOPIC 6c: HYPERPARAMETERS — LLM TEMPERATURE ====== */
+VIZ.hyperllmtemp={t:"Hyperparameter — Temperature in LLM sampling",
+  hint:'real softmax over 5 next-token logits for "The capital of France is ___"',w:980,h:340,
+  cap:"T=0.5: Paris takes 99.97% of probability mass, entropy=0.003 nats. T=1.0: Paris 97.19%, entropy=0.162 nats. T=2.0: Paris drops to 75.44%, entropy=0.887 nats — over 300× higher. Same logits throughout; only the distribution's spread changes.",
+  svg(){
+    const toks=[["Paris","cellhot"],["Lyon","cell"],["a","cell"],["the","cell"],["also","cell"]];
+    function panel(px,title,titleCls,vals,entropy,tip,ask){
+      const bx=px+15,by=40,bw=250,bh=190;
+      let s=txt(px+140,26,titleCls,title,"middle");
+      s+=barGroup(bx,by,bw,bh,toks.map((t,i)=>({label:t[0],value:vals[i],cls:t[1],valueLabel:(vals[i]*100).toFixed(vals[i]<0.01?2:1)+"%"})),1.0);
+      s+=txt(px+140,by+bh+34,"vsm",`entropy = ${entropy} nats`,"middle");
+      return hit(px,10,280,by+bh+50,tip,ask,s);}
+    let s="";
+    s+=panel(20,"T=0.5 (low)","vwarn",[0.9997,0.0002,0.0000,0.0000,0.0000],"0.003",
+      "Temperature 0.5 sharpens the distribution: 'Paris' takes 99.97% of the probability mass — near-deterministic, low-diversity output. Same logits as the other two panels, just divided by a smaller T before softmax.",
+      "Why does dividing the logits by a smaller temperature before softmax make the distribution MORE peaked rather than less?");
+    s+=panel(340,"T=1.0 (natural)","vok",[0.9719,0.0146,0.0059,0.0044,0.0033],"0.162",
+      "Temperature 1.0 uses the logits at their natural scale: 'Paris' still dominates (97.19%) but the other 4 tokens now have real, distinguishable, nonzero probability.",
+      "Why is T=1.0 considered the 'unmodified' distribution, and what does the model's raw logit scale actually represent before any temperature is applied?");
+    s+=panel(660,"T=2.0 (high)","vbad",[0.7544,0.0924,0.0589,0.0507,0.0436],"0.887",
+      "Temperature 2.0 flattens the distribution: 'Paris' drops to 75.44%, and every other token gains meaningfully — entropy rises to 0.887 nats, over 300x higher than at T=0.5. The MOST likely token never changes across all three panels — only how much probability the runners-up get.",
+      "Why does raising temperature flatten the distribution without changing WHICH token has the highest probability?");
+    return s;}};
+
+/* ---------- boot ---------- */
+const vtip=document.createElement("div");vtip.id="vtip";document.body.appendChild(vtip);
+const vask=document.createElement("div");vask.id="vask";document.body.appendChild(vask);
+const qaBtn=document.createElement("button");qaBtn.id="qaHistoryBtn";qaBtn.type="button";qaBtn.title="Q&A history";qaBtn.textContent="📜";document.body.appendChild(qaBtn);
+const qaPanel=document.createElement("div");qaPanel.id="qaHistoryPanel";document.body.appendChild(qaPanel);
+function escQA(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function renderHistory(items){
+  if(!items.length){qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">No questions asked yet.</div>';return;}
+  qaPanel.innerHTML='<div class="qhTitle">Q&A History</div>'+items.map(it=>{
+    const d=new Date(it.created_at);
+    return '<div class="qhItem"><div class="qhMeta">'+escQA(d.toLocaleString())+' &middot; '+escQA(it.topic||it.source||"")+'</div>'
+      +'<div class="qhQ">'+escQA(it.question)+'</div>'
+      +'<div class="qhA">'+escQA(it.answer)+'</div></div>';
+  }).join("");
+}
+async function openHistory(){
+  qaPanel.classList.add("open");
+  qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">Loading…</div>';
+  try{const res=await fetch("/api/history");const data=await res.json();renderHistory(data.items||[]);}
+  catch(e){qaPanel.innerHTML='<div class="qhTitle">Q&A History</div><div class="qhEmpty">Could not load history: '+escQA(e.message)+'</div>';}
+}
+qaBtn.addEventListener("click",e=>{e.stopPropagation();qaPanel.classList.contains("open")?qaPanel.classList.remove("open"):openHistory();});
+document.addEventListener("click",e=>{if(e.target.closest("#qaHistoryPanel")||e.target.closest("#qaHistoryBtn"))return;qaPanel.classList.remove("open");});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")qaPanel.classList.remove("open");});
+document.querySelectorAll("figure.viz").forEach(f=>{
+  const d=VIZ[f.dataset.viz];if(!d)return;
+  f.classList.add("mode-num");
+  f.innerHTML=`<div class="vhead"><span class="vtitle">${d.t}</span><span class="vhint">hover a box = one-line definition · click a box = follow-up question for Claude · ${d.hint||""}</span></div><div class="vbody"><svg viewBox="0 0 ${d.w} ${d.h}" width="${d.w}" style="max-width:none;height:auto;display:block" role="img" aria-label="${esc(d.t)}">${DEFS}${d.svg()}</svg></div><figcaption>${d.cap}</figcaption>`;});
+let askTopic="",askContext="",askHistory=[];
+function showAsk(q,topic,context){
+  askTopic=topic||"";askContext=context||"";askHistory=[];
+  vask.innerHTML='<div class="vlbl">Ask about: <span id="askTopicLbl"></span></div>'
+    +'<textarea id="askInput" rows="2"></textarea>'
+    +'<div class="vbtns"><button class="btn" type="button" data-vaskllm>Ask Azure OpenAI</button>'
+    +'<button class="btn ghost" type="button" data-vclose>Close</button><span class="vnote"></span></div>'
+    +'<div class="askAnswer" id="askAnswer"></div>';
+  vask.querySelector("#askTopicLbl").textContent=askTopic||"this";
+  vask.querySelector("#askInput").value=q||"";
+  vask.style.display="block";
+  vask.querySelector("#askInput").focus();}
+async function doAskLLM(){
+  const input=vask.querySelector("#askInput"),q=input.value.trim(),ans=vask.querySelector("#askAnswer"),
+    btn=vask.querySelector("[data-vaskllm]"),note=vask.querySelector(".vnote");
+  if(!q)return;
+  ans.style.display="block";ans.textContent="Thinking…";btn.disabled=true;note.textContent="";
+  try{
+    const res=await fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({topic:askTopic,context:askContext,question:q,history:askHistory,source:"ds-fundamentals"})});
+    const data=await res.json();
+    if(data.error){ans.textContent="Error: "+data.error;}
+    else{ans.textContent=data.answer;askHistory.push({role:"user",content:q});askHistory.push({role:"assistant",content:data.answer});
+      note.textContent="ask a follow-up above and click again — this panel remembers the thread";
+      if(qaPanel.classList.contains("open"))openHistory();}
+  }catch(e){ans.textContent="Request failed: "+e.message+" — is the local server running? (python server.py, then open http://localhost:5000)";}
+  btn.disabled=false;}
+document.addEventListener("click",e=>{
+  if(e.target.closest("[data-vaskllm]")){doAskLLM();return;}
+  if(e.target.closest("[data-vclose]")){vask.style.display="none";return;}
+  if(e.target.closest("#vask"))return;
+  const h=e.target.closest("g.vhit");
+  if(h&&h.dataset.ask){const fig=h.closest("figure.viz"),t=fig&&fig.querySelector(".vtitle");showAsk(h.dataset.ask,t?t.textContent:"this diagram",h.dataset.tip||"");return;}
+  if(e.target.closest(".topicask"))return;
+  vask.style.display="none";});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){vask.style.display="none";vtip.style.display="none";return;}
+  if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("vhit")){e.preventDefault();if(e.target.dataset.ask){const fig=e.target.closest("figure.viz"),t=fig&&fig.querySelector(".vtitle");showAsk(e.target.dataset.ask,t?t.textContent:"this diagram",e.target.dataset.tip||"");}}});
+function collectContext(heading){
+  let ctx="",el=heading.nextElementSibling;const level=+heading.tagName[1];
+  while(el&&!(/^H[1-4]$/.test(el.tagName)&&+el.tagName[1]<=level)){
+    if(el.textContent)ctx+=el.textContent.trim()+"\n";
+    el=el.nextElementSibling;
+    if(ctx.length>1500)break;}
+  return ctx.slice(0,1500);}
+document.querySelectorAll("main h2, main h3, main h4").forEach(h=>{
+  const b=document.createElement("button");
+  b.type="button";b.className="topicask";b.textContent="💬 ask";
+  b.addEventListener("click",ev=>{ev.stopPropagation();showAsk("",h.textContent.replace("💬 ask","").trim(),collectContext(h));});
+  h.appendChild(document.createTextNode(" "));h.appendChild(b);});
+document.addEventListener("mousemove",e=>{
+  const h=e.target.closest?e.target.closest("g.vhit"):null;
+  if(h&&h.dataset.tip){
+    vtip.textContent=h.dataset.tip;vtip.style.display="block";
+    const r=vtip.getBoundingClientRect();
+    let x=e.clientX+14,y=e.clientY+18;
+    if(x+r.width>innerWidth-8)x=innerWidth-r.width-8;
+    if(y+r.height>innerHeight-8)y=e.clientY-r.height-10;
+    vtip.style.left=x+"px";vtip.style.top=y+"px";
+  }else{vtip.style.display="none";}});
+})();
+</script>
+</body>
+</html>
