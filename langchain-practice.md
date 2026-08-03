@@ -107,6 +107,8 @@ A production endpoint calling two independent prompts (a full answer and a 5-wor
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 10 — Tool-Calling Agents](/topic/code-drills-langgraph-agents#cluster-3-tool-calling-agents)
+
 ## Cluster 3 — Giving the Model Tools, and Actually Running Them
 
 ### 1. How do you give the model a callable tool it can choose to invoke?
@@ -145,6 +147,8 @@ No — `bind_tools` only gets you the model's *request* to call a tool; LangChai
 Asking "how many days until 2026-07-13" triggers `bind_tools` (question 1) to produce a `tool_calls` request rather than an answer; the manual loop (question 2) then actually runs `exam_day_countdown`, appends its result as a `"role": "tool"` message, and calls the model a SECOND time so it can turn the raw number into prose — three separate model-adjacent steps (request, execute, re-invoke) that a framework like LangGraph would hide behind one driver call, but which are worth tracing by hand at least once.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 8 — Wiring Retrieval Into LangChain](/topic/code-drills-rag-langchain#cluster-3-wiring-retrieval-into-langchain)
 
 ## Cluster 4 — Building RAG: From Raw Text to a Grounded Answer
 

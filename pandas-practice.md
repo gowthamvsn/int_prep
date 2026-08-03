@@ -4,6 +4,8 @@
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 4 — Pandas](/topic/code-drills-numpy-pandas#cluster-2-pandas)
+
 ## Cluster 1 — Creating and Selecting Data
 
 ### 1. How do you create a DataFrame from scratch, with a specific column order?

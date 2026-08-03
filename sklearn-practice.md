@@ -80,6 +80,8 @@ A dataset with both `wear_pct` (numeric) and `depot` (categorical): `ColumnTrans
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 5 — Pipelines, Cross-Validation & Hyperparameter Search](/topic/code-drills-classical-ml#cluster-2-pipelines-cross-validation-hyperparameter-search)
+
 ## Cluster 2 — Cross-Validation and Hyperparameter Tuning
 
 ### 1. A single train/test split gives one score. How do you get a more reliable estimate?
@@ -170,6 +172,8 @@ A model scores 94% test accuracy — impressive, until `DummyClassifier(strategy
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 5 — Imbalance, Persistence & Preprocessing](/topic/code-drills-classical-ml#cluster-3-imbalance-persistence-preprocessing)
+
 ## Cluster 4 — Handling Class Imbalance
 
 ### 1. Given imbalanced classes (Cluster 3's exact scenario), what's the simplest fix, directly in the model itself?
@@ -235,6 +239,8 @@ If RMSE is much larger than MAE, that gap itself is diagnostic — it means a sm
 A model's MAE is $500 but its RMSE is $3,200 — that large gap immediately signals a handful of predictions with huge errors (RMSE's squaring punishes them disproportionately) rather than uniformly mediocre predictions across the board, pointing an investigation toward specific outlier cases rather than the model's general calibration.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 5 — Unsupervised Learning & Diagnosing Over/Underfitting](/topic/code-drills-classical-ml#cluster-4-unsupervised-learning-diagnosing-overunderfitting)
 
 ## Cluster 7 — Unsupervised: Clustering and Dimensionality Reduction
 

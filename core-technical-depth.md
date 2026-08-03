@@ -74,6 +74,8 @@ Every production system I've built in the last two years sits on top of a pretra
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 9 — LoRA Fundamentals](/topic/code-drills-finetuning-peft#cluster-1-lora-fundamentals)
+
 ## Model Fine-Tuning: LoRA and QLoRA
 
 ### Plain-English explanation
@@ -180,6 +182,8 @@ I'll say this directly rather than dress it up: my hands-on production LLM work 
 - **If a merged LoRA model behaves noticeably worse than the un-merged (adapter-attached) version, it's because the rank `r` was too low for the task's complexity** — a very low rank (r=4) can be enough for narrow domain adaptation but too constrained for tasks needing broader behavioral change; raising r (and re-tuning alpha) is the first lever to pull.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 8 — Embeddings & a Real Vector Store](/topic/code-drills-rag-langchain#cluster-2-embeddings-a-real-vector-store)
 
 ## RAG and Vector Databases
 

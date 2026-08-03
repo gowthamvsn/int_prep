@@ -4,6 +4,8 @@ Every snippet here is runnable on its own (`import numpy as np` assumed). Each c
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 4 — NumPy](/topic/code-drills-numpy-pandas#cluster-1-numpy)
+
 ## Cluster 1 — Creating and Shaping Arrays
 
 ### 1. How do you create an array with a specific shape, filled with zeros/ones/a constant?

@@ -4,6 +4,8 @@ These are the "surrounding" skills that make the modeling code elsewhere on this
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 1 — Basics](/topic/code-drills-basics) and [Code Drills 2 — Data Structures, JSON, Files, Exceptions](/topic/code-drills-data-structures)
+
 ## Cluster 1 — Datetime
 
 ### 1. How do you get the current time and format it as a readable string?

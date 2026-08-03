@@ -18,6 +18,8 @@ Because a single dense-embedding similarity search is a blunt instrument: it's g
 ```
 **Remember it as an assembly line, not a grab-bag of tricks:** every failure mode in this doc maps to exactly one station — a bad search query is a REWRITE problem, a missed keyword is a RETRIEVE problem, a mediocre top-5 is a RE-RANK problem, wasted tokens on irrelevant text is a COMPRESS problem, and a hallucinated claim is a GENERATE problem. When a RAG system misbehaves, walking the line station-by-station (which stage's OUTPUT first looks wrong) finds the fix far faster than guessing which of eight techniques to reach for.
 
+> 🔗 **Hands-on reps:** [Code Drills 8 — Where Simple RAG Breaks](/topic/code-drills-rag-langchain#cluster-4-where-simple-rag-breaks-and-the-direct-fixes)
+
 ## Cluster 1 — Walking the Assembly Line, Station by Station
 
 ### 1. Before retrieval even runs, what's wrong with the query itself, and how do you fix it at the very first station (REWRITE)?

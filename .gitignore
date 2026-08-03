@@ -17,6 +17,11 @@ node_modules/
 # personal progress-tracking/QA history if committed
 *.db
 *.log
+streamlit_progress.json
+
+# Streamlit secrets (APP_PASSWORD etc.) — set these in Streamlit Cloud's
+# "Secrets" panel instead, never commit a real secrets.toml
+.streamlit/secrets.toml
 
 # misc local scratch — not read by any server route, not needed to deploy
 transcripts/

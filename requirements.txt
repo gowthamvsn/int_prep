@@ -3,3 +3,4 @@ python-dotenv
 requests
 markdown
 gunicorn
+streamlit

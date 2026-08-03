@@ -82,6 +82,26 @@ DOCS = [
      "file": "stats-scipy-practice.md", "group": "Python Data Science Practice"},
     {"slug": "practice-utilities", "title": "Python Utilities Practice (datetime/regex/I-O/performance)",
      "file": "python-utilities-practice.md", "group": "Python Data Science Practice"},
+    {"slug": "code-drills-basics", "title": "Code Drills 1 — Basics (variables, strings, control flow, functions)",
+     "file": "code-drills-basics.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-data-structures", "title": "Code Drills 2 — Data Structures, JSON, Files, Exceptions",
+     "file": "code-drills-data-structures.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-oop", "title": "Code Drills 3 — OOP, Decorators, Generators, Context Managers",
+     "file": "code-drills-oop-intermediate.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-numpy-pandas", "title": "Code Drills 4 — NumPy & Pandas",
+     "file": "code-drills-numpy-pandas.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-classical-ml", "title": "Code Drills 5 — Classical ML (train/eval RandomForest & friends)",
+     "file": "code-drills-classical-ml.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-deep-learning", "title": "Code Drills 6 — PyTorch: Tensors, Training Loops, CNNs, LSTM Tuning",
+     "file": "code-drills-deep-learning.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-llm-huggingface", "title": "Code Drills 7 — LLMs: Tokenization, HuggingFace, Decoding, Embeddings",
+     "file": "code-drills-llm-huggingface.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-rag-langchain", "title": "Code Drills 8 — RAG & LangChain: Chunking to a Full Grounded Pipeline",
+     "file": "code-drills-rag-langchain.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-finetuning-peft", "title": "Code Drills 9 — Fine-Tuning: LoRA, QLoRA, PEFT, the Trainer API",
+     "file": "code-drills-finetuning-peft.md", "group": "Code Drills (Bonus)"},
+    {"slug": "code-drills-langgraph-agents", "title": "Code Drills 10 — LangGraph: StateGraph, Tool-Calling Agents, Memory",
+     "file": "code-drills-langgraph-agents.md", "group": "Code Drills (Bonus)"},
     {"slug": "practice-langchain", "title": "LangChain Practice (LCEL, RAG, agents, pitfalls)",
      "file": "langchain-practice.md", "group": "LLM App Frameworks Practice"},
     {"slug": "practice-langgraph", "title": "LangGraph Practice (StateGraph, agents, checkpointing, pitfalls)",
@@ -181,7 +201,7 @@ def doc(slug):
     if not entry:
         return "Not found", 404
     text = (ROOT / entry["file"]).read_text(encoding="utf-8")
-    content_html = md.markdown(text, extensions=["fenced_code", "tables", "sane_lists"])
+    content_html = md.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "toc"])
     body = f'<a class="backlink" href="/">&larr; All study materials</a>{content_html}'
     return render_doc_page(entry["title"], body, "bnsf-interview-prep")
 

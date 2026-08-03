@@ -4,6 +4,8 @@ Primarily **PyTorch** (`import torch, torch.nn as nn`) — every snippet here wa
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 6 — Building & Training a Model](/topic/code-drills-deep-learning#cluster-2-building-training-a-model)
+
 ## Cluster 1 — Building and Training a Basic Network
 
 ### 1. How do you define a basic feedforward network?
@@ -71,6 +73,8 @@ for xb, yb in loader:
 A full minimal training step: `TabularDataset` wraps raw NumPy arrays, `DataLoader(ds, batch_size=16, shuffle=True)` yields shuffled batches, and each batch runs through the exact 5-line sequence from question 2 — `zero_grad()` → forward → loss → `backward()` → `step()` — with the training loop's `shuffle=True` specifically preventing the model from learning any accidental pattern in how the original data happened to be ordered.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 6 — CNNs](/topic/code-drills-deep-learning#cluster-3-cnns)
 
 ## Cluster 2 — Convolutional Networks
 
@@ -141,6 +145,8 @@ Yes — the same switch. Randomly zeroing units is a regularization technique fo
 Forgetting `model.eval()` before a single-image inference call is a real, common bug with two simultaneous symptoms from one root cause: BatchNorm silently computes nonsense statistics from a batch of size 1, AND Dropout is still randomly zeroing units that should all be active — both fixed by the exact same one-line call, which is exactly why `model.eval()` (paired with `torch.no_grad()`) is the standard, non-optional first line of any inference function.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 6 — RNN/LSTM, and Tuning Them](/topic/code-drills-deep-learning#cluster-4-rnn-lstm-and-tuning-them-to-work-better)
 
 ## Cluster 4 — Recurrent Networks: RNN → LSTM → GRU
 

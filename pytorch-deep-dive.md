@@ -4,6 +4,8 @@ Continues from `deep-learning-practice.md`, more advanced territory: what happen
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 6 — Tensors & Autograd](/topic/code-drills-deep-learning#cluster-1-tensors-autograd)
+
 ## Cluster 1 — Autograd Internals: Custom Functions and Hooks
 
 ### 1. When a built-in operation isn't enough, how do you write a custom autograd `Function` with your own forward AND backward math?

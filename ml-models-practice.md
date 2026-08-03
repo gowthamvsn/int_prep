@@ -39,6 +39,8 @@ A logistic regression predicting equipment failure has a coefficient of 0.69 on 
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 5 — Train & Evaluate a RandomForest](/topic/code-drills-classical-ml#cluster-1-train-evaluate-a-randomforest)
+
 ## Cluster 2 — Decision Trees
 
 ### 1. How do you build and visualize a single decision tree?

@@ -4,6 +4,8 @@ Continues from `langchain-practice.md`. Same format: **question → code → why
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 10 — StateGraph Basics](/topic/code-drills-langgraph-agents#cluster-1-stategraph-basics)
+
 ## Cluster 1 — State and Nodes: The Two Ideas Everything Else Builds On
 
 ### 1. What's the minimal graph — one node, compile, run?
@@ -70,6 +72,8 @@ A single-turn `answer_node` (question 1) merges its one `answer` key into state 
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 10 — Conditional Edges & Control Flow](/topic/code-drills-langgraph-agents#cluster-2-conditional-edges-control-flow)
+
 ## Cluster 2 — Control Flow: Conditional Edges and Runaway Recursion
 
 ### 1. How do you branch based on a condition (conditional edges) — and how does a LOOP actually get built from this?
@@ -133,6 +137,8 @@ The exact diamond-shaped router from question 1's visual reappears in question 2
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 10 — Memory & Checkpointing](/topic/code-drills-langgraph-agents#cluster-4-memory-checkpointing)
+
 ## Cluster 3 — Memory: Persisting State Across Separate Calls
 
 ### 1. Given a single `.invoke()` already accumulates messages within itself (Cluster 1), how do you persist that state ACROSS separate `.invoke()` calls entirely?
@@ -156,6 +162,8 @@ print(r2["messages"][-1].content)          # has no idea -- separate thread, sep
 `thread_id="conv-1"` (question 1) accumulates "My name is Gowtham" and correctly recalls it on the next call, while `thread_id="conv-2"` gets a completely fresh, empty history — the same isolation guarantee `session_id` gave `RunnableWithMessageHistory` in `langchain-practice.md`, just implemented via a `checkpointer=` argument at compile time instead of a wrapper around the chain. The one thing that guarantee DOESN'T cover: restart the Python process, and every `thread_id`'s history is gone with `MemorySaver`, silently — a genuinely different failure mode than picking the wrong `thread_id`.
 
 ---
+
+> 🔗 **Hands-on reps:** [Code Drills 10 — Tool-Calling Agents](/topic/code-drills-langgraph-agents#cluster-3-tool-calling-agents)
 
 ## Cluster 4 — Building an Agent, and Watching It Think Step by Step
 

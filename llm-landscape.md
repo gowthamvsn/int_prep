@@ -28,6 +28,8 @@ A reference, not a tutorial: what's actually out there, who trained it, whether 
 
 ---
 
+> 🔗 **Hands-on reps:** [Code Drills 7 — LLMs: Tokenization, HuggingFace, Decoding, Embeddings](/topic/code-drills-llm-huggingface)
+
 ## Closed-source / proprietary (API-only)
 
 | Model | Organization | Purpose / notes |

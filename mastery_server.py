@@ -21,7 +21,7 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 
-from mastery_curriculum import TOPICS, TOPICS_BY_ID, TIERS
+from mastery_curriculum import TOPICS, TOPICS_BY_ID, TIERS, TIERS_BY_ID
 
 load_dotenv()
 
@@ -353,6 +353,7 @@ PROGRESS_CSS = """
 .tier-block{margin:2.2rem 0}
 .tier-block h2{margin-bottom:.15rem}
 .reference-block{background:var(--panel2);border:1px dashed var(--accent);border-radius:.6rem;padding:.2rem 1.1rem 1rem;margin-bottom:2.6rem}
+.bonus-block{background:var(--panel2);border:1px dashed #22c55e;border-radius:.6rem;padding:.2rem 1.1rem 1rem;margin-bottom:2.6rem}
 .tier-sub{color:var(--muted);font-family:var(--mono);font-size:.82rem;margin:0 0 .8rem}
 #progressSummary{background:var(--panel);border:1px solid var(--line);border-radius:.5rem;padding:.8rem 1rem;margin:1rem 0}
 #progressSummary .psTrack{background:var(--panel2);border-radius:1rem;height:.6rem;overflow:hidden;margin-top:.4rem}
@@ -450,15 +451,23 @@ def index():
                 f"</div>"
             )
         is_ref = tier.get("is_reference", False)
-        heading = tier["name"] if is_ref else f'Tier {tier["id"]} &middot; {tier["name"]}'
+        is_bonus = tier.get("is_bonus", False)
+        if is_ref:
+            heading = tier["name"]
+        elif is_bonus:
+            heading = f'Bonus: {tier["name"]}'
+        else:
+            heading = f'Tier {tier["id"]} &middot; {tier["name"]}'
+        block_class = " reference-block" if is_ref else (" bonus-block" if is_bonus else "")
+        icon = "&#128278; " if is_ref else ("&#127873; " if is_bonus else "")
         sections += (
-            f'<div class="tier-block{" reference-block" if is_ref else ""}">'
-            f'<h2>{"&#128278; " if is_ref else ""}{heading}</h2>'
+            f'<div class="tier-block{block_class}">'
+            f'<h2>{icon}{heading}</h2>'
             f'<p class="tier-sub">{tier["subtitle"]}</p>'
             f"{cards}</div>"
         )
 
-    num_ladder_tiers = sum(1 for t in TIERS if not t.get("is_reference"))
+    num_ladder_tiers = sum(1 for t in TIERS if not t.get("is_reference") and not t.get("is_bonus"))
     body = (
         f"{render_nav()}"
         f"{PROGRESS_CSS}"
@@ -486,17 +495,18 @@ def topic(topic_id):
         return app.redirect(t["route"])
 
     text = (ROOT / t["file"]).read_text(encoding="utf-8")
-    content_html = md.markdown(text, extensions=["fenced_code", "tables", "sane_lists"])
+    content_html = md.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "toc"])
     related = "".join(
         f'<a href="{topic_href(TOPICS_BY_ID[r])}">{TOPICS_BY_ID[r]["title"]}</a>'
         for r in t["related"]
     )
     role_badge = '<span class="role-badge">AI Engineer</span>' if t.get("role") == "ai_engineer" else ""
+    tier_label = f"Bonus &middot; {t['tier_name']}" if TIERS_BY_ID[t["tier"]].get("is_bonus") else f'Tier {t["tier"]} &middot; {t["tier_name"]}'
     meta = (
         f"{render_nav()}"
         f"{PROGRESS_CSS}"
         '<a class="backlink" href="/">&larr; Mastery Hub</a>'
-        f'<p class="tier-sub">Tier {t["tier"]} &middot; {t["tier_name"]}{role_badge}</p>'
+        f'<p class="tier-sub">{tier_label}{role_badge}</p>'
         f"{progress_buttons(t['id'])}"
         f'<div class="related-pills" style="margin-bottom:1.2rem">{related}</div>'
     )
@@ -557,7 +567,8 @@ def build_map_svg() -> str:
     for col, tier in enumerate(TIERS):
         hx = TIER_X + col * TIER_GAP
         is_ref = tier.get("is_reference", False)
-        top_label = "Reference" if is_ref else f'Tier {tier["id"]}'
+        is_bonus = tier.get("is_bonus", False)
+        top_label = "Reference" if is_ref else ("Bonus" if is_bonus else f'Tier {tier["id"]}')
         bottom_label = "open anytime" if is_ref else tier["name"]
         header_svg.append(
             f'<text x="{hx + NODE_W/2:.0f}" y="30" text-anchor="middle" class="tierhead">'
