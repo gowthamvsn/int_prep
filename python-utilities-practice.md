@@ -225,6 +225,30 @@ A logging utility accumulates readings across repeated calls without the caller 
 
 ---
 
+## Cluster 5 — Concurrency Pitfalls (What AI-Engineer Interviews Actually Probe)
+
+AI-engineer interviews lean on async Python constantly, because most GenAI backends are I/O-bound (waiting on LLM API calls). These come up as "fundamental, should just know it" questions, not bonus points.
+
+### 1. Two threads increment a shared counter at the same time and the final count is wrong. What actually happened, and what's the standard fix?
+A **race condition** — both threads read the counter's current value, both compute "value + 1" from that same stale read, and both write back, so one increment is silently lost. The standard fix is a **lock** (`threading.Lock`, sometimes called a mutex): a thread must acquire the lock before touching the shared value, and any other thread that tries to acquire it while it's held simply waits its turn. Only one thread touches the data at a time, by construction, not by hoping the timing works out. A second, complementary fix: use an **immutable** data structure (a tuple instead of a list) — since it can't be modified in place, anything that wants to "change" it must create a new copy, so there's nothing shared for two threads to race over.
+
+### 2. Given locks solve races within one process, what's the Python-specific wrinkle that catches people off guard here — something unique to this language?
+The **Global Interpreter Lock (GIL)** — a language-level mutex that allows only one thread to execute Python bytecode at a time, in *any* Python program, regardless of how many threads you spawn. This means multi-threading in Python gives you **concurrency** (multiple things making progress by interleaving) but not true **parallelism** (multiple things literally executing at the same instant) for CPU-bound work — you'd need `multiprocessing` (separate Python interpreter processes, each with its own GIL) to actually parallelize CPU-heavy work across cores. The GIL exists to make Python's memory management (reference counting) simple and thread-safe without a lock on every single object.
+
+### 3. Given the GIL limits threads for CPU-bound work, why is async/await still worth using in an AI backend at all?
+Because most AI-backend work isn't CPU-bound — it's **waiting** (on an LLM API response, a database query, a network call), and the GIL doesn't block *waiting*. `asyncio` lets one thread hold many in-flight "waiting" tasks at once, switching to whichever one becomes ready, which is exactly the shape of a backend making several concurrent LLM calls or DB lookups. This is concurrency without needing multiple threads or processes at all — the right tool specifically because the bottleneck is I/O, not computation.
+
+### 4. Given async is the right tool for I/O-bound work, what are the concrete ways people break it in practice?
+- **Blocking the event loop with a CPU-heavy task inside an async function** — one long synchronous computation freezes every other task waiting on that same event loop, defeating the entire point.
+- **Using a synchronous library inside async code** — `time.sleep()` instead of `asyncio.sleep()`, or the synchronous `requests` library instead of an async-native one like `httpx`, both block the whole event loop exactly like the CPU-heavy case above, just less obviously.
+- **Scheduling a task and forgetting to `await` it** — the task can fail silently, and since nothing is watching for its result, the failure produces no error and no log, just a task that quietly never happened.
+- **Harder debugging in general** — interleaved async execution makes stack traces and step-through debugging genuinely more confusing than synchronous code, which is worth naming as a real cost, not just extra latency to fix for free.
+
+### Summary example
+A FastAPI backend handling chat requests uses `requests.get()` inside an `async def` route handler to call an external LLM API. Under load, response times degrade far more than the API's own latency would explain — the synchronous `requests` call is blocking the entire event loop on every single request, so no other request can make progress while one is waiting on the network (question 4). Switching to `httpx`'s async client fixes it. Separately, a shared in-memory request counter incremented from multiple worker threads occasionally undercounts — a classic race condition (question 1) — fixed with a `threading.Lock` around the increment. Neither bug throws an exception; both silently produce wrong behavior, which is the common thread across this entire cluster.
+
+---
+
 ## Practice Q&A (Self-Test)
 
 **Q1. Why is `%Y-%m-%d` specifically worth memorizing as a date format, over something like `%m/%d/%Y`?**

@@ -247,6 +247,34 @@ An AI engineer ships a fine-tuning-as-a-service endpoint. Auth is non-negotiable
 - **If a caller reports being charged twice for one completed job, it's because the webhook receiver assumed exactly-once delivery** — webhook senders retry on timeout or non-2xx, so delivery is at-least-once by design; the receiver has to dedupe on `job_id` (or an idempotency key) and return `200` fast, doing the real work asynchronously.
 - **If someone says "we use OAuth2 instead of JWTs," it's a category error worth gently correcting** — OAuth2 is the framework for *obtaining* a token via delegated authorization; a JWT is a *format* that token often takes. They compose; they don't compete. (And OAuth2 alone is authorization, not authentication — OIDC is the layer that adds identity.)
 
+## Cluster 4 — When the LLM Call Itself Fails: Timeouts, Fallbacks, and Degrading Gracefully
+
+### Plain-English explanation
+Everything in Cluster 3 assumes your own service is the thing that can fail. Once your service's job is "call an LLM API and return the result," you've added a dependency you don't control — one with its own latency spikes, rate limits, and outages — and "the request failed" stops being an edge case and becomes a Tuesday. The failure modes are specific to LLM calls (long tail latency, token-based rate limits, a single provider going down) and the fixes are a different toolkit than a normal internal-service retry.
+
+### Built as a chain: from a hung request to a user who never notices
+
+### 1. Your LLM call sometimes takes 60+ seconds instead of the usual 2. What do you do about that alone?
+Set an explicit client-side timeout well below your own service's deadline — if your API has to respond in 10s, the LLM call gets maybe 6-7s, not "whatever the SDK defaults to." Without this, one slow provider call ties up a request thread until *your* framework-level timeout fires, which is usually much later and much less informative than a clean, fast failure you control.
+
+### 2. A timeout or a 429 comes back. Do you just retry immediately?
+No — immediate retries into a rate-limited or overloaded endpoint make the problem worse, not better, and a burst of clients all retrying at once creates a synchronized "thundering herd" that can keep an already-struggling endpoint down. The fix is **exponential backoff with jitter**: wait `base * 2^attempt` plus a small random offset before each retry, so failed requests spread out over time instead of re-arriving in lockstep. Respect a `Retry-After` header if the provider sends one — it's telling you exactly how long to wait, not a suggestion.
+
+### 3. Retries are exhausted and the primary provider is still down. What's the next line of defense?
+A **fallback model or provider** — configured in advance, not improvised at incident time. That can mean falling back from a large model to a smaller/faster one from the same provider (degraded quality, still answering), or to a second provider entirely if you've built against a provider-agnostic interface. The fallback doesn't have to be as good as the primary; it has to be good enough to avoid returning nothing.
+
+### 4. Even the fallback fails, or you've decided not to build one. What does the user actually see?
+Never a raw stack trace or a spinning indicator that eventually times out silently. **Graceful degradation**: return a clear, honest message ("this feature is temporarily unavailable, please try again shortly"), fall back to a cached previous answer if one exists and is still reasonable, or degrade to a non-LLM path if one exists (e.g., keyword search instead of a semantic answer). The product keeps functioning in a reduced form instead of appearing broken.
+
+### Summary example
+An AI engineer's chat feature calls Claude with a 8-second client timeout inside a service that has a 12-second SLA. On a timeout or 429, it retries twice with exponential backoff and jitter (roughly 0.5s, then 2s, respecting any `Retry-After`). If both retries fail, it falls back to a smaller, faster model configured for exactly this situation — answering with lower latency and slightly lower quality rather than not answering. If that also fails (full provider outage), the endpoint returns a plain-language "temporarily unavailable" response instead of hanging until the client gives up, and logs the failure with enough context (provider, model, attempt count, latency) to page on-call if the rate crosses a threshold. The user either gets a good answer, an acceptable answer, or a clear "not right now" — never a spinner that dies silently.
+
+### Common pitfalls
+- **If retries make an outage worse instead of better, it's because they fired immediately and in lockstep** — every client hitting the same failing endpoint at the same instant recreates the load spike that caused the failure; exponential backoff with jitter spreads retries out so they don't all land together.
+- **If a "resilient" service still hangs for 60+ seconds under a slow provider, it's because the client-side timeout was never set** — the SDK's default (or no timeout at all) leaves you waiting on someone else's infrastructure instead of failing fast on your own terms.
+- **If a fallback model was "configured" but never actually got traffic during the one outage that mattered, it's because it was never tested** — a fallback path that only runs during a real incident is a fallback path you're testing for the first time in production; exercise it deliberately (chaos testing, a feature flag that forces the fallback) before you need it for real.
+- **If users see a raw error or an infinite spinner during a provider outage, it's a degradation design gap, not a bug in any one line of code** — decide in advance what "acceptable but not perfect" looks like (cached answer, smaller model, plain-language unavailability message) rather than letting the failure mode be whatever falls out of unhandled exceptions.
+
 ## Practice Q&A (Self-Test)
 
 ### A fraud-detection model needs an answer in under 200ms at checkout. Batch or real-time serving?

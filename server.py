@@ -3,8 +3,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+import anthropic
 import markdown as md
-import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 
@@ -14,13 +14,15 @@ ROOT = Path(__file__).resolve().parent
 GUIDE_FILE = "NCA-GENL-study-guide.html"
 BNSF_VISUAL_FILE = "bnsf-technical-visual.html"
 DS_FUNDAMENTALS_FILE = "ds-fundamentals-visual.html"
+FOOTPRINT_CASE_FILE = "footprint-case-file-visual.html"
+AGENT_DECISION_LOOP_FILE = "agent-decision-loop-visual.html"
+UNIFIED_TELEMETRY_FILE = "unified-telemetry-agent-design.html"
 DOC_TEMPLATE = (ROOT / "doc_template.html").read_text(encoding="utf-8")
 DB_FILE = ROOT / "qa_history.db"
 
-AZURE_KEY = os.environ["AZURE_OPENAI_KEY"]
-AZURE_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
-AZURE_DEPLOYMENT = os.environ["AZURE_OPENAI_DEPLOYMENT"]
-API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
+os.environ["ANTHROPIC_API_KEY"]  # fail fast at startup if unset
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-5")
+claude_client = anthropic.Anthropic()
 
 app = Flask(__name__, static_folder=None)
 
@@ -175,6 +177,20 @@ def index():
         '<ul class="doclist"><li><a href="/ds-fundamentals">Data Science Fundamentals — Pictorial '
         "(gradient descent, loss functions, bias-variance/overfitting, L1/L2 regularization) — "
         "same interactive diagram style</a></li></ul>"
+        "<h2>AI Agent Engineering (Pictorial)</h2>"
+        '<ul class="doclist">'
+        '<li><a href="/footprint-case-file">The Case File: How footprintjs Traces an AI\'s Decision — '
+        "how Sanjay Krishna Anbalagan's footprintjs/agentfootprint makes an agent's decisions "
+        "traceable and provable, walked through one real loan-rejection trace</a></li>"
+        '<li><a href="/agent-decision-loop">The Agent Decision Loop — Where It Actually Breaks — '
+        "six real, sourced production incidents (AutoGPT, a $47K LangChain loop, Replit's deleted "
+        "database, Amazon Q's stale wiki, a supply-chain prompt injection) mapped to the exact "
+        "stage of an agent's loop that failed</a></li>"
+        '<li><a href="/unified-telemetry-agent-design">Unifying App, Infra &amp; Analytics Logs for '
+        "an LLM Agent — a real engineering design sourced to Honeycomb's Query Assistant and "
+        "Datadog's Bits AI: vocabulary normalization, token/context budgeting, memory-as-state, "
+        "and hypothesis-driven tool selection</a></li>"
+        "</ul>"
         f"{sections}"
     )
     return render_doc_page("Study Hub", body, "study-hub-index")
@@ -193,6 +209,21 @@ def bnsf_visual():
 @app.route("/ds-fundamentals")
 def ds_fundamentals():
     return send_from_directory(ROOT, DS_FUNDAMENTALS_FILE)
+
+
+@app.route("/footprint-case-file")
+def footprint_case_file():
+    return send_from_directory(ROOT, FOOTPRINT_CASE_FILE)
+
+
+@app.route("/agent-decision-loop")
+def agent_decision_loop():
+    return send_from_directory(ROOT, AGENT_DECISION_LOOP_FILE)
+
+
+@app.route("/unified-telemetry-agent-design")
+def unified_telemetry_agent_design():
+    return send_from_directory(ROOT, UNIFIED_TELEMETRY_FILE)
 
 
 @app.route("/doc/<slug>")
@@ -250,35 +281,32 @@ def ask():
         "e.g. `SE = s / sqrt(n) = 10 / 5 = 2`."
     )
 
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = []
     for turn in history[-6:]:
         role, content = turn.get("role"), turn.get("content")
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": question})
 
-    url = (
-        f"{AZURE_ENDPOINT}/openai/deployments/{AZURE_DEPLOYMENT}/chat/completions"
-        f"?api-version={API_VERSION}"
-    )
     try:
-        resp = requests.post(
-            url,
-            headers={"api-key": AZURE_KEY, "Content-Type": "application/json"},
-            json={"messages": messages, "temperature": 0.3, "max_tokens": 700},
-            timeout=60,
+        resp = claude_client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            output_config={"effort": "medium"},
+            system=system_prompt,
+            messages=messages,
         )
-    except requests.RequestException as exc:
-        return jsonify({"error": f"could not reach Azure OpenAI: {exc}"}), 502
+    except anthropic.APIConnectionError as exc:
+        return jsonify({"error": f"could not reach the Claude API: {exc}"}), 502
+    except anthropic.APIStatusError as exc:
+        return jsonify({"error": f"Claude API error {exc.status_code}: {exc.message}"}), 502
 
-    if resp.status_code != 200:
-        return jsonify({"error": f"Azure OpenAI error {resp.status_code}: {resp.text[:500]}"}), 502
+    if resp.stop_reason == "refusal":
+        return jsonify({"error": "Claude declined to answer this one — try rephrasing the question."}), 502
 
-    body = resp.json()
-    try:
-        answer = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError):
-        return jsonify({"error": f"unexpected response shape: {body}"}), 502
+    answer = next((b.text for b in resp.content if b.type == "text"), "")
+    if resp.stop_reason == "max_tokens":
+        answer += "\n\n*(cut off — hit the response length limit; ask a narrower follow-up to continue)*"
 
     conn = get_db()
     conn.execute(

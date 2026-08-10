@@ -1,0 +1,463 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>The Case File: How footprintjs Traces an AI's Decision</title>
+<style>
+  :root{
+    --paper:#F6F6F3; --panel:#FFFFFF; --ink:#1B1D1E; --muted:#63676E;
+    --line:#DCDCD6; --accent:#2F6F6B; --accent-soft:#DCEBE9;
+    --flag:#B23A2E; --flag-soft:#F6E1DE; --good:#3E7C43; --good-soft:#E2EEE0;
+    --amber:#93610E; --amber-soft:#F3E7D2;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --serif:Charter,'Iowan Old Style','Georgia',serif;
+  }
+  :root[data-theme="dark"]{
+    --paper:#15181A; --panel:#1D2124; --ink:#E9E7E2; --muted:#9BA0A6;
+    --line:#2C3134; --accent:#6BBDB6; --accent-soft:#1E3230;
+    --flag:#E37567; --flag-soft:#3A211F; --good:#7FC383; --good-soft:#213321;
+    --amber:#D8A94D; --amber-soft:#332A18;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#15181A; --panel:#1D2124; --ink:#E9E7E2; --muted:#9BA0A6;
+      --line:#2C3134; --accent:#6BBDB6; --accent-soft:#1E3230;
+      --flag:#E37567; --flag-soft:#3A211F; --good:#7FC383; --good-soft:#213321;
+      --amber:#D8A94D; --amber-soft:#332A18;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+    font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:52rem;margin:0 auto;padding:3.5rem 1.5rem 6rem}
+  h1,h2,h3{font-family:var(--mono);font-weight:700;letter-spacing:-0.01em;text-wrap:balance;color:var(--ink)}
+  h1{font-size:2rem;line-height:1.25;margin:0 0 .6rem}
+  h2{font-size:1.3rem;margin:0 0 .3rem;display:flex;align-items:baseline;gap:.6rem}
+  h2 .tag{font-size:.68rem;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);
+    border-radius:.3rem;padding:.15rem .5rem;font-weight:600;white-space:nowrap}
+  p{margin:0 0 1rem;max-width:38rem}
+  .lede{font-size:1.12rem;color:var(--muted);max-width:36rem}
+  .kicker{font-family:var(--mono);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 .8rem;display:flex;align-items:center;gap:.5rem}
+  .kicker::before{content:"";width:1.6rem;height:1px;background:var(--accent)}
+  .backlink{font-family:var(--mono);font-size:.78rem;color:var(--muted);text-decoration:none;display:inline-block;margin-bottom:1.4rem}
+  .backlink:hover{color:var(--accent)}
+  header.hero{padding-bottom:2.4rem;border-bottom:1px solid var(--line);margin-bottom:2.6rem}
+  .byline{font-family:var(--mono);font-size:.8rem;color:var(--muted);margin-top:1.2rem}
+  .byline a{color:var(--accent)}
+  section{margin:3.2rem 0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:.5rem;padding:1.3rem 1.5rem;margin:1.1rem 0}
+  .trace{font-family:var(--mono);font-size:.82rem;line-height:1.75;white-space:pre-wrap;color:var(--ink)}
+  .trace .read{color:var(--accent)}
+  .trace .write{color:var(--amber)}
+  .trace .decide{color:var(--flag);font-weight:700}
+  .fig{margin:1.4rem 0;overflow-x:auto}
+  .fig svg{max-width:100%;height:auto;display:block;margin:0 auto}
+  figcaption{font-family:var(--mono);font-size:.78rem;color:var(--muted);text-align:center;margin-top:.6rem}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 .4rem .4rem 0;
+    padding:.9rem 1.1rem;margin:1.2rem 0;font-size:.96rem}
+  .callout.flag{border-color:var(--flag);background:var(--flag-soft)}
+  .callout.good{border-color:var(--good);background:var(--good-soft)}
+  .callout strong{font-family:var(--mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;
+    display:block;margin-bottom:.35rem;color:inherit}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media (max-width:640px){.two-col{grid-template-columns:1fr}}
+  .verdict-box{border:1px solid var(--line);border-radius:.5rem;padding:1rem 1.1rem;background:var(--panel)}
+  .verdict-box h4{font-family:var(--mono);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;
+    margin:0 0 .6rem;color:var(--muted)}
+  .verdict-box .result{font-family:var(--mono);font-weight:700;font-size:1rem}
+  .verdict-box.no .result{color:var(--flag)}
+  .verdict-box.yes .result{color:var(--good)}
+  ul{padding-left:1.3rem;margin:0 0 1rem}
+  li{margin-bottom:.4rem}
+  code{font-family:var(--mono);background:var(--accent-soft);color:var(--ink);border-radius:.25rem;
+    padding:.08rem .35rem;font-size:.88em}
+  .credit{font-family:var(--mono);font-size:.82rem;color:var(--muted);border-top:1px solid var(--line);
+    padding-top:1.6rem;margin-top:3rem}
+  .credit a{color:var(--accent)}
+  .stamp{display:inline-block;font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;
+    text-transform:uppercase;border:1.5px solid var(--flag);color:var(--flag);border-radius:.3rem;
+    padding:.2rem .5rem;transform:rotate(-2deg)}
+</style></head><body>
+
+<div class="wrap">
+
+  <a class="backlink" href="/">&larr; Mastery Hub</a>
+
+  <header class="hero">
+    <div class="kicker">Case file &middot; contextual errors</div>
+    <h1>The refund that shouldn't have happened &mdash;<br>and the six-line trail that explains it</h1>
+    <p class="lede">A walkthrough of <code>footprintjs</code> / <code>agentfootprint</code>, the open-source
+      framework by Sanjay Krishna Anbalagan that makes an AI agent's decisions traceable, provable, and
+      auditable &mdash; step by step, in its own words, with the real example from the project's own docs.</p>
+    <div class="byline">Source: <a href="https://github.com/footprintjs/footPrint" target="_blank" rel="noopener">github.com/footprintjs/footPrint</a>
+      &nbsp;&middot;&nbsp; <a href="https://github.com/footprintjs/agentfootprint" target="_blank" rel="noopener">github.com/footprintjs/agentfootprint</a>
+      &nbsp;&middot;&nbsp; MIT licensed</div>
+  </header>
+
+  <section>
+    <div class="kicker">the opening problem</div>
+    <h2>An agent that's "up," fast, and confidently wrong</h2>
+    <p>A loan pipeline rejects an applicant &mdash; call him Bob. The code didn't crash. The server didn't
+      time out. The answer even reads as reasonable. Bob asks the obvious question:</p>
+    <div class="callout flag"><strong>Bob</strong>"Why was I rejected?"</div>
+    <p>A normal log tells you <em>what happened</em>: <code>status: REJECTED</code>. It does not tell
+      you <em>why the system believed that was correct</em> &mdash; which fact, which rule, which comparison
+      actually produced that word. That gap is the whole problem this project exists to close.</p>
+  </section>
+
+  <section>
+    <div class="kicker">step by step</div>
+    <h2>How the trace is actually built <span class="tag">footprintjs</span></h2>
+    <p>Business logic isn't written as one big function &mdash; it's written as a graph of small,
+      named stages, each one working on a shared, watched piece of state called the
+      <strong>scope</strong>. Every stage that reads from the scope, writes to it, or makes a decision
+      based on it gets that action recorded automatically, as it happens &mdash; nobody writes a log line
+      by hand.</p>
+
+    <figure class="fig">
+      <svg viewBox="0 0 980 300" role="img" aria-label="Four pipeline stages for Bob's loan application: ReceiveApplication writes creditScore and dti; EvaluateRisk reads those and writes riskTier; RouteByRisk reads riskTier and decides high-risk; GenerateRejection writes the final decision. A dashed backward arrow traces from the final decision back through each cause to the original write.">
+        <defs>
+          <marker id="arrow-fwd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" opacity="0.55"/>
+          </marker>
+          <marker id="arrow-back" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="#B23A2E"/>
+          </marker>
+        </defs>
+
+        <!-- stage boxes -->
+        <g font-family="SFMono-Regular,Consolas,monospace" font-size="12.5">
+          <!-- Stage 1 -->
+          <rect x="20" y="30" width="210" height="118" rx="8" fill="none" stroke="currentColor" opacity="0.35"/>
+          <text x="34" y="52" font-weight="700" fill="currentColor">Stage 1 &middot; ReceiveApplication</text>
+          <text x="34" y="76" fill="#93610E">write creditScore = 580</text>
+          <text x="34" y="94" fill="#93610E">write dti = 0.6</text>
+          <text x="34" y="112" fill="#93610E">write employmentStatus</text>
+          <text x="34" y="130" fill="#93610E">      = "self-employed"</text>
+
+          <!-- Stage 2 -->
+          <rect x="270" y="30" width="210" height="118" rx="8" fill="none" stroke="currentColor" opacity="0.35"/>
+          <text x="284" y="52" font-weight="700" fill="currentColor">Stage 2 &middot; EvaluateRisk</text>
+          <text x="284" y="76" fill="#2F6F6B">read creditScore = 580</text>
+          <text x="284" y="94" fill="#93610E">write riskTier = "high"</text>
+          <text x="284" y="112" fill="#93610E">write riskFactors</text>
+          <text x="284" y="130" fill="#93610E">      = (3 items)</text>
+
+          <!-- Stage 3 -->
+          <rect x="520" y="30" width="210" height="118" rx="8" fill="none" stroke="currentColor" opacity="0.35"/>
+          <text x="534" y="52" font-weight="700" fill="currentColor">Stage 3 &middot; RouteByRisk</text>
+          <text x="534" y="76" fill="#2F6F6B">read riskTier = "high"</text>
+          <text x="534" y="98" fill="#B23A2E" font-weight="700">[condition] "high" eq "high" &#10003;</text>
+          <text x="534" y="118" fill="currentColor">&rarr; chose RejectApplication</text>
+
+          <!-- Stage 4 -->
+          <rect x="750" y="30" width="210" height="118" rx="8" fill="none" stroke="currentColor" opacity="0.35"/>
+          <text x="764" y="52" font-weight="700" fill="currentColor">Stage 4 &middot; GenerateRejection</text>
+          <text x="764" y="76" fill="#93610E">write decision =</text>
+          <text x="764" y="94" fill="#93610E">  "REJECTED &mdash; DTI 60%</text>
+          <text x="764" y="112" fill="#93610E">  exceeds 43% max; credit</text>
+          <text x="764" y="130" fill="#93610E">  score 580; self-employed"</text>
+        </g>
+
+        <!-- forward arrows -->
+        <line x1="230" y1="89" x2="268" y2="89" stroke="currentColor" opacity="0.5" marker-end="url(#arrow-fwd)"/>
+        <line x1="480" y1="89" x2="518" y2="89" stroke="currentColor" opacity="0.5" marker-end="url(#arrow-fwd)"/>
+        <line x1="730" y1="89" x2="748" y2="89" stroke="currentColor" opacity="0.5" marker-end="url(#arrow-fwd)"/>
+
+        <!-- backward causal trace -->
+        <path d="M 855 148 C 855 210, 125 210, 125 148" fill="none" stroke="#B23A2E" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-back)"/>
+        <text x="490" y="235" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="12.5" fill="#B23A2E" font-weight="700">the trace, walked backward: decision &larr; condition &larr; riskTier &larr; creditScore</text>
+
+        <text x="490" y="280" text-anchor="middle" font-family="Charter,Georgia,serif" font-size="13" fill="currentColor" opacity="0.7" font-style="italic">Every value on the right can point back to the exact write that produced it, all the way to Stage 1.</text>
+      </svg>
+      <figcaption>Real output, quoted from the footprintjs README's own worked example</figcaption>
+    </figure>
+
+    <p>Read left to right, that's the pipeline running forward. Read right to left, it's the
+      answer to Bob's question &mdash; an actual chain of cause and effect, not a guess reconstructed
+      from scraps of log text:</p>
+
+    <div class="panel">
+      <div class="trace"><span class="write">Stage 1:</span> Write creditScore = 580, dti = 0.6, employmentStatus = "self-employed"
+<span class="read">Stage 2:</span> Read creditScore = 580 &rarr; <span class="write">Write riskTier = "high"</span>
+<span class="decide">Stage 3:</span> Read riskTier = "high" &rarr; [Condition] "high" eq "high" &#10003; &rarr; RejectApplication
+<span class="write">Stage 4:</span> Write decision = "REJECTED &mdash; DTI 60% exceeds 43%; credit score 580; self-employed &lt; 2yr"</div>
+    </div>
+
+    <div class="callout good">
+      <strong>What the AI can now honestly say to Bob</strong>
+      "Your application was rejected because your debt-to-income ratio of 60% exceeds the 43%
+      maximum, your credit score of 580 falls in the 'fair' tier, and your self-employment tenure
+      of 1 year is below the 2-year minimum." &mdash; generated <em>from the trace</em>, not invented by
+      the model reading between the lines of a log file.
+    </div>
+
+    <p style="margin-top:1rem">The project's own vocabulary table, precisely &mdash; every term maps
+      to something you already understand from other systems:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:.88rem;margin:.6rem 0">
+      <tr><th style="text-align:left;font-family:var(--mono);font-size:.68rem;color:var(--muted);border-bottom:2px solid var(--line);padding:.4rem .5rem">footprintjs term</th><th style="text-align:left;font-family:var(--mono);font-size:.68rem;color:var(--muted);border-bottom:2px solid var(--line);padding:.4rem .5rem">= the thing you already know</th></tr>
+      <tr><td style="border-bottom:1px solid var(--line);padding:.5rem"><code>scope</code></td><td style="border-bottom:1px solid var(--line);padding:.5rem">the run's shared state (working memory) &mdash; but every read/write is tracked</td></tr>
+      <tr><td style="border-bottom:1px solid var(--line);padding:.5rem"><code>decider</code> / <code>select()</code></td><td style="border-bottom:1px solid var(--line);padding:.5rem">a router (one branch) / parallel fan-out (many branches)</td></tr>
+      <tr><td style="border-bottom:1px solid var(--line);padding:.5rem"><code>recorder</code></td><td style="border-bottom:1px solid var(--line);padding:.5rem">an observer, called on each read/write/decision</td></tr>
+      <tr><td style="border-bottom:1px solid var(--line);padding:.5rem"><code>narrative</code></td><td style="border-bottom:1px solid var(--line);padding:.5rem">the execution trace, rendered as plain English &mdash; the LLM-readable form</td></tr>
+      <tr><td style="border-bottom:1px solid var(--line);padding:.5rem"><code>commit log</code></td><td style="border-bottom:1px solid var(--line);padding:.5rem">the ordered record of what each stage wrote &mdash; powers time-travel replay</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <div class="kicker">memory &mdash; real API</div>
+    <h2>One recording, three consumers, zero extra instrumentation <span class="tag">agentfootprint</span></h2>
+    <p>Memory isn't a single mechanism here &mdash; it's a factory, and the numbers are exact: <strong>4
+      types</strong> (<code>episodic</code> / <code>semantic</code> / <code>narrative</code> /
+      <code>causal</code>) <strong>&times; 7 strategies</strong> (<code>window</code> / <code>budget</code> /
+      <code>summarize</code> / <code>topK</code> / <code>extract</code> / <code>decay</code> /
+      <code>hybrid</code>). The interesting one is <code>causal</code>: instead of storing raw
+      conversation history, it stores the same decision-evidence snapshots as the trace above &mdash;
+      which means one recorded run can be replayed later, handed to a cheaper model for fast triage
+      on a similar future decision, or exported as training data. The project states this directly:</p>
+    <div class="callout">
+      <strong>Real quote, from the docs</strong>
+      "One recording. Two lenses. Three consumers. Zero extra instrumentation."
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">human-in-the-loop &mdash; real API</div>
+    <h2>Pause for a person, resume on a different server, days later</h2>
+    <p>Because state commits per-stage (the same transactional model behind the loan trace), a run
+      can stop mid-flow, wait for a human, and pick back up anywhere &mdash; this is the literal
+      documented call shape:</p>
+    <div class="panel">
+      <div class="trace">const out = await agent.run({ message: 'Process refund' });
+
+if (isPaused(out)) {
+  const checkpoint = out.checkpoint;  <span style="opacity:.65">// plain JSON, persist it anywhere</span>
+  <span style="opacity:.65">// ...hours or days later, possibly on a different server:</span>
+  await agent.resume(checkpoint, userDecision);
+}</div>
+    </div>
+    <p>The same checkpoint mechanism backs a tool calling <code>pauseHere(...)</code> or
+      <code>askHuman(...)</code> mid-stage &mdash; and because the commit log is what makes this
+      possible, it's the same feature that lets you rewind a run to any prior stage's exact state
+      for debugging, not a separate system bolted on for human approval specifically.</p>
+  </section>
+
+  <section>
+    <div class="kicker">engineering, not just concepts</div>
+    <h2>The parts that show this was built for production</h2>
+    <ul>
+      <li><strong>Tree-shaking is CI-proven, not promised</strong> &mdash; a real test in the repo
+        (<code>test/esm-packaging.test.ts</code>) bundles a minimal <code>import { flowChart }</code>
+        and asserts the recorder, detach, and trace layers get pruned out. Dual true-ESM/CJS build,
+        subpath exports (<code>footprintjs/trace</code>, <code>footprintjs/detach</code>,
+        <code>footprintjs/advanced</code>) so each layer is independently tree-shakeable.</li>
+      <li><strong>Deferred observers with honest backpressure</strong> &mdash; a heavy recorder can run
+        "one beat behind" on a bounded queue (<code>{ delivery: 'deferred' }</code>) instead of
+        blocking the engine's hot path, with a named backpressure policy when the queue fills:
+        <code>drop-oldest</code> / <code>sample</code> / <code>block</code>.</li>
+      <li><strong>Fire-and-forget child flowcharts</strong> via <code>scope.$detachAndForget(driver, child, input)</code>
+        &mdash; six real built-in drivers: <code>microtask</code> / <code>immediate</code> /
+        <code>setImmediate</code> / <code>setTimeout</code> / <code>sendBeacon</code> / <code>workerThread</code>,
+        plus a custom-driver protocol.</li>
+      <li><strong>60+ typed observability events across 18 domains</strong> &mdash; <code>agent</code> ·
+        <code>composition</code> · <code>context</code> · <code>stream</code> · <code>tools</code> ·
+        <code>skill</code> · <code>memory</code> · <code>cache</code> · <code>cost</code> ·
+        <code>permission</code> · <code>eval</code> · <code>embedding</code> · <code>pause</code> ·
+        <code>error</code> · <code>fallback</code> · <code>resilience</code> · <code>reliability</code> ·
+        <code>risk</code>. (Worth flagging: an earlier draft of this page cited "47 events across 13
+        domains" from a secondhand source — that number was wrong. This is the real, current count,
+        checked directly against the project's own README.)</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="kicker">where the data comes from</div>
+    <h2>Every fact the model sees has an address <span class="tag">agentfootprint</span></h2>
+    <p>A chat agent is fed more than one prompt: background facts about the customer, always-on
+      rules, and skills that only switch on when needed. Instead of mashing all of that into one
+      string, each piece declares two things up front &mdash; <strong>where</strong> it's allowed to land,
+      and <strong>when</strong> it's allowed to fire. That's the whole abstraction:</p>
+
+    <figure class="fig">
+      <svg viewBox="0 0 900 260" role="img" aria-label="A grid: four trigger types (always, rule, on tool return, llm activated) as rows, crossed with three landing slots (system prompt, messages, tools) as columns. Example content types are placed in the cells they occupy: facts and steering always land in system; RAG lands in messages on a rule; skills land in system and tools only when the model asks for them.">
+        <g font-family="SFMono-Regular,Consolas,monospace" font-size="12">
+          <!-- column headers -->
+          <text x="330" y="24" text-anchor="middle" font-weight="700" fill="currentColor">system prompt</text>
+          <text x="530" y="24" text-anchor="middle" font-weight="700" fill="currentColor">messages</text>
+          <text x="730" y="24" text-anchor="middle" font-weight="700" fill="currentColor">tools</text>
+
+          <!-- grid lines -->
+          <line x1="180" y1="36" x2="850" y2="36" stroke="currentColor" opacity="0.3"/>
+          <line x1="180" y1="36" x2="180" y2="240" stroke="currentColor" opacity="0.3"/>
+          <line x1="430" y1="36" x2="430" y2="240" stroke="currentColor" opacity="0.3"/>
+          <line x1="630" y1="36" x2="630" y2="240" stroke="currentColor" opacity="0.3"/>
+          <line x1="850" y1="36" x2="850" y2="240" stroke="currentColor" opacity="0.3"/>
+          <line x1="180" y1="86" x2="850" y2="86" stroke="currentColor" opacity="0.15"/>
+          <line x1="180" y1="136" x2="850" y2="136" stroke="currentColor" opacity="0.15"/>
+          <line x1="180" y1="186" x2="850" y2="186" stroke="currentColor" opacity="0.15"/>
+          <line x1="180" y1="240" x2="850" y2="240" stroke="currentColor" opacity="0.3"/>
+
+          <!-- row labels -->
+          <text x="20" y="66" fill="currentColor">trigger: always</text>
+          <text x="20" y="116" fill="currentColor">trigger: rule</text>
+          <text x="20" y="166" fill="currentColor">trigger: on-tool-return</text>
+          <text x="20" y="210" fill="currentColor">trigger: llm-activated</text>
+
+          <!-- cell contents -->
+          <rect x="255" y="46" width="150" height="30" rx="5" fill="#2F6F6B" opacity="0.16"/>
+          <text x="330" y="66" text-anchor="middle" fill="#2F6F6B" font-weight="700">fact &middot; steering</text>
+
+          <rect x="455" y="96" width="150" height="30" rx="5" fill="#93610E" opacity="0.16"/>
+          <text x="530" y="116" text-anchor="middle" fill="#93610E" font-weight="700">RAG passage</text>
+
+          <rect x="255" y="146" width="150" height="30" rx="5" fill="#93610E" opacity="0.16"/>
+          <text x="330" y="166" text-anchor="middle" fill="#93610E" font-weight="700">instruction</text>
+
+          <rect x="255" y="196" width="150" height="30" rx="5" fill="#B23A2E" opacity="0.14"/>
+          <text x="330" y="216" text-anchor="middle" fill="#B23A2E" font-weight="700">skill (context)</text>
+          <rect x="655" y="196" width="150" height="30" rx="5" fill="#B23A2E" opacity="0.14"/>
+          <text x="730" y="216" text-anchor="middle" fill="#B23A2E" font-weight="700">skill (its tools)</text>
+        </g>
+      </svg>
+      <figcaption>injection = slot &times; trigger &times; cache &mdash; one primitive covering facts, rules, RAG, memory, and skills</figcaption>
+    </figure>
+
+    <p>The payoff of labeling things this precisely: nothing enters the model's context by
+      accident. If Bob's decision was influenced by something, that something has a name, a
+      slot, and a reason it was let in &mdash; which is exactly what you need to walk the trace
+      backward when the decision looks wrong.</p>
+  </section>
+
+  <section>
+    <div class="kicker">how it decides &mdash; real CLI output</div>
+    <h2>Picking the right tool &mdash; and catching it when it doesn't <span class="tag">agentfootprint</span></h2>
+    <p>Two tools with near-identical names or descriptions get picked interchangeably by the model.
+      This is the literal, unedited output of running the project's own confusability linter
+      against a real tools file:</p>
+
+    <div class="panel">
+      <div class="trace">$ npx agentfootprint-lint-tools tools.json --threshold 0.94 --strict
+
+<span class="decide">&#10007; CONFUSABLE 0.9445</span>  get_fcns_database &lt;&gt; influx_get_fcns_database
+    hint: names differ only by 'influx' &mdash; make the descriptions say WHEN to choose each
+<span class="write">~ warn  [enum-in-prose]</span> influx_get_port_ranking.metric
+    suggest: "enum": ["avg_iops","peak_iops","mbps"]</div>
+    </div>
+
+    <p>That's a real pairwise-embedding similarity score (<code>0.9445</code>) against a real
+      <code>--threshold 0.94</code> flag &mdash; two tools named a single word apart, caught before
+      a single live user ever triggered the mix-up. The linter is pluggable on the embedder and
+      cached by content hash, so re-running it costs nothing until a tool description actually changes.</p>
+
+    <p>The same geometry runs live, via an observer attached at build time:</p>
+    <div class="panel">
+      <div class="trace">const choices = toolChoiceRecorder({ embedder: staticEmbedder() });
+const agent = Agent.create({ provider, model })
+  .watch(choices)
+  .build();
+
+await agent.run({ message: 'refund order 4471' });
+console.log(await choices.getFlagged());  <span style="opacity:.65">// calls where the tool choice was a near-tie</span></div>
+    </div>
+    <p>Design split, stated directly by the project: <em>"agentfootprint owns the detection &mdash;
+      the scores, the ties, the recorded margins; you own the policy &mdash; the threshold, the
+      embedder, the rewrite."</em> It flags; it doesn't decide for you what to do about a flag.</p>
+
+    <div class="callout">
+      <strong>The other lever: don't show every button at once</strong>
+      Tools aren't a fixed catalog sitting in front of the model on every turn. A tool only
+      enters the list once its skill has been explicitly unlocked &mdash; turn 1 might expose one
+      general tool, turn 4 (once the model has scoped into "this is a refund") exposes five
+      refund-specific ones. Fewer buttons on the desk at any moment is itself a reliability
+      feature, not just a cost saving.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">proving it, not guessing</div>
+    <h2>A real bug from the project's own logs</h2>
+    <p>A refunds agent approved a refund for an order <strong>47 days old</strong>, against a
+      30-day policy. The trace pointed at one suspect: a fact meant for VIP customers,
+      <code>vip-override-fact</code>, that had drifted into a conversation it didn't belong in.
+      Suspicion isn't proof &mdash; so the actual test is to remove that one fact and rerun the exact
+      same request, with the same random seed, more than once:</p>
+
+    <figure class="fig">
+      <svg viewBox="0 0 860 190" role="img" aria-label="Ablation test: with the VIP override fact present, three reruns all say APPROVED. With the fact removed, all three reruns say DECLINED instead. A benign, unrelated fact removed as a control produces zero flips. The three-out-of-three flip is the proof of causation.">
+        <g font-family="SFMono-Regular,Consolas,monospace" font-size="13">
+          <text x="20" y="24" font-weight="700" fill="currentColor">WITH vip-override-fact</text>
+          <text x="20" y="52" fill="#B23A2E">run 1 &rarr; APPROVED</text>
+          <text x="20" y="74" fill="#B23A2E">run 2 &rarr; APPROVED</text>
+          <text x="20" y="96" fill="#B23A2E">run 3 &rarr; APPROVED</text>
+
+          <line x1="270" y1="20" x2="270" y2="110" stroke="currentColor" opacity="0.25"/>
+          <text x="330" y="24" font-weight="700" fill="currentColor">WITHOUT it (same seed)</text>
+          <text x="330" y="52" fill="#3E7C43">run 1 &rarr; DECLINED</text>
+          <text x="330" y="74" fill="#3E7C43">run 2 &rarr; DECLINED</text>
+          <text x="330" y="96" fill="#3E7C43">run 3 &rarr; DECLINED</text>
+
+          <line x1="620" y1="20" x2="620" y2="110" stroke="currentColor" opacity="0.25"/>
+          <text x="640" y="24" font-weight="700" fill="currentColor">control: remove a</text>
+          <text x="640" y="40" font-weight="700" fill="currentColor">different, benign fact</text>
+          <text x="640" y="68" fill="currentColor" opacity="0.7">0 / 3 runs flip</text>
+
+          <rect x="10" y="132" width="840" height="42" rx="6" fill="#2F6F6B" opacity="0.12"/>
+          <text x="430" y="158" text-anchor="middle" fill="#2F6F6B" font-weight="700">3 / 3 flips on the suspect, 0 / 3 on the control &rarr; causal proof, not correlation</text>
+        </g>
+      </svg>
+      <figcaption>The "context bisection" technique &mdash; real run, from the agentfootprint docs</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="kicker">proving the record itself wasn't touched</div>
+    <h2>Tamper-evidence, in the project's own real output</h2>
+    <p>A causal trace only means something if nobody edited it after the fact. <code>auditExport()</code>
+      hash-chains every typed event &mdash; decisions, tool calls, permission verdicts, costs &mdash; into an
+      append-only bundle; <code>verifyAuditBundle()</code> re-checks it entirely offline, no agent or
+      LLM involved. This is the literal documented behavior when one record in the chain is altered:</p>
+    <div class="panel">
+      <div class="trace">verifyAuditBundle(bundle)
+<span class="decide">&rarr; { valid: false, brokenAt: #16, reason: 'hash mismatch' }</span></div>
+    </div>
+    <p>Not "something looks wrong somewhere" &mdash; record <strong>#16</strong>, specifically. And a
+      genuinely useful efficiency number from the same docs: their trace-debugging toolpack lets a
+      cheap model walk a captured run by ID rather than reading the whole thing, and found a planted
+      bug after reading <strong>9.5% of the trace</strong>.</p>
+  </section>
+
+  <section>
+    <div class="kicker">keeping the two apart</div>
+    <h2>What this fixes, and what it deliberately doesn't</h2>
+    <div class="two-col">
+      <div class="verdict-box no">
+        <h4>Not this system's job</h4>
+        <p style="margin:0">Deciding <em>what the refund policy should be</em>. If the 30-day
+          rule itself is wrong or outdated, that's a product and policy call &mdash; no amount of
+          tracing fixes a bad rule.</p>
+      </div>
+      <div class="verdict-box yes">
+        <h4>Exactly this system's job</h4>
+        <p style="margin:0">Making sure that whatever the rule is, when the agent breaks it,
+          someone can find the exact cause in minutes &mdash; proven, not guessed &mdash; instead of never
+          finding out at all.</p>
+      </div>
+    </div>
+    <p style="margin-top:1.2rem">One more boundary worth naming: this whole toolkit tells you
+      <em>why</em> an answer happened. It never tells you whether the answer was <em>right</em> &mdash;
+      that's still a separate job for a standing evaluation set, checked continuously. A system
+      can have a perfect trace on a badly wrong answer; tracing and evaluation are both required,
+      and neither substitutes for the other.</p>
+  </section>
+
+  <div class="credit">
+    <span class="stamp">Case closed</span><br><br>
+    Concepts, code samples, and the loan/refund examples above are drawn directly from
+    <a href="https://github.com/footprintjs/footPrint" target="_blank" rel="noopener">footprintjs</a> and
+    <a href="https://github.com/footprintjs/agentfootprint" target="_blank" rel="noopener">agentfootprint</a>,
+    open-source (MIT) projects by <strong>Sanjay Krishna Anbalagan</strong>. This page is an independent
+    study explainer, not an official project page. The underlying research has an academic side too:
+    a paper on explainable conversational-agent design is accepted at HCI International 2026 (Springer,
+    AI-HCI track), building on an earlier HCII 2025 paper applying UI-design principles to conversational
+    agents &mdash; verified against the Springer proceedings index, not taken on faith.
+  </div>
+
+</div>
+</body></html>

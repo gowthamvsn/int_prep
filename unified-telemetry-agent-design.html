@@ -1,0 +1,329 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unifying App, Infra &amp; Analytics Logs for an LLM Agent — A Real Engineering Design</title>
+<style>
+  :root{
+    --paper:#F6F6F3; --panel:#FFFFFF; --ink:#1B1D1E; --muted:#63676E;
+    --line:#DCDCD6; --accent:#2F6F6B; --accent-soft:#DCEBE9;
+    --flag:#B23A2E; --flag-soft:#F6E1DE; --good:#3E7C43; --good-soft:#E2EEE0;
+    --amber:#93610E; --amber-soft:#F3E7D2; --violet:#5B4B8A; --violet-soft:#E7E3F3;
+    --sec:#8A3A6B; --sec-soft:#F2E1EC;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --serif:Charter,'Iowan Old Style','Georgia',serif;
+  }
+  :root[data-theme="dark"]{
+    --paper:#15181A; --panel:#1D2124; --ink:#E9E7E2; --muted:#9BA0A6;
+    --line:#2C3134; --accent:#6BBDB6; --accent-soft:#1E3230;
+    --flag:#E37567; --flag-soft:#3A211F; --good:#7FC383; --good-soft:#213321;
+    --amber:#D8A94D; --amber-soft:#332A18; --violet:#A597D6; --violet-soft:#2A2540;
+    --sec:#D98CBE; --sec-soft:#3A2333;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#15181A; --panel:#1D2124; --ink:#E9E7E2; --muted:#9BA0A6;
+      --line:#2C3134; --accent:#6BBDB6; --accent-soft:#1E3230;
+      --flag:#E37567; --flag-soft:#3A211F; --good:#7FC383; --good-soft:#213321;
+      --amber:#D8A94D; --amber-soft:#332A18; --violet:#A597D6; --violet-soft:#2A2540;
+      --sec:#D98CBE; --sec-soft:#3A2333;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+    font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:60rem;margin:0 auto;padding:3.2rem 1.5rem 6rem}
+  h1,h2,h3{font-family:var(--mono);font-weight:700;letter-spacing:-0.01em;text-wrap:balance;color:var(--ink)}
+  h1{font-size:1.8rem;line-height:1.3;margin:0 0 .6rem}
+  h2{font-size:1.18rem;margin:0 0 .3rem;display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+  h2 .tag{font-size:.65rem;letter-spacing:.06em;color:var(--muted);border:1px solid var(--line);
+    border-radius:.3rem;padding:.15rem .5rem;font-weight:600;white-space:nowrap}
+  p{margin:0 0 1rem;max-width:39rem}
+  .lede{font-size:1.06rem;color:var(--muted);max-width:37rem}
+  .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 .7rem;display:flex;align-items:center;gap:.5rem}
+  .kicker::before{content:"";width:1.4rem;height:1px;background:var(--accent)}
+  .backlink{font-family:var(--mono);font-size:.78rem;color:var(--muted);text-decoration:none;display:inline-block;margin-bottom:1.4rem}
+  .backlink:hover{color:var(--accent)}
+  header.hero{padding-bottom:2.2rem;border-bottom:1px solid var(--line);margin-bottom:2.4rem}
+  .byline{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-top:1rem}
+  .byline a{color:var(--accent)}
+  section{margin:2.9rem 0}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:.55rem;padding:1.2rem 1.4rem;margin:1rem 0}
+  .fig{margin:1.2rem 0;overflow-x:auto}
+  .fig svg{max-width:100%;height:auto;display:block;margin:0 auto}
+  figcaption{font-family:var(--mono);font-size:.74rem;color:var(--muted);text-align:center;margin-top:.6rem}
+  .callout{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 .4rem .4rem 0;
+    padding:.9rem 1.1rem;margin:1.1rem 0;font-size:.95rem}
+  .callout.flag{border-color:var(--flag);background:var(--flag-soft)}
+  .callout.good{border-color:var(--good);background:var(--good-soft)}
+  .callout.violet{border-color:var(--violet);background:var(--violet-soft)}
+  .callout strong{font-family:var(--mono);font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;
+    display:block;margin-bottom:.35rem;color:inherit}
+  .quote{font-style:italic;border-left:3px solid var(--flag);padding:.2rem 0 .2rem 1rem;margin:1rem 0;color:var(--ink)}
+  .quote cite{display:block;font-style:normal;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.3rem}
+  code{font-family:var(--mono);background:var(--accent-soft);color:var(--ink);border-radius:.25rem;
+    padding:.08rem .35rem;font-size:.87em}
+  table{border-collapse:collapse;width:100%;font-size:.88rem;margin:1rem 0}
+  th{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;text-align:left;
+    color:var(--muted);border-bottom:2px solid var(--line);padding:.4rem .55rem}
+  td{border-bottom:1px solid var(--line);padding:.5rem .55rem;vertical-align:top}
+  .stat-row{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:.5rem;padding:.8rem 1rem;flex:1;min-width:9rem}
+  .stat .num{font-family:var(--mono);font-weight:700;font-size:1.4rem;display:block}
+  .stat .lbl{font-family:var(--mono);font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .credit{font-family:var(--mono);font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);
+    padding-top:1.5rem;margin-top:3rem}
+  .credit a{color:var(--accent)}
+</style></head><body>
+
+<div class="wrap">
+
+  <a class="backlink" href="/">&larr; Mastery Hub</a>
+
+  <header class="hero">
+    <div class="kicker">system design &middot; grounded in two real production systems</div>
+    <h1>Unifying app, infra &amp; analytics logs for an LLM agent — the real engineering design</h1>
+    <p class="lede">Not a hypothetical. Every design decision below is sourced to <strong>Honeycomb's Query
+      Assistant</strong> (wide-event logs/traces/metrics from customer apps and infra, an LLM query layer
+      on top) and <strong>Datadog's Bits AI</strong> (a multi-source SRE agent) — two companies that
+      published unusually specific detail on exactly this problem.</p>
+    <div class="byline">Sources: <a href="https://www.honeycomb.io/blog/hard-stuff-nobody-talks-about-llm" target="_blank" rel="noopener">honeycomb.io — "All the Hard Stuff Nobody Talks About"</a>
+      &nbsp;&middot;&nbsp; <a href="https://www.datadoghq.com/blog/engineering/bits-ai-eval-platform/" target="_blank" rel="noopener">datadoghq.com — Bits AI engineering</a></div>
+  </header>
+
+  <section>
+    <div class="kicker">the setup</div>
+    <h2>What's actually being ingested</h2>
+    <p>Honeycomb's product unifies traces, logs, and metrics from a customer's application and
+      infrastructure into one wide-event model — some customer schemas carry <strong>over 5,000
+      unique fields</strong>. Datadog's Bits AI reasons across an even wider set: metrics, logs,
+      traces, infra metadata, RUM, network path, and profiler data, to find the root cause of a
+      production incident. Both are real companies solving your exact three-source problem, at
+      production scale, in public.</p>
+  </section>
+
+  <section>
+    <div class="kicker">issue 1 &middot; vocabulary</div>
+    <h2>Solved at ingestion, not at query time <span class="tag">Honeycomb + OpenTelemetry</span></h2>
+    <p>Customer app logs call it <code>user_id</code>. Infra metrics call it <code>host_id</code>.
+      Analytics calls it <code>actor_id</code>. Honeycomb's real fix wasn't a synonym table — it
+      was feeding the customer's actual, current schema straight into the prompt as grounding. The
+      more durable, industry-standard fix is normalizing <em>before</em> anything reaches an LLM:</p>
+
+    <figure class="fig">
+      <svg viewBox="0 0 900 260" role="img" aria-label="Three sources — customer app, infrastructure, analytics — each emit differently-named fields for the same concept. An OpenTelemetry Collector normalizes all three into canonical semantic-convention field names like enduser.id before anything reaches the LLM or the query layer.">
+        <defs>
+          <marker id="uarrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" opacity="0.55"/>
+          </marker>
+        </defs>
+        <g font-family="SFMono-Regular,Consolas,monospace" font-size="12">
+          <rect x="20" y="20" width="190" height="62" rx="7" fill="none" stroke="#2F6F6B" stroke-width="2"/>
+          <text x="115" y="46" text-anchor="middle" font-weight="700" fill="#2F6F6B">customer app</text>
+          <text x="115" y="65" text-anchor="middle" fill="currentColor" opacity="0.75">emits: user_id</text>
+
+          <rect x="20" y="99" width="190" height="62" rx="7" fill="none" stroke="#93610E" stroke-width="2"/>
+          <text x="115" y="125" text-anchor="middle" font-weight="700" fill="#93610E">infrastructure</text>
+          <text x="115" y="144" text-anchor="middle" fill="currentColor" opacity="0.75">emits: host_id</text>
+
+          <rect x="20" y="178" width="190" height="62" rx="7" fill="none" stroke="#5B4B8A" stroke-width="2"/>
+          <text x="115" y="204" text-anchor="middle" font-weight="700" fill="#5B4B8A">analytics</text>
+          <text x="115" y="223" text-anchor="middle" fill="currentColor" opacity="0.75">emits: actor_id</text>
+        </g>
+
+        <path d="M 210 51 L 335 105" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#uarrow)"/>
+        <path d="M 210 130 L 335 130" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#uarrow)"/>
+        <path d="M 210 209 L 335 155" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#uarrow)"/>
+
+        <rect x="345" y="90" width="210" height="80" rx="8" fill="#2F6F6B" opacity="0.12" stroke="#2F6F6B" stroke-width="1.5"/>
+        <text x="450" y="120" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="12.5" font-weight="700" fill="#2F6F6B">OTel Collector</text>
+        <text x="450" y="138" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="11" fill="currentColor" opacity="0.75">semantic-convention</text>
+        <text x="450" y="153" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="11" fill="currentColor" opacity="0.75">attribute remap</text>
+
+        <path d="M 555 130 L 675 130" fill="none" stroke="currentColor" opacity="0.6" marker-end="url(#uarrow)"/>
+
+        <rect x="685" y="90" width="195" height="80" rx="8" fill="none" stroke="currentColor" opacity="0.4"/>
+        <text x="782" y="118" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="12" font-weight="700" fill="currentColor">canonical field:</text>
+        <text x="782" y="138" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="12" fill="#3E7C43" font-weight="700">enduser.id</text>
+        <text x="782" y="155" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="10.5" fill="currentColor" opacity="0.65">same name, everywhere</text>
+      </svg>
+      <figcaption>OpenTelemetry semantic conventions: normalize once at the collector, never re-solve vocabulary per query</figcaption>
+    </figure>
+
+    <div class="callout">
+      <strong>Design rule</strong>
+      Put the normalization layer at the ingestion/collector tier, not in the prompt. Fixing
+      vocabulary at query time means re-solving it on every request; fixing it at ingestion means
+      you solve it once, per source, forever.
+    </div>
+
+    <h2 style="margin-top:1.8rem">The gap OTel doesn't close: the AI engineer isn't the domain expert</h2>
+    <p>Normalizing field <em>names</em> doesn't tell you which field actually means what a business
+      person means by "the right data" — an AI engineer building this system usually isn't the
+      person who knows that, say, <code>order.status = 'held'</code> is the field that actually
+      predicts a failed checkout, three joins away from anything obviously named "checkout."
+      Guessing at that mapping is how you ship a confidently wrong retrieval layer.</p>
+    <p>The real, established pattern for this — not invented for LLMs, but exactly what an LLM
+      context-assembly layer needs — is a <strong>data catalog with a business glossary</strong>:
+      tools like Lyft's <strong>Amundsen</strong> or LinkedIn's <strong>DataHub</strong> exist
+      specifically so a domain expert (not the engineer) can annotate a table or field with its
+      business meaning, link it to the metric/dashboard it feeds, and make that annotation
+      discoverable by anyone building on top of it.</p>
+    <div class="callout violet">
+      <strong>Design rule</strong>
+      Build (or point at) exactly this kind of tool as the interface between the AI engineer and
+      the domain expert: a lightweight registry where the expert answers "what's the right field
+      for X, and how do I fetch it" once, in a UI, and that answer becomes a structured mapping
+      the context-assembly layer reads from — instead of a Slack thread the engineer has to
+      re-ask every time the schema changes.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">issue 2 &middot; context &amp; tokens</div>
+    <h2>Real numbers on what happens when you just "use a bigger context window" <span class="tag">Honeycomb</span></h2>
+    <p>The naive move — dump the whole 5,000-field schema into the prompt — blows GPT-3.5-turbo's
+      context window outright. Honeycomb's shipped fix: only include fields that received data in
+      the <strong>last 7 days</strong>. Recency as a cheap relevance proxy, not an embedding lookup.
+      When that still wasn't enough, they truncated further — and are explicit that this was
+      "hit-or-miss depending on if the most relevant fields... were truncated or not."</p>
+
+    <div class="stat-row">
+      <div class="stat"><span class="num">5,000+</span><span class="lbl">fields in some real customer schemas</span></div>
+      <div class="stat"><span class="num">7 days</span><span class="lbl">recency window used to trim the schema</span></div>
+      <div class="stat"><span class="num">2&ndash;15s+</span><span class="lbl">real measured latency band</span></div>
+    </div>
+
+    <table>
+      <tr><th>Model considered</th><th>What actually happened</th></tr>
+      <tr><td>GPT-4</td><td>"Far too slow" for the product's latency bar — ruled out despite being more capable</td></tr>
+      <tr><td>GPT-3.5-turbo</td><td>Shipped: fast enough, "good enough" with a well-trimmed schema</td></tr>
+      <tr><td>Claude (100K context)</td><td>Available, but dumping the full schema in made it "several times slower" <em>and</em> "hallucinates more often"</td></tr>
+    </table>
+
+    <div class="callout flag">
+      <strong>Counterintuitive real finding</strong>
+      A bigger context window is not a free lever. Past a point, stuffing more tokens in made
+      Honeycomb's system both slower <em>and</em> less accurate — the dial goes the wrong direction
+      on both axes at once if you use "more context" as a substitute for actually filtering what's relevant.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">issue 3 &middot; memory</div>
+    <h2>Memory is a carried object, not a transcript <span class="tag">Honeycomb + Datadog</span></h2>
+    <p>Honeycomb's real multi-turn mechanism: the <strong>existing query object</strong> from the
+      last turn is included as a literal prompt component on the next one. Not chat history — one
+      structured object, carried forward.</p>
+    <p>For a longer investigation across three sources, Datadog's Bits AI keeps an evolving
+      <strong>hypothesis + evidence</strong> state: which theory is being tested, what's been
+      checked already, so it never re-queries the same telemetry twice in one session.</p>
+    <div class="callout good">
+      <strong>Design rule</strong>
+      Memory = a structured state object your orchestrator code owns and updates explicitly
+      (a query object, a hypothesis record) — not something you ask the LLM to "remember" by
+      making the context window bigger.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">issue 4 &middot; tool decision</div>
+    <h2>Tool choice is a function of the hypothesis, not the question <span class="tag">Datadog Bits AI</span></h2>
+    <p>Datadog's Bits AI reasons across metrics, logs, traces, infra metadata, RUM, network path,
+      and profiler data. The real, documented shape of its tool selection is <strong>not</strong> a
+      classifier mapping "question type &rarr; one data source." It's a loop:</p>
+
+    <figure class="fig">
+      <svg viewBox="0 0 880 260" role="img" aria-label="A hypothesis loop: form a candidate root-cause hypothesis, pick whichever telemetry source (infra logs, app logs, or analytics) would most cheaply confirm or deny it, query that source, then update the hypothesis based on the result — looping until one hypothesis survives. The same starting question can route through the sources in a different order depending on what the first query returns.">
+        <defs>
+          <marker id="harrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" opacity="0.6"/>
+          </marker>
+        </defs>
+        <g font-family="SFMono-Regular,Consolas,monospace" font-size="12.5" font-weight="700">
+          <rect x="20" y="100" width="170" height="60" rx="8" fill="none" stroke="#93610E" stroke-width="2.2"/>
+          <text x="105" y="126" text-anchor="middle" fill="#93610E">FORM</text>
+          <text x="105" y="143" text-anchor="middle" fill="#93610E">HYPOTHESIS</text>
+
+          <rect x="250" y="30" width="150" height="55" rx="8" fill="none" stroke="#2F6F6B" stroke-width="2"/>
+          <text x="325" y="53" text-anchor="middle" fill="#2F6F6B" font-size="11.5">infra logs</text>
+          <text x="325" y="70" text-anchor="middle" fill="#2F6F6B" font-size="11.5">(5xx spike?)</text>
+
+          <rect x="250" y="102" width="150" height="55" rx="8" fill="none" stroke="#B23A2E" stroke-width="2"/>
+          <text x="325" y="125" text-anchor="middle" fill="#B23A2E" font-size="11.5">app logs</text>
+          <text x="325" y="142" text-anchor="middle" fill="#B23A2E" font-size="11.5">(exception for req ID?)</text>
+
+          <rect x="250" y="174" width="150" height="55" rx="8" fill="none" stroke="#5B4B8A" stroke-width="2"/>
+          <text x="325" y="197" text-anchor="middle" fill="#5B4B8A" font-size="11.5">analytics</text>
+          <text x="325" y="214" text-anchor="middle" fill="#5B4B8A" font-size="11.5">(client JS error?)</text>
+
+          <rect x="520" y="100" width="170" height="60" rx="8" fill="none" stroke="#3E7C43" stroke-width="2.2"/>
+          <text x="605" y="122" text-anchor="middle" fill="#3E7C43">UPDATE</text>
+          <text x="605" y="139" text-anchor="middle" fill="#3E7C43">HYPOTHESIS</text>
+
+          <rect x="740" y="100" width="120" height="60" rx="8" fill="#3E7C43" opacity="0.15" stroke="#3E7C43" stroke-width="2"/>
+          <text x="800" y="126" text-anchor="middle" fill="#3E7C43">ROOT</text>
+          <text x="800" y="143" text-anchor="middle" fill="#3E7C43">CAUSE</text>
+        </g>
+        <path d="M 190 122 L 248 58" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 190 130 L 248 130" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 190 138 L 248 200" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 400 65 L 518 118" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 400 130 L 518 130" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 400 200 L 518 142" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 690 130 L 738 130" fill="none" stroke="currentColor" opacity="0.5" marker-end="url(#harrow)"/>
+        <path d="M 605 100 C 605 10, 250 10, 105 98" fill="none" stroke="currentColor" opacity="0.4" stroke-dasharray="4 4" marker-end="url(#harrow)"/>
+        <text x="360" y="15" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="11.5" fill="currentColor" opacity="0.65">hypothesis survives another round &rarr; pick the next cheapest source to test it against</text>
+      </svg>
+      <figcaption>the same question can hit the three sources in a different order, depending what the first query returns</figcaption>
+    </figure>
+
+    <div class="callout violet">
+      <strong>Design rule</strong>
+      A static router ("classify the question, pick one source") cannot do this, because it
+      decides before it has any evidence. Make the current hypothesis — not the raw user question —
+      the input to tool selection, and let the loop re-route after every query result.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">issue 5 &middot; chaining makes it worse</div>
+    <h2>The compounding-error math <span class="tag">Honeycomb</span></h2>
+    <p>Honeycomb tried the obvious "agentic" move — chain 3&ndash;5 LLM calls (draft &rarr; refine &rarr;
+      validate) — and measured <strong>no tangible improvement</strong>. The real reason is
+      arithmetic, not opinion:</p>
+    <div class="panel" style="font-family:var(--mono);font-size:1.1rem;text-align:center">
+      0.9 &times; 0.9 &times; 0.9 &times; 0.9 &times; 0.9 = <strong style="color:var(--flag)">0.59</strong>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.9rem;margin-top:-.5rem">a 90%-accurate step, chained 5 times, is 59% accurate end to end</p>
+    <div class="callout flag">
+      <strong>Design rule</strong>
+      Every extra LLM hop in a chain multiplies your error rate — it does not average it out. Don't
+      chain "summarize infra &rarr; summarize app &rarr; summarize analytics &rarr; synthesize" as four
+      separate calls unless you've actually measured each step near 100%, because a 4-hop chain at
+      95% per step is still only 81% end to end.
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">issue 6 &middot; security, honestly</div>
+    <h2>What they actually ship, and what they admit they haven't solved <span class="tag">Honeycomb</span></h2>
+    <div class="quote">"It's kinda like SQL injection, except worse and with no solution today."
+      <cite>— Honeycomb engineering, on prompt injection against their query assistant</cite></div>
+    <p>Real, ongoing: <em>"people are already attempting prompt injection in our system today...
+      several people attempt to extract information from other customers."</em> Their shipped
+      mitigations, none of which claim to fully solve it:</p>
+    <table>
+      <tr><th>Mitigation</th><th>What it actually bounds</th></tr>
+      <tr><td>LLM output is a query <em>object</em>, never raw execution</td><td>A deterministic parser/validator sits between the model and the database</td></tr>
+      <tr><td>Action is non-destructive and undoable</td><td>Worst case is a bad query result, not a bad write</td></tr>
+      <tr><td>No chat UI, deliberately</td><td>Reduces surface for multi-turn adversarial steering</td></tr>
+      <tr><td>Input/output truncation + per-user daily rate limits</td><td>Bounds blast radius even when something gets through</td></tr>
+    </table>
+  </section>
+
+  <div class="credit">
+    Every fact, number, and quote above is drawn from the public engineering posts linked at the
+    top of this page. The diagrams (OTel normalization, the hypothesis loop) are this page's own
+    synthesis of those documented architectures, not literal screenshots from either company.
+  </div>
+
+</div>
+</body></html>

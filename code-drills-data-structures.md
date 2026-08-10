@@ -438,4 +438,55 @@ def divide(a, b):
 
 ---
 
+## Cluster 7 — Interview Staples: Merging, Flattening, Scanning
+
+**56. Merge two dicts that share some keys, WITHOUT letting one side silently overwrite the other — keep every distinct value.**
+```python
+a = {"x": 1, "y": 2}
+b = {"y": 3, "z": 4}
+# drill 16's `a | b` gives {'x': 1, 'y': 3, 'z': 4} — b's "y" silently wins, a's "y": 2 is gone.
+# when the requirement is "keep both values when keys collide," pick a shape that can hold both:
+merged = {}
+for d in (a, b):
+    for k, v in d.items():
+        if k in merged and merged[k] != v:
+            merged[k] = {merged[k], v} if not isinstance(merged[k], set) else merged[k] | {v}
+        else:
+            merged[k] = v
+# merged = {'x': 1, 'y': {2, 3}, 'z': 4} — colliding keys become a set of the distinct values, no data lost
+```
+The distinction from drill 16 matters: "merge two dicts" (last-write-wins) and "merge two dicts keeping distinct keys" (collision-aware) are different specs that sound identical until someone loses data to a silent overwrite — always ask which one is meant before reaching for `|`.
+
+**57. Flatten a nested list of ARBITRARY depth (not just 2D — lists nested inside lists, unknown how deep).**
+```python
+def flatten(items):
+    result = []
+    for item in items:
+        if isinstance(item, list):
+            result.extend(flatten(item))   # recurse on nested lists, however deep
+        else:
+            result.append(item)
+    return result
+
+flatten([1, [2, 3, [4, [5, 6], 7]], 8])   # [1, 2, 3, 4, 5, 6, 7, 8]
+```
+Drill 8's `[x for row in matrix for x in row]` only unwraps exactly one level — it assumes the shape is uniformly 2D. The moment nesting depth is unknown or irregular, a flat comprehension can't express it (there's no fixed number of `for` clauses to write), so this needs actual recursion: the base case is "not a list, keep it," the recursive case is "a list, flatten its contents and splice them in."
+
+**58. "Leader in an array" — find every element that is strictly greater than everything to its right.**
+```python
+def leaders(nums):
+    result = []
+    max_from_right = float("-inf")
+    for n in reversed(nums):          # scan right to left, tracking the max seen so far
+        if n > max_from_right:
+            result.append(n)
+            max_from_right = n
+    return result[::-1]               # reverse back to original left-to-right order
+
+leaders([16, 17, 4, 3, 5, 2])   # [17, 5, 2] — 17 beats everything after it; 5 beats 3,2; 2 is last, trivially a leader
+```
+The naive approach checks, for every element, whether it's the max of everything to its right — that's an inner scan per element, O(n²). Scanning once from the right and carrying "the best I've seen so far" turns it into O(n): an element only needs to beat the single running max to its right, not re-derive that max from scratch each time. The rightmost element is always a leader by definition (nothing to its right to lose to), which is why the running max starts at `-inf` rather than needing a special first case.
+
+---
+
 **Next in the Code Drills tier:** `code-drills-oop-intermediate.md` (classes, decorators, generators, closures).

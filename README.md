@@ -1280,7 +1280,147 @@ Fair catch — Iteration 59 covered the classical-ML/DL half of the hub but stop
 
 ---
 
+## Iteration 61 — 2026-08-04
+
+### Request
+A multi-turn conversational thread (not code-focused) starting from "how do people build AI projects for LinkedIn" and progressively narrowing: asked for a taxonomy of AI-builder types (wrapper vs. systems vs. infra vs. research), then how the hub's own content maps onto that taxonomy, then system-design prep methodology, and finally: **"i want real words in system design and not generic ones... real world problems, real happened issues and how they are handled... how latency was introduced and what was the reason and what was the solution, why did it start giving wrong answers after x users"** — followed by a mid-turn addition: **"not just attacks but also performance improvers, accuracy improving examples. in simple words and numbers."**
+
+### Response (Claude)
+Checked `system-design-prep.md` (526 lines, 8 fully-worked hypothetical scenarios) and `common-issues-failure-modes.md` (generic symptom→cause→fix) first to confirm neither already covered real, dated, sourced incidents — they didn't; both are frameworks/patterns, not case studies. Built a new file, **`real-world-incidents.md`**, verified via live web search rather than written from memory (the user explicitly wanted *real*, not generic/composite examples), covering 5 parts:
+
+- **Part 1 — Attacks/Injection:** Chevrolet of Watsonville's $1 Tahoe (Dec 2023, direct prompt injection), Slack AI's indirect-prompt-injection data exfiltration (Aug 2024, PromptArmor), Samsung's 3 ChatGPT source-code leaks in 20 days (2023)
+- **Part 2 — Latency at scale:** Cloudflare's 27-minute global outage (July 2019, a nested-wildcard regex + no canary rollout), AWS's ~4-hour S3 outage (Feb 2017, one mistyped server-count parameter + an untested cold-restart path)
+- **Part 3 — Wrong answers after conditions changed:** Air Canada's chatbot-hallucinated refund policy (ruled liable Feb 2024), Google Bard's $100B one-sentence factual error (Feb 2023), NYC's MyCity chatbot telling businesses to break the law (2024), Microsoft Tay corrupted by coordinated adversarial users in 16 hours (2016), Zillow Offers' $500M+ writedown from pricing-algorithm drift as the market turned (shut down Nov 2021), Knight Capital's $440M/45-minute loss from a reactivated 2003 flag on 1-of-8 servers a deploy script missed (Aug 2012)
+- **Part 4 — Performance wins (added after the user's follow-up):** Amazon's 100ms=1%-sales finding (2006), Google's 500ms=20%-traffic-drop finding (2006), vLLM PagedAttention's up-to-24x throughput gain, Anthropic prompt caching's up to 90% cost / 85% latency cut, Mixtral 8x7B matching Llama 2 70B at ~5x fewer active parameters
+- **Part 5 — Accuracy wins:** AlexNet's 2012 ImageNet jump (26%→15.3% top-5 error), ResNet surpassing human-level accuracy (3.57% top-5 error, 2015), AlphaFold2 solving protein folding at CASP14 (median GDT 92.4/100), LoRA matching full fine-tuning at 10,000x fewer trainable parameters, Gmail blocking 99.9% of 15B+ daily spam messages
+
+Every entry: what happened (with real dates/numbers), root cause or mechanism, the fix/response, and a generalizable lesson explicitly tied back to the matching `system-design-prep.md` framework section (e.g., Chevrolet → the browsing-agent tool-layer-not-prompt-layer guardrail; Zillow → the production-monitoring drift framework; vLLM → the LLM-inference-at-scale memory section). All facts verified via live web search this session (11 searches for Parts 1-3, 10 more for Parts 4-5) rather than asserted from memory, given the user's explicit "real, not generic" requirement — every entry carries its source links. Cross-linked one-way from the top of `system-design-prep.md` pointing to the new file.
+
+**Not yet done:** registering `real-world-incidents.md` into `mastery_curriculum.py`/`server.py` so it's servable via the local doc app (every other substantive `.md` file in the hub follows that pattern) — deferred since the user didn't ask for it this session; flagged in the backlog below.
+
+---
+
+## Iteration 61b — 2026-08-04 (same day, immediate follow-up)
+
+### Request
+"why is it not in localhost 5001 ?" — after Iteration 61 explicitly deferred wiring the new file into the app.
+
+### Response (Claude)
+Registered `real-world-incidents.md` into `mastery_curriculum.py`'s `TOPICS` list (tier -1, alongside `module-cheatsheet`/`common-issues`, since it's reference material rather than a tier-to-finish), cross-linked both directions (`system-design`'s and `common-issues`'s `related` lists now include it). Restarting `mastery_server.py` (port 5001) surfaced a real environment gotcha worth remembering: **this shell's `python` resolves to `.venv-langchain`, which does NOT have `flask`/`markdown` installed — the actual Mastery Hub app's dependencies (flask 3.1.1, markdown 3.8) live in the plain global install at `C:\Users\koole\AppData\Local\Programs\Python\Python310\python.exe`, not in any of the topic-specific `.venv-*` envs.** This contradicts none of the standing isolated-venv convention (that rule is about *new* packages for experimentation) but is a real trap for restarting *this specific* long-running server — using the wrong `python` produces a `ModuleNotFoundError` that looks like a missing dependency when it's actually a wrong-interpreter problem. Restarted with the correct full path; curl-verified `/topic/real-world-incidents` (200, real content confirmed via grep), `/topic/system-design` (200), and `/` (200).
+
+---
+
+## Iteration 62 — 2026-08-04 (same day, continued)
+
+### Request
+Pushback that the real-world-incidents file wasn't the format wanted: **"i wanted somethong for system design. like 'if there are gonna be 10,000 users, how would handle the RAG system for accuracy and latency', 'if there is continuous input used for continuous training, how do you handle this and that' kind of questions. take specific scenario and ask deep about it. think deeper. they will ask me to design systems."** Mid-response, extended further with a large batch of operational questions: **"how do i create pipelines, how do i handle integrity, latency, accuracy, how do i move data from one stage to another... how do i host it, how do i make it highly available, how do i make sure it doesnt hallucinate or give partial responses, what is the metric to measure to know i need to intervene, what is the daily job in this process, how to introduce new feature to this existing system without disturbing users and system."**
+
+### Response (Claude)
+Recognized this as a genuinely different format from both `system-design-prep.md` (narrated framework walkthroughs) and `real-world-incidents.md` (case studies) — the ask was for **interviewer-transcript-style interrogation**: one scenario, real numbers, and follow-ups that keep pushing past the first answer, simulating actual interview pressure rather than a clean linear explanation. Built **`system-design-deep-drills.md`**, 4 drills as Interviewer/Candidate dialogue:
+- **Drill 1 — RAG at 10,000 concurrent users, accuracy AND latency:** converts the headline number to real QPS via Little's Law (10,000 concurrent ÷ 20s avg think-time ≈ 500 QPS), breaks the latency budget across pipeline stages, identifies the reranker (not the vector index) as the real bottleneck at that QPS with the actual math (500 QPS × 20-50 reranked candidates = 10,000-25,000 cross-encoder passes/sec), pushes on load-shedding policy and the "accuracy silently traded for latency under load" trap, then to 100,000 users to find what breaks next (index sharding).
+- **Drill 2 — continuous training on continuous input:** disambiguates true online SGD vs. micro-batch continuous retraining vs. continuous adapter fine-tuning, argues against per-example SGD with a direct callback to the Tay incident, works out replay-buffer ratios against catastrophic forgetting, ties eval-set decay back to the Search+LLM design's point, and does real cost arithmetic (continuous retraining every 4 hours vs. weekly ≈ 42x more frequent, hence why continuous updates need to be adapter-only, not full retrains).
+- **Drill 3 — real-time fraud detection, 5,000 TPS / sub-50ms:** rules out LLM-class latency immediately, identifies feature lookup (not model inference) as the real bottleneck, works out fail-open-vs-fail-closed for a missing feature store, and diagnoses a "accuracy looked fine offline, losses crept up 3 weeks post-launch with no redeploy" concept-drift scenario live.
+- **Drill 4 — operating the full pipeline end-to-end** (built directly from the mid-turn follow-up): 6 movements covering pipeline/DAG construction and stage-to-stage data handoff (queues, idempotency, claim-timeout re-queuing), data integrity checks (schema/volume/content gates, a concrete 75%-volume-drop alerting example), hosting/HA (multi-AZ redundancy, failover behavior, a stated 99.9% SLO translated to ~43 min/month), hallucination and partial-response guardrails (grounding + post-hoc entailment verification + faithfulness as its own tracked metric; structural detection of truncated/malformed responses, `max_tokens` sizing, client-disconnect cancellation), which metrics justify a 3am page vs. a next-morning ticket, a concrete "daily job" checklist (~15 min: dashboard review, ingestion-volume check, sampled non-escalated conversation review, canary-eval-set check), and staged safe feature rollout (shadow mode → 5% canary → gradual ramp, feature-flag-as-rollback-mechanism, and the trap of picking a guardrail metric too slow to catch a regression before the ramp completes).
+
+Every drill closes answers with explicit cross-references back to the specific `system-design-prep.md` section, `real-world-incidents.md` entry, or `production-ml-practice.md`/`mlops-practice.md` section the reasoning borrows from, rather than re-deriving material that already exists elsewhere in the hub — checked `production-ml-practice.md` (already has a canary/rollout cluster) and `mlops-practice.md` (already has the pipeline-loop framework) first specifically to avoid duplicating them.
+
+Registered into `mastery_curriculum.py` (tier 5, id `system-design-drills`, cross-linked with `system-design`/`real-world-incidents`/`rag-deeper`/`production-ml`/`mlops-practice`) and restarted the server. **Hit a real port-conflict bug doing it:** a prior restart attempt left a stale `mastery_server.py` process still bound to port 5001 (a bash-wrapped PowerShell `Stop-Process` call silently failed on a quoting/env-var mangling issue rather than actually killing the target PID), so two processes were briefly listening on the same port simultaneously and curl was nondeterministically hitting the stale one (serving pre-restart code, hence a 404 on the new route despite the new process starting cleanly). Fixed by using the native PowerShell tool directly (not bash-wrapped) with `Get-NetTCPConnection -LocalPort 5001 -State Listen` to enumerate and kill every PID actually bound to the port before restarting once, cleanly. Curl-verified all 4 topic routes plus the homepage at 200, and grep-confirmed real per-drill content rendered (not a stub).
+
+---
+
+## Iteration 63 — 2026-08-07/08 (footprintjs research + Claude API migration)
+
+### Request
+Asked to deeply research Sanjay Krishna Anbalagan's LinkedIn profile and his open-source `footprintjs`/`agentfootprint` project — "read everything... every feature... gather as deep information as possible" — then, mid-conversation: **"my openai subscription is gone. use only claude api from now on."**
+
+### Response (Claude)
+Deep-researched `footprintjs`/`agentfootprint` (GitHub repos, docs site, Medium posts) — the flowchart pattern (stages/scope/decider), causal tracing, the injection primitive (`slot × trigger × cache`), and tool-selection lint + runtime scoring. Added as **Drill 5** in `system-design-deep-drills.md`: a plain-English primer (a concrete loan/refund walkthrough) plus the file's existing Interviewer/Candidate interrogation format, crediting the real open-source project by name rather than presenting it as generic knowledge.
+
+Separately: migrated `server.py`, `mastery_server.py`, and `mcq_server.py` off Azure OpenAI entirely onto the Anthropic SDK (`claude-opus-5`), updated `requirements.txt`/`.env.example` accordingly, removed the dead Azure keys from the real `.env`, and smoke-tested all three `/api/ask` endpoints live against the real API (not mocked) before considering it done.
+
+---
+
+## Iteration 64 — 2026-08-08 (pictorial artifacts + real agent-failure incidents)
+
+### Request
+Pushback that the Drill 5 content was "bland, too many words... make it pictorially interesting... see what pics he used himself" — followed by a much larger ask: **"real world step by step process of how agents make their decisions, what issues come at each step... look deep into people's codes or blogs or linkedin posts or some logs on internet."**
+
+### Response (Claude)
+Built two visual HTML pages sharing one custom design system (light/dark theme tokens, hand-authored inline SVG diagrams, no external libraries): **`footprint-case-file-visual.html`** (the loan-trace walkthrough, the injection-model grid, tool-lint output, the VIP-override ablation proof) and **`agent-decision-loop-visual.html`** (a 5-stage agent-loop diagram mapped to 6 real, independently sourced production incidents: AutoGPT's infinite planning loops, a DN42 agent that over-provisioned $6,531 of AWS for a hobbyist network scan, Replit's agent deleting a production database during a code freeze, the $47,000 LangChain Analyzer/Verifier loop, Amazon Q's stale-wiki-triggered retail outages, and the "Clinejection" npm supply-chain attack — sourced from `vectara/awesome-agent-failures` and Anthropic's own "Building Effective Agents" engineering post, not invented).
+
+All 6 incidents added as **Part 3B** in `real-world-incidents.md`, matching the file's existing What-happened/Root-cause/Fix/Lesson format with full source links. Both pages registered as new Tier-3 topics (`footprint-case-file`, `agent-decision-loop`) in `mastery_curriculum.py`, wired into `mastery_server.py`'s `HTML_FILES` map and `server.py`'s routes/index section, cross-linked both directions with `system-design-drills`/`practice-langgraph`/`code-drills-langgraph-agents`. Curriculum sanity-check and live route tests (200s on both ports) run before calling it done.
+
+---
+
+## Iteration 65 — 2026-08-08 (a fabrication caught, then a real-company design page)
+
+### Request
+Direct pushback, twice: **"the content are not put up as good as he taught me... it looks so bland"** and, after a further round, **"if you cant do it, if you cant help, be open about it."** Separately: **"take an example of a company where they collect logs from customer app, infra logs, analytics application, then do engineering design to make it work for every single issue like context, memory, vocabulary, token, tool decision."**
+
+### Response (Claude)
+Self-audited `footprint-case-file-visual.html` against the user's "is this detailed or reporter-generic" question and found a real problem: the tool-selection section's numbers (`0.94 similarity`, `0.51 vs 0.49`) were **fabricated illustrative examples presented as if they were real measured output** — caught and named as worse than generic prose, since it looked authoritative while being invented. Fixed by pulling the actual CLI output from the project's own README (`✗ CONFUSABLE 0.9445  get_fcns_database <> influx_get_fcns_database`, real `--threshold 0.94` flag) and the real `toolChoiceRecorder` code, replacing the invented numbers entirely.
+
+On the "if you can't help, be open about it" pushback: acknowledged directly, without producing more content in that turn, that "accurate page" and "the user actually understands this" are different jobs and had been getting conflated.
+
+Built **`unified-telemetry-agent-design.html`**, grounded in two real companies' own published engineering postmortems rather than a hypothetical: **Honeycomb's Query Assistant** (customer schemas with 5,000+ fields, the 7-day temporal-filtering trick, GPT-3.5-turbo vs. GPT-4 vs. Claude-100K latency/hallucination tradeoffs, the real `0.9⁵ = 0.59` compounding-chain-error math, their own "it's kinda like SQL injection, except worse" quote on prompt injection) and **Datadog's Bits AI** (the hypothesis-driven tool-selection loop, used to explain why tool routing across app/infra/analytics logs isn't a one-shot classifier). Registered as a third Tier-3 topic. Later in the same iteration, extended it with a domain-expert-tool section citing the real, established pattern (Lyft's Amundsen, LinkedIn's DataHub) for bridging the AI-engineer/domain-expert knowledge gap.
+
+---
+
+## Iteration 66 — 2026-08-08/09 (verifying a secondhand technical transcript before trusting it)
+
+### Request
+User pasted a long, detailed technical transcript (from a separate research session, not this one) describing `footprintjs`/`agentfootprint` internals in depth — the flowchart engine's transactional commits, the memory-factory shape, an observability-event count, an academic-paper claim — then asked: **"did you use all these in our mastery hub?"**
+
+### Response (Claude)
+Answered honestly that most of it wasn't in the hub yet, then — before adding anything — verified every checkable claim against the actual project source rather than trusting a secondhand transcript at face value. **Confirmed real:** the HCI International 2026 / Springer paper (real co-authors, checked against the actual Springer proceedings index), the `surfaceMode` skill-delivery parameter, `$detachAndForget`/`$detachAndJoinLater` with their 6 named drivers, deferred-observer backpressure (`drop-oldest`/`sample`/`block`), and the memory factory (exactly 4 types × 7 strategies, matching the transcript). **Caught a real error in the pasted transcript:** it claimed "47 typed events across 13 domains" — the actual current README says **60+ events across 18 domains**. Added only the verified material to the existing `footprint-case-file` page (a vocabulary table, the memory system, real pause/resume code, a production-engineering section) with the wrong number explicitly corrected and flagged in-page rather than silently swapped.
+
+---
+
+## Iteration 67 — 2026-08-09 (the "5 generations of LLMs" mental model)
+
+### Request
+User relayed a 5-stage "how LLMs evolved" framework taught to them directly by Sanjay Krishna Anbalagan (raw string completion → structured system/messages/tools → trained on prior-generation usage data → multi-LLM dependency-graph decomposition → trained reasoning/chain-of-thought/subagent delegation), then: **"do we have it in our mastery, dont add a new title, see if they can fit into an existing topic,"** then **"do you understand what this is,"** then **"if you have to describe the evolution, how would you do it."**
+
+### Response (Claude)
+Verified the checkable historical claims before writing anything down: OpenAI's Chat Completions API really did launch March 1, 2023 with the system/messages/tools split (function calling added June 13, 2023), and Anthropic's XML-tag prompting convention is real and still documented. Added a new **"How the API itself evolved"** section directly into the existing `llm-landscape.md` — no new topic/title created, per the user's explicit instruction — framed honestly as a teaching mental model grounded in real dated events, not an official taxonomy any vendor publishes. When asked to explain it back, then to reframe it independently, restructured the same material around **named bottlenecks** (no structure → text-only output → frozen snapshot → one-shot-reasoning ceiling → engineer-designed decomposition → capability-outran-verifiability) instead of a numbered list, explicitly tying the last, currently-unresolved bottleneck back to the `footprintjs`/agent-incident work from Iterations 63-66.
+
+---
+
+## Iteration 68 — 2026-08-09 (tier consolidation, healthcare interview prep, an RLHF coverage audit)
+
+### Request
+Three separate asks in one stretch: (1) whether Tiers 3/4/5's topic count could be reduced without cutting content; (2) an interview-ready answer to "what AI tools/frameworks are you curious about," specifically for EHR extraction and medical-image analysis; (3) **"do we have RLHF in our mastery?"**
+
+### Response (Claude)
+(1) Analysis only — no merges made. Pulled the real current topic list and file sizes per tier rather than guessing, and recommended exactly one clean merge candidate (`rag-deeper` + `prompt-engineering-deeper` — already conceptually paired, comparable combined size to other single topics), while explicitly recommending *against* merging the 6 LeetCode files or the `system-design`/`system-design-drills` pair, since those splits are functional (targeted practice, theory-vs-drill) rather than accidental fragmentation. Left pending the user's decision.
+
+(2) Gave real, current, healthcare-specific tooling (Amazon Comprehend Medical, OMOP CDM/FHIR for the EHR vocabulary-mismatch problem, Microsoft Presidio for PHI redaction, MONAI for imaging, nnU-Net, and a real tie-back from `footprintjs`'s causal-audit work to FDA 21 CFR Part 11 record-keeping requirements) — explicitly avoided writing first-person "I use X" claims on the user's behalf for tools they may not have hands-on experience with.
+
+(3) Checked actual current file state rather than assuming from memory. Found a stale line in this very file's Iteration-47-audit backlog claiming RLHF coverage was "a one-liner" — but `NCA-GENL-study-guide.html` §1.5 already has a real mechanics-level deep-dive (reward model + PPO + KL-penalty tethering to the SFT model, reward hacking and its countermeasures, DPO's closed-form derivation, the `6ND` / Chinchilla `D≈20N` scaling-law formulas). The backlog line was simply out of date, not reflective of the current hub. Fixed in this same iteration — see the backlog edit below.
+
+**Process note, since the user asked directly:** this iteration log is a real, established convention in this file (Iterations 1-62 run through 2026-08-04), but iterations 63-67 above were *not* logged as they happened — they were reconstructed and backfilled in this iteration, after the user asked "are you maintaining an iteration log." Going forward, log entries should be added at the time of the work, not batch-reconstructed after the fact.
+
+---
+
+## Iteration 69 — 2026-08-10 (closing out the 3-video gap-fill: structural fix, 3 new sections, a drill, a stale-line fix, and verification)
+
+### Request
+Continuation of the prior session's "watch 3 YouTube videos, cross-reference against the hub, fill confirmed gaps into existing topics (no new titles)" task, resumed after a context-compaction summary. The immediate item flagged at the point of interruption: a structural bug where a newly-added "Choosing a Datastore" section had been inserted *inside* `core-technical-depth.md`'s existing MCP section instead of after it.
+
+### Response (Claude)
+Worked the full remaining punch list from the carried-over task in one pass:
+- **Fixed the placement bug** — moved "Choosing a Datastore by Data Shape" out from between MCP's "Common pitfalls" and its own "Likely interview question" closer, to its correct home after the complete MCP section, before "Mixture-of-Experts." Verified the fix by grepping the file's heading structure before and after.
+- **Added a new Cluster 4 to `production-ml-practice.md`** — "When the LLM Call Itself Fails: Timeouts, Fallbacks, and Degrading Gracefully" (client-side timeouts below the service SLA, exponential backoff with jitter vs. thundering-herd retries, configured-in-advance fallback models/providers, graceful degradation UX) — distinct from the file's existing webhook-retry content, which covers a different failure surface (inbound delivery, not outbound LLM calls).
+- **Added Drill 6 to `system-design-deep-drills.md`** — a dead-link detection/cleanup system for AEO (Answer Engine Optimization), covering link-graph crawling, per-domain rate limiting, a 3-state alive/dead/flaky status model with backoff before promoting flaky→dead, impact-based triage (source-page traffic × internal-vs-external), and what's safe to auto-fix vs. what needs a human.
+- **Fixed the second stale backlog line** in this file's Iteration-47-audit gap list — MCP was still listed as an open GenAI gap; `core-technical-depth.md` has had a real, deep MCP section (JSON-RPC wire format, the tools/resources/prompts permissions-boundary distinction, transport/trust tradeoffs, a first-person FinSight-grounded model answer) since earlier in this same task. Struck through and marked resolved, same pattern as the RLHF fix in Iteration 68.
+- **Closed out the two explicitly-deprioritized video items** rather than leaving them open: added a new item 11 to `rag-deeper.md` Cluster 1 addressing "don't 1M-token context windows just replace RAG" (cost-per-query at scale, the lost-in-the-middle effect, and a fixed window vs. an incrementally-growable index), and added a new Cluster 7 to `code-drills-data-structures.md` with the three video-3 coding questions (collision-aware dict merge vs. drill 16's last-write-wins merge, arbitrary-depth recursive list flattening vs. drill 8's 2D-only comprehension, and the O(n) right-to-left "leader in an array" scan) — both landed in existing topics, no new titles.
+- **Verified every edit** — rendered all seven touched files (`core-technical-depth.md`, `production-ml-practice.md`, `system-design-deep-drills.md`, `rag-deeper.md`, `python-utilities-practice.md`, `code-drills-data-structures.md`, `README.md`) through the same `markdown` library the hub server uses, and re-imported `mastery_curriculum.py` to confirm its own sanity-check assertions still pass — none of this had been checked yet going into this iteration, breaking from the verification pattern every earlier phase of this session had used.
+
+---
+
 ## Next steps / backlog
+- [x] `real-world-incidents.md` registered in `mastery_curriculum.py` and live on port 5001 — see Iteration 61b.
+- [x] `system-design-deep-drills.md` (4 drills) registered and live on port 5001 — see Iteration 62.
 - [ ] **Code Drills bonus tier (Iterations 59-60, 378 reps across 10 files) — not yet used by the user.** Next natural steps: (1) work through it live and flag anything confusing, (2) the deferred theory↔code hyperlinking pass (see `theory-code-hyperlink-request` memory) — wire section-level links between each theory doc and its matching drill numbers once the tier is confirmed final, (3) if the user wants to push further ("think big") past this: a transformer-from-scratch cluster (ties to the parked mentor-mode build in the backlog below), an evaluation-metrics drill file (BLEU/ROUGE/perplexity/RAGAS scored on real text), or an MLOps/production drill file (experiment tracking, drift detection) are the next-most-natural extensions given what's already in the hub.
 - [x] **Decision (2026-07-31): no new certification exam for ~1 month.** NCA-AIIO and AWS ML Engineer Associate (discussed 2026-07-30) are both parked until end of August. Active focus is now **interview + coding prep** — the BNSF loop and the broader AI-Engineer-track backlog items below (LeetCode-style coding-round problems, classical-ML/DL depth gaps, GenAI/AI-Engineer gaps, system-design walkthroughs, behavioral STAR stories) are the priority, not further content-building or another cert.
 - [ ] Click-test the two new sections from Iteration 58 (`neural-net-numerical-practice.md`'s transformer forward/backward-pass section, `core-technical-depth.md`'s new LoRA-arithmetic subsection) in a live browser via the local doc server — written and fence-balance-checked, not yet rendered/viewed
@@ -1317,7 +1457,9 @@ Fair catch — Iteration 59 covered the classical-ML/DL half of the hub but stop
 - [ ] **AI-Engineer-track gap list from Iteration 47's audit — not yet prioritized:**
   - [ ] Coding-round system-design-style problems missing entirely: LRU Cache design, Serialize/Deserialize Binary Tree, Design Twitter/TinyURL/Rate Limiter, Median of Two Sorted Arrays, Trie w/ prefix search, Alien Dictionary, Course Schedule II, Kth-Largest-in-a-Stream, Word Break II, Online Stock Span/Next Greater Element
   - [ ] Classical-ML/DL depth gaps: XGBoost internals (2nd-order gradients/Hessian, histogram binning, sparsity-aware splits), BatchNorm backward-pass equations, explicit ReLU-vs-vanishing-gradient proof, Information Theory (entropy/KL divergence/mutual information) as a topic, DBSCAN/hierarchical clustering/t-SNE/UMAP, Perceptron as a standalone topic, convex optimization/Lagrange multipliers
-  - [ ] GenAI/AI-Engineer gaps: Model Context Protocol (MCP — actively asked about at OpenAI/Anthropic/DeepMind), Weaviate, ARES and G-Eval eval frameworks (RAGAS is the only one currently covered), MoE gating/top-k routing/load-balancing-loss math, RLHF/PPO mechanics beyond the current one-liner, TPU/hardware-specific optimization (Google angle), time-series foundation models / low-latency trading ML (hedge-fund angle), FDA/clinical-regulatory framing (healthcare angle)
+  - [x] ~~RLHF/PPO mechanics beyond the current one-liner~~ — **stale, resolved.** Checked 2026-08-09 (Iteration 68): `NCA-GENL-study-guide.html` §1.5 already has a real mechanics-level deep-dive (reward model + PPO + KL-penalty tethering, reward hacking + countermeasures, DPO's closed-form derivation, the `6ND`/Chinchilla scaling-law formulas) — this gap no longer exists; the line just never got removed after it was closed.
+  - [x] ~~Model Context Protocol (MCP — actively asked about at OpenAI/Anthropic/DeepMind)~~ — **stale, resolved.** Checked 2026-08-10 (Iteration 69): `core-technical-depth.md` already has a full section ("Model Context Protocol (MCP) — a standard wire format between LLM apps and everything else") covering the JSON-RPC 2.0 wire format, the tools/resources/prompts primitive split as a permissions boundary, stdio-vs-Streamable-HTTP transport, third-party-server trust/injection risk, and a first-person model answer grounded in the user's own FinSight project — this gap no longer exists.
+  - [ ] GenAI/AI-Engineer gaps: Weaviate, ARES and G-Eval eval frameworks (RAGAS is the only one currently covered), MoE gating/top-k routing/load-balancing-loss math, TPU/hardware-specific optimization (Google angle), time-series foundation models / low-latency trading ML (hedge-fund angle), FDA/clinical-regulatory framing (healthcare angle)
   - [ ] System-design walkthroughs missing: a Perplexity-style search+LLM product, a web-browsing autonomous agent, a customer-support-chatbot eval framework, fine-tuning a 70B model on a small dataset under a tight budget
   - [ ] Behavioral: the BERT+LSTM ticket-classifier (92% accuracy) story is entirely missing from the hub; the Bosch GenAI Workflow Bot (16% efficiency gain) STAR story is still a `[FILL IN]` skeleton, not interview-ready
 - [x] **Resolved:** exam date confirmed by the user on 2026-07-28 as 2026-07-30, 9:00 AM CT — updated everywhere in this file and in the `nca-genl-exam-prep` memory. **2 days out — practice-quiz repetition and the cheat table are now higher priority than any further content-building.**

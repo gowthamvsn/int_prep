@@ -987,6 +987,30 @@ I want to be straight that I haven't shipped an MCP server in production — the
 
 ---
 
+## Choosing a Datastore by Data Shape — Structured, Unstructured, and High-Volume Events
+
+### Plain-English explanation
+A real AI-backed application almost never has just one kind of data — and picking one datastore for all of it is a common, avoidable mistake. The right question per data type is "what does this data actually look like and how will it be queried," not "what database does the rest of the stack already use."
+
+### Built as a chain: from a clean schema to a firehose of events
+
+### 1. You have product SKUs, prices, and inventory counts. What kind of store, and why?
+A relational database (**Postgres**, most commonly) — this data has a fixed, well-defined schema, needs **ACID compliance** (an inventory count decrementing on a sale can't be allowed to race or partially apply), and is queried by exact match or range, not by meaning. Structured, transactional data belongs in a SQL store; reaching for anything else here is solving a problem you don't have.
+
+### 2. You have free-text product reviews and support tickets. Does the same store still make sense?
+No — this is unstructured text with no fixed schema, and the actual query need is "find things that mean something similar to this," not exact match. This is where a **vector database** (Pinecone, or a self-hosted option) earns its place: chunk the text, embed it, and query by semantic similarity. A **document store** like MongoDB is a middle option if the data is semi-structured (varying fields per record) but doesn't need semantic search — worth naming as the option between the two, not jumping straight to "vector DB for anything that isn't a clean table."
+
+### 3. You now have a firehose of user interaction events — every click, every page view — at high volume. Does either of the above still fit?
+Not well. This is high-volume, append-only, rarely-updated data, and the bottleneck shifts from "how do I query this meaningfully" to "how do I not fall over under ingest volume." Two real tools built specifically for this: **Kafka**, a message queue that decouples the event producers from whatever consumes them, so a burst of traffic queues up instead of overwhelming the backend directly; and **ClickHouse**, a columnar SQL database purpose-built for exactly this shape — extremely high ingest rates (millions of rows/second) and strong compression, at the cost of not being the right tool for single-row transactional updates the way Postgres is.
+
+### 4. Given these are three different systems, what's the practical failure mode of getting this wrong?
+Forcing high-volume event data into a transactional store built for consistency guarantees you don't need here — Postgres will work, right up until ingest volume makes writes the bottleneck, and by then it's a migration under production load instead of a design decision made up front. The tell in an interview: naming the query pattern and volume characteristic *before* naming the tool, not the other way around.
+
+### Summary example
+An e-commerce AI assistant needs all three at once: **Postgres** for the product catalog and inventory (structured, transactional, exact-match), a **vector database** for semantic search over product descriptions and reviews (unstructured, similarity-queried), and **Kafka feeding ClickHouse** for the clickstream/interaction log that trains the recommendation model (high-volume, append-only, rarely re-read row by row). Naming why each one fits its data shape — not defaulting to "just use Postgres for everything" or "just use a vector DB for everything" — is the actual signal an interviewer is checking for.
+
+---
+
 ## Mixture-of-Experts: Gating, Top-k Routing, and the Load-Balancing Loss
 
 ### Plain-English explanation

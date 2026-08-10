@@ -2,6 +2,8 @@
 
 System design rounds test whether you can reason about a whole system's lifecycle under real constraints — not whether you can name the fanciest architecture. The consistent pattern across every topic below: state requirements and constraints before drawing boxes, and always close the loop back to monitoring/feedback rather than stopping at "deploy the model."
 
+**For real, dated, sourced incidents and wins** (Chevrolet's $1 chatbot, Cloudflare's 27-minute regex outage, Zillow Offers' $500M writedown, vLLM's 24x throughput, LoRA's 10,000x parameter reduction, and more) that make these frameworks concrete with actual company names and numbers, see `real-world-incidents.md` — built specifically to answer "what actually happened, not a hypothetical."
+
 ## Reading this from the hiring manager's seat
 The specific thing I'd be listening for here, given your background: every production system on your résumé — FinSight on AKS, NaviDoc on FastAPI/PostgreSQL/MongoDB, the Bosch mobility platform — is cloud-native, built on infrastructure you fully controlled. A freight railroad's ML systems very often can't assume that. Sensor telemetry off a locomotive or a wayside detector may travel over intermittent field connectivity before it ever reaches a cloud region; the system of record for a maintenance work order is frequently a decades-old enterprise system that was never designed with an API in mind; and anything touching safety-relevant decisions may need to satisfy a certification or change-control process that a typical cloud deployment pipeline doesn't have to think about. My honest concern reading your résumé is: *has this candidate only ever designed for a world where the data shows up clean, on time, and through infrastructure they own end to end?*
 

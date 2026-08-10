@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape as xml_escape
 
+import anthropic
 import markdown as md
-import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 
@@ -33,12 +33,14 @@ HTML_FILES = {
     "nca-genl": "NCA-GENL-study-guide.html",
     "bnsf-visual": "bnsf-technical-visual.html",
     "ds-fundamentals": "ds-fundamentals-visual.html",
+    "footprint-case-file": "footprint-case-file-visual.html",
+    "agent-decision-loop": "agent-decision-loop-visual.html",
+    "unified-telemetry-agent-design": "unified-telemetry-agent-design.html",
 }
 
-AZURE_KEY = os.environ["AZURE_OPENAI_KEY"]
-AZURE_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
-AZURE_DEPLOYMENT = os.environ["AZURE_OPENAI_DEPLOYMENT"]
-API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-06-01")
+os.environ["ANTHROPIC_API_KEY"]  # fail fast at startup if unset
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-5")
+claude_client = anthropic.Anthropic()
 
 # Set only when deployed publicly (see .env.example / deploy notes). When unset,
 # auth is skipped entirely so local dev on localhost is unaffected.
@@ -691,35 +693,32 @@ def ask():
         "e.g. `SE = s / sqrt(n) = 10 / 5 = 2`."
     )
 
-    messages = [{"role": "system", "content": system_prompt}]
+    messages = []
     for turn in history[-6:]:
         role, content = turn.get("role"), turn.get("content")
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": question})
 
-    url = (
-        f"{AZURE_ENDPOINT}/openai/deployments/{AZURE_DEPLOYMENT}/chat/completions"
-        f"?api-version={API_VERSION}"
-    )
     try:
-        resp = requests.post(
-            url,
-            headers={"api-key": AZURE_KEY, "Content-Type": "application/json"},
-            json={"messages": messages, "temperature": 0.3, "max_tokens": 700},
-            timeout=60,
+        resp = claude_client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            output_config={"effort": "medium"},
+            system=system_prompt,
+            messages=messages,
         )
-    except requests.RequestException as exc:
-        return jsonify({"error": f"could not reach Azure OpenAI: {exc}"}), 502
+    except anthropic.APIConnectionError as exc:
+        return jsonify({"error": f"could not reach the Claude API: {exc}"}), 502
+    except anthropic.APIStatusError as exc:
+        return jsonify({"error": f"Claude API error {exc.status_code}: {exc.message}"}), 502
 
-    if resp.status_code != 200:
-        return jsonify({"error": f"Azure OpenAI error {resp.status_code}: {resp.text[:500]}"}), 502
+    if resp.stop_reason == "refusal":
+        return jsonify({"error": "Claude declined to answer this one — try rephrasing the question."}), 502
 
-    body = resp.json()
-    try:
-        answer = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError):
-        return jsonify({"error": f"unexpected response shape: {body}"}), 502
+    answer = next((b.text for b in resp.content if b.type == "text"), "")
+    if resp.stop_reason == "max_tokens":
+        answer += "\n\n*(cut off — hit the response length limit; ask a narrower follow-up to continue)*"
 
     conn = get_db()
     conn.execute(

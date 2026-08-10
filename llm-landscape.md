@@ -189,6 +189,29 @@ Deploying a customer-support LLM for a market where most users write in Tagalog.
 
 ---
 
+## How the API itself evolved — five real generations, string-in/string-out to agents that spawn agents
+
+A mental model, not an official version number any vendor publishes — but every stage below is a real, dated, documented shift in how you actually talk to these models, and knowing which generation a given API surface belongs to explains *why* it's shaped the way it is.
+
+### Generation 1 (2020–2022): one string in, one string out
+GPT-3's original Completions API (2020) took a single flat text string and returned its continuation — no roles, no turns, no concept of "system" vs. "user." Few-shot prompting in this era meant literally concatenating examples into that one string. The structuring trick that survives from this era, still real and still recommended today: **Anthropic's XML-tag convention** (`<thinking>`, `<document>`, `<answer>`) — a way to fake sections inside a single flat prompt, which Claude models are specifically trained to pay attention to. It's a workaround from the single-string era that outlived the era itself because it still works.
+
+### Generation 2 (from March 2023): the string gets structured
+OpenAI's Chat Completions API launched March 1, 2023 alongside `gpt-3.5-turbo`, replacing the freeform string with `messages: [{role: system/user/assistant, content}]` — a **dedicated system slot** for behavioral instructions ("do this, never do that"), separated from the actual conversation turns. Function/tool calling landed three months later (June 13, 2023), adding a *third* structural piece — a `tools` array the model could invoke instead of only ever emitting prose. Anthropic's Messages API mirrors this same three-way split (`system`, `messages`, `tools`). This is the generational shift that matters most in practice: instructions, conversation, and capabilities became three separate, independently-cacheable inputs instead of one string you hoped the model parsed correctly.
+
+### Generation 3: trained on what the previous generation actually said
+Once a generation is deployed via API, its real production interactions become training signal for the *next* one — RLHF reward models built from logged preference data, and Anthropic's Constitutional AI/RLAIF approach specifically has a model critique outputs (its own or a prior model's) as the training signal, rather than relying only on human-labeled preferences. Exact recipes are proprietary and vendor-specific; the general shape — each generation partly trained on evidence of how the last one actually got used and where it fell short — is real and publicly discussed, not an implementation detail worth overclaiming precision on.
+
+### Generation 4: one call isn't enough — decompose into a dependency graph
+A single LLM call hits a ceiling on tasks with unpredictable structure. The real, documented fix (Anthropic's own "Building Effective Agents" engineering post) is decomposing a task across *multiple* LLM calls with real dependencies between them — the **orchestrator-workers** pattern specifically: a central call dynamically breaks the task into subtasks nobody could have hardcoded in advance, delegates each to a worker call, and synthesizes the results. Prompt chaining (sequential, fixed steps) and parallelization (fan-out, then merge) are the simpler siblings of the same idea. This is the generation where "the LLM" stopped being one call and became a small distributed system.
+
+### Generation 5: trained to reason, checks its own work, and delegates
+The current generation: models with a real, separate **thinking** mode (`thinking: {type: "adaptive"}` in Claude's API, o1-style reasoning models elsewhere) that reason before answering, with an `effort` dial controlling how much. Two real, documented behavioral shifts ride along with this: models now **verify their own output without being told to** (current-generation Claude does this by default — prompt guidance for it has flipped from "please double-check your work" to "stop double-checking, you're doing it too much"), and they **delegate to subagents more readily** — spawning a sub-call to handle an independent chunk of work rather than doing everything in one linear trace, the same pattern Anthropic's Managed Agents platform formalizes as a declared `multiagent` coordinator with a roster of agents it can call.
+
+**Why this framework is worth having:** each generation didn't replace the previous one's problem, it moved it. Gen 2 solved "where do instructions live," Gen 4 solved "how do you do more than one call's worth of work," Gen 5 is solving "how do you know the multi-call answer is actually right" — and that last question is exactly what `Designing an Explainable, Debuggable AI Agent System` (`system-design-deep-drills.md`, Drill 5) and the real agent failures in `real-world-incidents.md` Part 3B are about.
+
+---
+
 ## Practice Q&A (Self-Test)
 
 **Q1. What's the actual difference between "open source," "open-weight," and "closed-source" for an LLM — and which category does Llama fall into?**
