@@ -30,6 +30,9 @@ HTML_FILES = {
     "nca-genl": "NCA-GENL-study-guide.html",
     "bnsf-visual": "bnsf-technical-visual.html",
     "ds-fundamentals": "ds-fundamentals-visual.html",
+    "footprint-case-file": "footprint-case-file-visual.html",
+    "agent-decision-loop": "agent-decision-loop-visual.html",
+    "unified-telemetry-agent-design": "unified-telemetry-agent-design.html",
 }
 
 st.set_page_config(page_title="Mastery Hub", page_icon="🎓", layout="wide")
