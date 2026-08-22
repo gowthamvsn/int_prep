@@ -73,7 +73,7 @@ dvc push                            # uploads the actual data to remote storage
 Now `git log` on the `.dvc` file gives you a real history of *which data version* trained which model — the same reproducibility Git gives code, extended to the large files Git can't handle directly, and exactly the "RETRAIN on new/versioned data" arrow feeding back into TRACK in the loop diagram above.
 
 ### 6. Given tracked runs, a registry, and versioned data all now exist, what has to happen automatically at the DEPLOY stop before a new model is trusted?
-**CI/CD for ML** — regular CI/CD asks "does the code still work?" (tests pass, it builds). ML CI/CD has to additionally ask "does the *model* still work?" — a code change can pass every unit test and still silently degrade model quality. A reasonable ML pipeline, triggered on a PR or a merge:
+**CI/CD for ML** — CI/CD (continuous integration / continuous deployment) is the automated pipeline that tests and ships every code change without a human running steps by hand. Regular CI/CD asks "does the code still work?" (tests pass, it builds). ML CI/CD has to additionally ask "does the *model* still work?" — a code change can pass every unit test and still silently degrade model quality. A reasonable ML pipeline, triggered on a PR or a merge:
 1. Standard checks — lint, unit tests, type checks (nothing ML-specific yet).
 2. **Data validation** — schema check on any new/changed data (right columns, right types, no unexpected nulls) before it's allowed to feed a training job.
 3. **Retrain or evaluate** on a fixed validation set, and **compare metrics against the current production model** — fail the pipeline if quality regresses past a threshold, not just if code errors out.

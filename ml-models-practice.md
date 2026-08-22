@@ -1,6 +1,6 @@
 # Classical ML Models Practice — Built as a Chain, Not a List
 
-`X_train, X_test, y_train, y_test` assumed to already exist (see `sklearn-practice.md` for the split). Each cluster below is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+`X_train, X_test, y_train, y_test` assumed to already exist (see `sklearn-practice.md` for the split). New to the core vocabulary — fitting, overfitting, hyperparameters, leakage? The five-term primer at the top of `sklearn-practice.md` defines them once; this doc builds on those. Each cluster below is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
 
 ---
 
@@ -14,7 +14,7 @@ reg.fit(X_train, y_train)
 print(dict(zip(X_train.columns, reg.coef_)))    # one coefficient per feature
 print("intercept:", reg.intercept_)
 ```
-A coefficient's SIZE reflects both the feature's real effect AND its raw scale — a feature measured in thousands will have a tiny coefficient even if it matters a lot, while one measured in single digits gets an inflated-looking coefficient. Standardize features first if you want to compare coefficient magnitudes as "importance."
+Linear regression fits a straight-line formula: `prediction = intercept + coef₁·feature₁ + coef₂·feature₂ + …` — each **coefficient** is the learned multiplier on one feature ("for every extra unit of this feature, add this much to the prediction"), and the **intercept** is the prediction when every feature is zero. One reading trap: a coefficient's SIZE reflects both the feature's real effect AND its raw scale — a feature measured in thousands will have a tiny coefficient even if it matters a lot, while one measured in single digits gets an inflated-looking coefficient. Standardize features first if you want to compare coefficient magnitudes as "importance."
 
 ### 2. Given raw coefficients can overfit to noise, how do you add regularization, and how do you choose L1 vs. L2?
 ```python
@@ -23,7 +23,7 @@ ridge = Ridge(alpha=1.0)    # L2: shrinks all coefficients toward zero, rarely t
 lasso = Lasso(alpha=0.1)    # L1: can shrink coefficients to EXACTLY zero -- performs feature selection
 elastic = ElasticNet(alpha=0.1, l1_ratio=0.5)   # mix of both
 ```
-The exact L1-vs-L2 distinction is worked out with real numbers in `math-foundations-refresher.md`'s norms section: if you suspect only a handful of features actually matter and want the model to tell you which, Lasso's exact-zero property does real feature selection. Ridge is the better default when you believe most features contribute a little (multicollinearity especially) and don't want to discard any outright. `alpha` is the regularization STRENGTH — higher alpha = more shrinkage = simpler model, tuned via cross-validation, not guessed.
+**Regularization** means adding a penalty on coefficient size to the quantity being minimized during fitting — the model now has to justify every large coefficient with real predictive payoff, which stops it from contorting itself around training noise. The exact L1-vs-L2 distinction is worked out with real numbers in `math-foundations-refresher.md`'s norms section: if you suspect only a handful of features actually matter and want the model to tell you which, Lasso's exact-zero property does real feature selection. Ridge is the better default when you believe most features contribute a little (multicollinearity especially) and don't want to discard any outright. `alpha` is the regularization STRENGTH — higher alpha = more shrinkage = simpler model, tuned via cross-validation, not guessed.
 
 ### 3. Given a CLASSIFICATION target instead of a continuous one, how does a linear model's coefficient even apply, and how do you interpret it?
 ```python
@@ -32,7 +32,7 @@ clf = LogisticRegression()
 clf.fit(X_train, y_train)
 odds_ratios = np.exp(clf.coef_[0])    # exponentiate the log-odds coefficient to get an interpretable odds ratio
 ```
-Logistic regression's coefficients are in LOG-ODDS units, not probability units — a coefficient of 0.69 doesn't mean "69% more likely," it means the odds multiply by `e^0.69 ≈ 2.0` (twice the odds) for a one-unit increase in that feature (the same `eˣ` mechanics from `math-foundations-refresher.md`'s calculus section). Reporting the raw coefficient instead of the odds ratio is a common source of misinterpreting logistic regression output.
+First, the vocabulary: **odds** are probability-of-happening divided by probability-of-not-happening (a 75% probability is odds of 3-to-1, written as just 3), and **log-odds** are the natural logarithm of that number — the scale logistic regression actually works in internally, because it turns "multiply the odds" into "add to the score." So logistic regression's coefficients are in LOG-ODDS units, not probability units — a coefficient of 0.69 doesn't mean "69% more likely," it means the odds multiply by `e^0.69 ≈ 2.0` (twice the odds) for a one-unit increase in that feature (the same `eˣ` mechanics from `math-foundations-refresher.md`'s calculus section). Reporting the raw coefficient instead of the odds ratio is a common source of misinterpreting logistic regression output.
 
 ### Summary example
 A logistic regression predicting equipment failure has a coefficient of 0.69 on "age_days" — reported raw, this looks unremarkable; `np.exp(0.69) ≈ 2.0` reveals the real story: each additional standardized unit of age roughly DOUBLES the odds of failure, which is the number worth putting in front of a stakeholder, not the log-odds coefficient itself.
@@ -50,7 +50,7 @@ tree = DecisionTreeClassifier(max_depth=3, min_samples_leaf=10, random_state=42)
 tree.fit(X_train, y_train)
 plot_tree(tree, feature_names=X_train.columns, filled=True, fontsize=8)
 ```
-`max_depth` caps how many splits deep the tree can go; `min_samples_leaf` prevents a leaf from being created based on just 1-2 data points (almost certainly noise, not signal) — both are regularization levers against overfitting, and a tree with unconstrained `min_samples_leaf` can still overfit badly even at a modest depth by creating tiny, unreliable leaves.
+A **decision tree** is a learned flowchart of yes/no questions on feature values ("is `wear_pct` > 40? → is `age_days` > 300? → predict FAIL") — prediction means walking a new row down the flowchart to a **leaf** (an end node) and answering with whatever the training rows that landed there mostly were. `max_depth` caps how many questions deep the flowchart can go; `min_samples_leaf` prevents a leaf from being created based on just 1-2 data points (almost certainly noise, not signal) — both are regularization levers against overfitting, and a tree with unconstrained `min_samples_leaf` can still overfit badly even at a modest depth by creating tiny, unreliable leaves.
 
 ### 2. Given a tree with both depth and leaf-size capped, how does it actually DECIDE where to split in the first place?
 ```python
@@ -72,7 +72,7 @@ from sklearn.ensemble import RandomForestClassifier
 rf = RandomForestClassifier(n_estimators=300, max_features="sqrt", random_state=42, n_jobs=-1)
 rf.fit(X_train, y_train)
 ```
-It's not just "build many trees" — each tree is also only ALLOWED to consider a random subset of features (`max_features="sqrt"`, sqrt(total) by convention) at every split, forcing trees to be different from each other even on the same data. Without this feature-level randomness, all trees would tend to make similar splits on the same dominant features and the ensemble wouldn't reduce variance much — the feature subsampling is what actually decorrelates the trees and makes averaging them powerful.
+An **ensemble** is many models voting together — the idea being that individual models' mistakes partly cancel out, the way averaging many noisy measurements gets you closer to the truth than trusting one. A Random Forest is the "bagging" kind of ensemble: each tree trains on a **bootstrap sample** (rows drawn at random *with replacement*, so each tree sees a slightly different version of the data), and — the part people forget — each tree is also only ALLOWED to consider a random subset of features (`max_features="sqrt"`, sqrt(total) by convention) at every split, forcing trees to be different from each other even on the same data. Without this feature-level randomness, all trees would tend to make similar splits on the same dominant features and the ensemble wouldn't reduce variance much — the feature subsampling is what actually decorrelates the trees and makes averaging them powerful.
 
 ### 2. A Random Forest averages many INDEPENDENT trees. What's the alternative — building trees that learn from each other SEQUENTIALLY (boosting)?
 ```python
@@ -84,6 +84,23 @@ model = xgb.XGBClassifier(
 model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 ```
 A Random Forest builds many INDEPENDENT trees and averages them (reduces variance); boosting builds trees SEQUENTIALLY, where each new tree is trained specifically to correct the PREVIOUS ensemble's errors (reduces bias) — this is why boosting typically needs a low `learning_rate` (how much each new tree's correction counts) and MORE trees, trading training time for often-higher accuracy, and why it's more prone to overfitting if not regularized (`subsample`, `colsample_bytree`, `max_depth` all exist to fight that).
+
+**The two shapes, side by side — parallel voters vs. an error-correcting relay:**
+```
+BAGGING (Random Forest)                    BOOSTING (XGBoost / LightGBM)
+
+ data ──┬──▶ tree 1 ──┐                    data ──▶ tree 1   "here's my best guess"
+ (each  ├──▶ tree 2 ──┤                               │ errors
+ tree:  ├──▶ tree 3 ──┼──▶ AVERAGE                    ▼
+ random ├──▶  ...     ──┤    the votes      residuals ──▶ tree 2   "I'll fix what 1 got wrong"
+ rows + └──▶ tree 300 ─┘                              │ remaining errors
+ random                                               ▼
+ features)                                 residuals ──▶ tree 3   "I'll fix what 1+2 still miss"
+                                                      │  ... × n_estimators
+ trees never see each other;                          ▼
+ independence IS the strength              final = tree1 + lr·tree2 + lr·tree3 + …
+ (errors cancel in the average)            each tree only makes sense given the ones before
+```
 
 ### 3. Given that boosting needs both `learning_rate` AND `n_estimators`, why must they be tuned TOGETHER rather than independently?
 ```python
@@ -121,7 +138,7 @@ The same dataset fit three ways: `RandomForestClassifier` averages 300 independe
 import pandas as pd
 importance = pd.Series(model.feature_importances_, index=X_train.columns).sort_values(ascending=False)
 ```
-The default (`"gain"`-based by column, check `importance_type`) can overweight high-cardinality features that get used for many splits just because they offer more possible split points, not because they're more predictive.
+The default (`"gain"`-based by column, check `importance_type`) can overweight high-cardinality features — columns with many distinct values, like a ZIP code or anything ID-like — that get used for many splits just because they offer more possible split points, not because they're more predictive.
 
 ### 2. Given that built-in tree importance can mislead, how do you get a more trustworthy, model-agnostic version?
 ```python
@@ -224,7 +241,7 @@ A real, dramatic difference on a real dataset (200 points arranged as two concen
 4. Project onto top-k eigenvectors (sorted by eigenvalue, descending)
 </div>
 
-PCA doesn't "shrink" data randomly — it finds the exact direction the data varies the most along (the top eigenvector of the covariance matrix), and that direction becomes the new first axis. Real numbers, computed on 10 points (`np.cov` + `np.linalg.eigh`, not estimated):
+PCA doesn't "shrink" data randomly — it finds the exact direction the data varies the most along (the top eigenvector of the covariance matrix), and that direction becomes the new first axis. If "eigenvector" and "covariance" are unfamiliar words: the covariance matrix is a table of how strongly each pair of features moves together, and an eigenvector is a direction that matrix stretches without rotating — both worked with small real numbers in `math-foundations-refresher.md`. Real numbers, computed on 10 points (`np.cov` + `np.linalg.eigh`, not estimated):
 
 <figure class="fig" data-mlviz="pcaeig" id="mlviz-pcaeig"></figure>
 

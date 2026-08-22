@@ -30,7 +30,7 @@ y = ClampedSquare.apply(x)
 y.sum().backward()
 print(x.grad)
 ```
-`ctx.save_for_backward(x)` instead of a plain Python attribute: it registers the tensor properly with autograd's memory management (freed at the right time, interacts correctly with `.detach()` and checkpointing) — stashing tensors as plain `ctx` attributes works for simple cases but bypasses this bookkeeping, which can leak memory in long training runs. The `backward` method here IS the chain rule from `math-foundations-refresher.md`, written out explicitly instead of PyTorch deriving it automatically.
+**Autograd**, first: it's PyTorch's automatic-gradient machinery — every tensor operation you run gets recorded into a graph, and `loss.backward()` walks that graph in reverse applying the chain rule, which is how gradients appear "for free" without you deriving any calculus. Writing a custom `Function` means stepping outside that automation for one op and supplying the forward math *and* its derivative yourself. Within that: `ctx.save_for_backward(x)` instead of a plain Python attribute registers the tensor properly with autograd's memory management (freed at the right time, interacts correctly with `.detach()` and checkpointing) — stashing tensors as plain `ctx` attributes works for simple cases but bypasses this bookkeeping, which can leak memory in long training runs. The `backward` method here IS the chain rule from `math-foundations-refresher.md`, written out explicitly instead of PyTorch deriving it automatically.
 
 ### 2. Given a custom or built-in layer already running, how do you INSPECT what's flowing through it during a real forward pass, without touching its code?
 ```python
@@ -90,7 +90,7 @@ scaler.scale(loss).backward()     # scales the loss UP before backward to avoid 
 scaler.step(optimizer)             # unscales gradients, checks for inf/nan, then steps (or skips if unstable)
 scaler.update()                     # adjusts the scale factor for next time
 ```
-fp16 has a narrow representable range, so small gradients can underflow to exactly zero — `GradScaler` multiplies the loss by a large factor before `backward()` so gradients land in a safer range, then divides back out before the optimizer sees them. `step()` silently SKIPS the update if it detects inf/nan; `update()` adapts the scale factor over time — this is why hand-rolling fp16 training without `GradScaler` is a common source of silent `nan` losses.
+The vocabulary first: **fp16** means 16-bit floating-point numbers — half the memory of the standard 32-bit kind and much faster on modern GPUs, but with a far narrower range of values they can represent. **Mixed precision** means doing the bulk of the math in fp16 while keeping the numerically delicate parts (weight updates, loss) in fp32 — most of the speed, little of the risk. The remaining risk is exactly this: fp16's narrow range means small gradients can underflow to exactly zero — `GradScaler` multiplies the loss by a large factor before `backward()` so gradients land in a safer range, then divides back out before the optimizer sees them. `step()` silently SKIPS the update if it detects inf/nan; `update()` adapts the scale factor over time — this is why hand-rolling fp16 training without `GradScaler` is a common source of silent `nan` losses.
 
 **Visual + memory hook — the numbers get inflated before the danger zone, then deflated back after it:**
 ```
@@ -129,7 +129,7 @@ for epoch in range(10):
 dist.destroy_process_group()
 """
 ```
-`sampler.set_epoch(epoch)` is a real, easy-to-miss requirement: without it, `DistributedSampler` uses the SAME shuffle order every epoch across all ranks — calling it at the start of each epoch reseeds the shuffle consistently (using the epoch number) so training doesn't waste shuffling's regularization benefit by seeing the exact same batch order repeatedly.
+What DDP actually does, mechanically: each GPU runs its own complete copy of the model as a separate process (a **rank**), training on its own disjoint slice (**shard**) of the data — and after every backward pass, the ranks average their gradients with each other before stepping, so all copies stay bit-identical while collectively seeing N times the data per step. Given that, `sampler.set_epoch(epoch)` is a real, easy-to-miss requirement: without it, `DistributedSampler` uses the SAME shuffle order every epoch across all ranks — calling it at the start of each epoch reseeds the shuffle consistently (using the epoch number) so training doesn't waste shuffling's regularization benefit by seeing the exact same batch order repeatedly.
 
 ### Summary example
 Training a large model that doesn't fit on one GPU's compute budget in reasonable time: `GradScaler`+`autocast` (question 1) halves memory and often speeds up each individual GPU's step, while `DistributedSampler`+`DDP` (question 2) splits the data across multiple GPUs so each processes a disjoint shard per step — the two techniques are independent and routinely combined, since one addresses per-GPU efficiency and the other addresses scaling across GPUs.
@@ -192,7 +192,7 @@ seq_len = 10
 causal_mask = nn.Transformer.generate_square_subsequent_mask(seq_len)   # built-in helper, upper triangle = -inf
 out = encoder(x, mask=causal_mask, is_causal=True)
 ```
-`is_causal=True` as a SEPARATE flag from just passing the mask: recent PyTorch versions use a faster fused-attention code path specifically when told the mask is causal (rather than a generic arbitrary mask) — passing the flag lets PyTorch pick the optimized implementation instead of the general one, a real (if version-dependent) performance difference for the identical mathematical result.
+The distinction being toggled here: **bidirectional** means every position can attend to the whole sequence, past and future alike (BERT-style — right for *understanding* complete text); **causal / autoregressive** means each position may only see what came before it (GPT-style — required when the model *generates* text left to right, since the future doesn't exist yet at generation time). The mask enforces that by blanking out the upper triangle of the attention grid. On the API detail — `is_causal=True` as a SEPARATE flag from just passing the mask: recent PyTorch versions use a faster fused-attention code path specifically when told the mask is causal (rather than a generic arbitrary mask) — passing the flag lets PyTorch pick the optimized implementation instead of the general one, a real (if version-dependent) performance difference for the identical mathematical result.
 
 ### 3. Before training any architecture built this way, how do you sanity-check its actual SIZE?
 ```python
@@ -265,7 +265,7 @@ torch.onnx.export(
     dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},   # allow variable batch size at inference
 )
 ```
-Without `dynamic_axes`, the exported ONNX graph hardcodes the exact batch size used during export (here, 1) — any real serving system needs to handle varying batch sizes, so marking dimension 0 as dynamic is what makes the exported model actually usable for real traffic instead of one fixed batch size forever.
+**ONNX** is a framework-neutral file format for trained models — export once, and any runtime that speaks ONNX (C++ servers, browsers, mobile) can run it without PyTorch installed. One export detail matters disproportionately: without `dynamic_axes`, the exported ONNX graph hardcodes the exact batch size used during export (here, 1) — any real serving system needs to handle varying batch sizes, so marking dimension 0 as dynamic is what makes the exported model actually usable for real traffic instead of one fixed batch size forever.
 
 ### Summary example
 Deploying the same model two ways: TorchScript (question 1) for a Python-free but still PyTorch-runtime environment, ONNX (question 2) for a genuinely cross-framework C++ inference server — both require `.eval()` mode first, and ONNX specifically needs `dynamic_axes` set or the exported model will only ever accept exactly one request at a time, batch size 1, forever.
@@ -290,7 +290,7 @@ x = torch.randn(16, 20)
 reconstructed = ae(x)
 reconstruction_error = ((x - reconstructed) ** 2).mean(dim=1)   # per-sample error -- the actual anomaly score
 ```
-An autoencoder trained only on NORMAL data learns to compress and reconstruct normal patterns well; a genuinely anomalous input doesn't match the patterns it learned, so it reconstructs poorly — the per-sample reconstruction error becomes a usable anomaly score without ever needing a single labeled anomalous example during training.
+An **autoencoder** is a network trained to reproduce its own input after squeezing it through a deliberately narrow middle — the **latent** vector (here, 8 numbers standing in for 20). The squeeze is the point: to reconstruct well through a bottleneck, the network is forced to learn the data's underlying regularities rather than copying it. Trained only on NORMAL data, it learns to compress and reconstruct normal patterns well; a genuinely anomalous input doesn't match the patterns it learned, so it reconstructs poorly — the per-sample reconstruction error becomes a usable anomaly score without ever needing a single labeled anomalous example during training.
 
 ### 2. Given an encoder/decoder pair that learns to RECONSTRUCT, how does a GAN's generator/discriminator pair learn to GENERATE new data instead, and why does training alternate two updates?
 ```python

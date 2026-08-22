@@ -1418,6 +1418,39 @@ Worked the full remaining punch list from the carried-over task in one pass:
 
 ---
 
+## Iteration 70 — 2026-08-17 (full-hub "layman + AI engineer" density audit; llm-landscape vocabulary primer as the exemplar)
+
+### Request
+Following up on the Iteration-style trial (2026-08-11, `hub-content-writing-style` memory): audit every topic outside Tier 0 — every statement — for being a *full-fledged statement* ("right now it sounds like some LinkedIn post with less content"), understandable to a layman AND useful to an AI engineer, adding images/flowcharts where they'd genuinely help. Confirmed scope after a restatement check: "yes make the entire mastery hub efficient for a layman n ai engineer."
+
+### Response (Claude)
+- **Audited all 19 in-scope markdown teaching docs** (Tiers 1–5 minus Tier 0, HTML pictorials, Code Drills, and LeetCode memorize-format files) by sampling intros and mid-file sections of each. Verdict: nearly everything already meets the bar — full-sentence why-explanations, worked numbers, ASCII diagrams, self-checks (`sklearn-practice`, `mlops-practice`, `freight-rail-ai-domain-context`, `time-series-analysis`, `pytorch-deep-dive`, `production-ml-practice`, `problem-formulation-framework`, `tensorflow-keras-deep-dive`, `service-impact-and-causal-inference`, `system-design-deep-drills`, `ml-models-practice`, `deep-learning-practice` all sampled clean).
+- **The one clear "LinkedIn post" offender found: `llm-landscape.md`'s three model tables** — 25 one-line fragment cells leaning on undefined jargon (MoE, distillation, encoder-only, continued-pretraining, instruction-tuning). Fixed as the exemplar for the density standard:
+  - Added a **"vocabulary the tables assume" section** — eight terms defined once in plain English (parameters, pretraining, fine-tuning/instruction-tuning, continued-pretraining vs. from-scratch, encoder vs. decoder, context window, MoE, distillation), with two new ASCII diagrams (reader-vs-writer encoder/decoder split; MoE router with idle experts), cross-referenced to `nca-genl` for the full transformer teardown rather than duplicating it.
+  - **Rewrote all 25 table cells as self-contained full sentences** that a newcomer can learn from — each entry now states what the model is, why it matters, and how it connects to the vocabulary above (e.g. Code Llama vs. StarCoder explicitly mirrors the BioBERT vs. PubMedBERT from-scratch-vs-fine-tuned contrast).
+  - Updated the doc's framing paragraph — it's no longer "a reference, not a tutorial" since the tables are now readable cold.
+- **User chose "full newbie pass"** for the remaining docs, which then ran across all of Tiers 1–5 in the same session:
+  - **Vocabulary primers added** where a doc leans on many terms at once: `sklearn-practice.md` (5-term primer: model/fitting, train/test split, overfitting, hyperparameter, leakage) and `deep-learning-practice.md` (6-term primer: tensor, layer/activation, loss, gradient/backprop, batch/epoch, learning rate). Other docs point at these primers instead of duplicating them (per the hub's no-duplication convention).
+  - **Inline first-use glosses** added across 17 docs — every ML term now defined in plain English where it first appears, cross-referenced to the doc that teaches it deeply: coefficients/odds/log-odds, regularization, decision-tree-as-flowchart, ensembles/bootstrap, one-hot encoding, standardization, cross-validation folds, precision/recall/AUC/confusion matrix, centroids/local optima, PCA/dimensionality reduction, serialization, convolution/kernels, hidden state, embeddings, logits, BatchNorm, transfer learning/backbone/head, autograd, fp16/mixed precision, DDP ranks/shards/gradient averaging, causal vs. bidirectional attention, ONNX, autoencoder/latent, survival models, shadow vs. A/B tests, unit roots, AR/MA "regresses on", recall in wayside detection, MILP/TSP/VRP, Grad-CAM/SHAP, CI/CD, SLA, PSI/KL, dense embeddings/top-k, TF-IDF/BM25, temperature, TypedDict/shallow-merge, champion-challenger, activations.
+  - **New diagrams**: bagging-vs-boosting side-by-side (parallel voters vs. error-correcting relay) in `ml-models-practice.md`, plus the encoder/decoder and MoE diagrams in `llm-landscape.md`.
+  - **Fixed a real content gap**: `deep-learning-practice.md`'s RNN question promised "what IS the hidden state" but the answer only covered `batch_first` — the hidden-state definition now actually exists.
+  - **Verified**: all 17 edited docs rendered through the hub's own `markdown(extensions=['fenced_code','tables'])` pipeline — all tables/fences balanced, no leaks. Docs found already at the bar and left substantively unchanged: `langchain-practice.md`, `system-design-deep-drills.md` (both sampled deeply, no undefined-jargon findings).
+
+---
+
+## Iteration 71 — 2026-08-17 (Sanjay's five topics: coverage check + a new Skills & On-Demand Context section)
+
+### Request
+Sanjay Anbazhagan recommended the user learn: graph engineering, LLM loop engineering, skills (a tool that returns instructions on demand), a reference implementation for LLM token saving, and collecting benchmarks. Question: does the hub cover these? Then: "yes please" to filling the one real gap.
+
+### Response (Claude)
+- **Coverage audit result:** graph engineering (LangGraph + GraphRAG), loop engineering (langchain-practice's hand-built tool loop, agent-decision-loop pictorial, Reflexion, cyclic retry drills), and benchmark collection (llm-landscape's MMLU/HellaSwag/HumanEval chain, RAGAS/ARES/G-Eval, eval-set decay drills) were already covered. Token-saving was partial (concepts scattered, no reference implementation). **The Skills pattern — progressive disclosure of instructions via a `load_skill` tool — was the genuine gap.**
+- **Built a new section in `core-technical-depth.md`**: "Skills & On-Demand Context — Loading Instructions Only When the Task Needs Them," placed after the MCP section. Full hub format: TL;DR, plain-English, side-by-side design diagram, reference implementation, scaling table, five trip-ups (including the honest counter-cases: small-library crossover and the prompt-caching objection), 5-question self-check, recap, honest "where I've worked with this" (FinSight per-agent context budgeting as the adjacent real experience), and an interview Q&A.
+- **The reference implementation was actually run** (`.venv-langchain`, tiktoken 0.13.0, cl100k_base): three ~300-token playbooks, stuffed-vs-skills designs measured for real — 938 vs. 514 tokens/request = **45.2% saved at 3 skills**, scaling projection **~80% at 10 skills, ~90% at 30** (stuffed cost is O(skills owned), skills cost is O(skills used)). Printed output pasted verbatim into the doc; temp script removed after the run. The live tool-loop half is cross-referenced to `langchain-practice.md` Cluster 3 (already live-verified) rather than duplicated — no Azure creds were available this session, stated plainly.
+- Cross-links wired: MCP `prompts` primitive, the tool-retrieval (RAG-for-tools) MCQ, langchain-practice Cluster 3, Unified Telemetry's token budgeting. `mastery_curriculum.py` blurb updated (sanity assertions re-verified) and the doc re-rendered through the hub's markdown pipeline (70 fences balanced, tables render).
+
+---
+
 ## Next steps / backlog
 - [x] `real-world-incidents.md` registered in `mastery_curriculum.py` and live on port 5001 — see Iteration 61b.
 - [x] `system-design-deep-drills.md` (4 drills) registered and live on port 5001 — see Iteration 62.

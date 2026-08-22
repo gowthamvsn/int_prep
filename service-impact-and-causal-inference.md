@@ -10,7 +10,7 @@ A railroad running under precision-scheduled-railroading discipline (which BNSF 
 ## Tying ML Model Performance to Business Metrics
 
 ### Plain-English explanation
-An ML metric (AUC, F1, RMSE) measures how good the model is at the prediction task in isolation. A business metric (dollars saved, downtime-hours avoided, on-time performance) measures whether the *business* is actually better off. These are related but not the same thing, and the gap between them is exactly where "the model looked great in the demo but didn't move any real numbers" stories come from.
+An ML metric (AUC, F1, RMSE — each defined properly in `sklearn-practice.md`'s evaluation clusters; all you need here is that they score prediction quality) measures how good the model is at the prediction task in isolation. A business metric (dollars saved, downtime-hours avoided, on-time performance) measures whether the *business* is actually better off. These are related but not the same thing, and the gap between them is exactly where "the model looked great in the demo but didn't move any real numbers" stories come from.
 
 ### Built as a chain: from a model score to a defensible dollar number
 

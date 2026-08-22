@@ -1,6 +1,6 @@
 # LLM Landscape — Open Source vs. Closed Source Models
 
-A reference, not a tutorial: what's actually out there, who trained it, whether you can download the weights, and what it's actually for. 25 models across closed-source, open-weight/open-source, and domain-specific encoder models — the kind of breadth an interviewer expects you to have opinions about, not just recognize by name.
+What's actually out there, who trained it, whether you can download the weights, and what each model is actually for. 25 models across closed-source, open-weight/open-source, and domain-specific encoder models — the kind of breadth an interviewer expects you to have opinions about, not just recognize by name. The tables are built to be readable cold: a short vocabulary section first defines every term the entries lean on, so a newcomer can learn from them rather than just recognize names, while the entries themselves stay opinionated enough to be useful as a working reference.
 
 **Three categories, not two** — the "open vs. closed" framing hides a real middle category that matters:
 - **Closed-source**: weights never released; access only via a paid API (GPT-4, Claude, Gemini).
@@ -30,48 +30,94 @@ A reference, not a tutorial: what's actually out there, who trained it, whether 
 
 > 🔗 **Hands-on reps:** [Code Drills 7 — LLMs: Tokenization, HuggingFace, Decoding, Embeddings](/topic/code-drills-llm-huggingface)
 
+## The vocabulary the tables assume — eight terms, defined once in plain English
+
+Every "Purpose / notes" cell in the tables below leans on a handful of terms that get used everywhere in LLM writing and defined almost nowhere. Read these once and every table entry becomes a full sentence instead of jargon. (The transformer architecture itself — attention, layers, tokens — gets its full teardown in the `nca-genl` guide; this list is just what you need to *read the tables*.)
+
+- **Parameters / weights (the "7B" in a model's name)** — the learned numbers inside the model. Training is the process of nudging billions of these numbers, a tiny step at a time, until the model predicts text well; "Llama 2 7B" literally means the finished model is a bundle of ~6.74 billion learned numbers (counted exactly, stage by stage, later in this doc). More parameters generally buys more capability, but every parameter must sit in GPU memory and be multiplied through on every token generated — which is the entire tension behind "small model vs. big model."
+
+- **Pretraining** — the first, giant training phase: the model reads trillions of words of text and learns exactly one skill, predicting the next token. Everything a base model "knows" is a side effect of getting good at that one game. Pretraining a competitive model costs millions of dollars in compute, which is why only well-funded labs produce base models and everyone else adapts them.
+
+- **Fine-tuning and instruction-tuning** — a second, far cheaper phase: take an already-pretrained model and continue training it briefly on a specific kind of data. *Instruction-tuning* is the flavor that matters most here: training on (instruction → good response) pairs, which converts a raw text-continuer into something that answers questions. Alpaca and Vicuna in the tables below are both just "Llama plus an instruction-tuning pass" — which is why a university lab could build each one for a few hundred dollars.
+
+- **Continued pretraining vs. from scratch** — the two ways to build a domain specialist, and exactly the BioBERT-vs-PubMedBERT contrast in the third table: either keep training an existing general model on domain text (cheaper, retains general knowledge, but its vocabulary stays partly general-purpose), or pretrain a fresh model on *only* domain text (costlier, but every bit of its capacity is domain-shaped).
+
+- **Encoder vs. decoder** — the biggest split in the tables, and the reason the third table exists at all. An encoder is a *reader*; a decoder is a *writer*:
+
+```
+ENCODER (BERT family) — a READER              DECODER (GPT/Llama family) — a WRITER
+reads the whole sentence at once, in          reads strictly left-to-right; its output
+both directions, and outputs a rich           is literally "the most likely next word,"
+numeric summary of each word                  generated one word at a time until done
+
+  "the [bank] by the river"                     "The capital of France is" → " Paris"
+   every word sees every other word              each word sees only what came before it
+              │                                              │
+              ▼                                              ▼
+  best at: classification, search/                best at: generating text — chat,
+  embeddings, tagging entities in text            code, answers, summaries
+```
+
+When people say "LLM" today they almost always mean decoder models. The encoder family didn't disappear, though — it quietly powers search, classification, and the embedding step of every RAG system.
+
+- **Context window** — the model's working memory, measured in tokens (word-pieces): how much text it can consider at once, covering the prompt, the conversation so far, and any documents pasted in. A model with a bigger window can do "read this entire contract and answer questions" tasks; the cost is that processing more tokens takes more compute and money per request.
+
+- **Mixture-of-experts (MoE)** — a trick for getting big-model quality at small-model running cost. Instead of one dense block of parameters that *all* activate for every token, an MoE layer holds several parallel "expert" blocks plus a tiny learned router that picks about two of them per token:
+
+```
+                    ┌─ expert 1  (idle this token)
+ token ─▶ router ───┼─ expert 2 ──┐
+          ("pick    ├─ expert 3 ──┴──▶ combine ──▶ output
+           two")    ├─ expert 4  (idle)
+                    └─ ...       (idle)
+```
+
+Mixtral 8x7B is the canonical example: 47B parameters exist, but only ~13B of them run for any given token — so it generates roughly at 13B-model speed and compute cost, with quality closer to its full size. The catch: all 47B still have to fit in GPU memory, active or not.
+
+- **Distillation** — training a small "student" model to imitate a large "teacher" model's outputs, preserving most of the capability in a fraction of the size. DistilBERT is the canonical result: about 40% smaller and 60% faster than BERT while keeping ~97% of its quality — the standard trade when serving speed and cost matter more than the last few accuracy points.
+
 ## Closed-source / proprietary (API-only)
 
 | Model | Organization | Purpose / notes |
 |---|---|---|
-| **GPT-4 / GPT-4o** | OpenAI | General-purpose multimodal (text/image/audio) flagship; most widely deployed via ChatGPT and the OpenAI API; strong reasoning and coding. |
-| **Claude (3/4 family)** | Anthropic | General-purpose, built around Constitutional AI alignment; very large context windows; strong at long-document reasoning, coding, and agentic tool use. |
-| **Gemini (1.5/2.0/2.5)** | Google DeepMind | Natively multimodal from the ground up (text/image/audio/video in one model); deep integration with Google Search/Workspace; very long context windows. |
-| **Bard** | Google | Not a current model — the deprecated *product name* for Google's chatbot (originally LaMDA-based, later PaLM-2-based). Rebranded to **Gemini** in Feb 2024; calling the current product "Bard" is a dated/incorrect usage worth knowing, not repeating. |
-| **Grok** | xAI | General-purpose with real-time access to X (Twitter) data, positioned around current-events awareness and a less-filtered response style. |
-| **Command R / Command R+** | Cohere | Enterprise-focused, purpose-built for RAG and tool-calling workflows rather than general chat — optimized retrieval-augmented generation performance. |
-| **Amazon Titan** | AWS | Foundation models (text generation + embeddings) offered through Bedrock, built for enterprise pipelines already inside AWS. |
-| **Mistral Large / Medium** | Mistral AI | Mistral's flagship *closed* API models — distinct from the same company's open-weight smaller models below; competitive reasoning at a lower price point than GPT-4-class models. |
+| **GPT-4 / GPT-4o** | OpenAI | OpenAI's general-purpose flagship, and the most widely deployed LLM in the world via ChatGPT and the API. It's multimodal — one model handles text, images, and audio — and it serves as the default "strong closed model" reference point most other models get compared against. |
+| **Claude (3/4 family)** | Anthropic | A general-purpose model trained with Anthropic's Constitutional AI method: the model is trained against a written set of principles, not only against human preference ratings. Known for very large context windows, which makes it strong at long-document reasoning, plus coding and agentic tool use. |
+| **Gemini (1.5/2.0/2.5)** | Google DeepMind | Built multimodal from the ground up — text, image, audio, and video were in the training recipe from the start rather than bolted on later. Deeply integrated with Google Search and Workspace, and offers some of the longest context windows available. |
+| **Bard** | Google | Not a current model — the deprecated *product name* for Google's chatbot (originally LaMDA-based, later PaLM-2-based). It was rebranded to **Gemini** in Feb 2024, so calling the current product "Bard" is a dated usage worth recognizing but not repeating. |
+| **Grok** | xAI | A general-purpose model whose distinguishing feature is live access to X (Twitter) data, positioning it around current-events awareness; it's also marketed on a less-filtered response style than its competitors. |
+| **Command R / Command R+** | Cohere | Enterprise models purpose-built for RAG (retrieval-augmented generation — answering from your organization's own documents, with citations) and tool calling, rather than general chat. The pitch: better grounding behavior at lower cost than pointing a general flagship model at the same retrieval task. |
+| **Amazon Titan** | AWS | AWS's own foundation models (text generation plus embeddings), offered through the Bedrock service. Their appeal is less about benchmark scores and more about friction: for a team whose data and infrastructure already live inside AWS, Titan requires no new vendor, contract, or data-egress approval. |
+| **Mistral Large / Medium** | Mistral AI | Mistral's flagship *closed* API models — a separate product line from the same company's open-weight models in the next table. They compete on offering near-GPT-4-class reasoning at a noticeably lower price per token. |
 
 ## Open-weight / open-source, general-purpose
 
 | Model | Organization | Purpose / notes |
 |---|---|---|
-| **Llama 2 / Llama 3** | Meta | Open-weight (custom license, not fully OSI-approved), the most widely used base for fine-tuning and research; strong performance-per-parameter, huge downstream ecosystem. |
-| **Mistral 7B / Mixtral 8x7B** | Mistral AI | Apache 2.0, fully permissive. Mixtral is a sparse **mixture-of-experts** — 47B total parameters but only ~13B active per token, so it runs at roughly 13B-model inference cost with much higher quality. |
-| **Falcon** | Technology Innovation Institute (UAE) | Open-weight, trained on the large curated **RefinedWeb** web-text dataset; competitive with Llama at its release. |
-| **BLOOM** | BigScience (Hugging Face-led collaboration) | Fully open (weights + training details), explicitly built for **multilingual** coverage — 46 natural languages and 13 programming languages — and research transparency over raw benchmark performance. |
-| **GPT-J / GPT-NeoX** | EleutherAI | Open GPT-3-architecture replications that predate Llama; enabled open LLM research before any major lab released comparable open weights. |
-| **Gemma** | Google DeepMind | Open-weight lightweight models distilled from the same research as Gemini, sized to run on consumer hardware. |
-| **Phi (Phi-2 / Phi-3)** | Microsoft | Small open-weight models trained on curated "textbook-quality" synthetic + filtered data — punches well above its parameter count on reasoning benchmarks. |
-| **Qwen** | Alibaba | Open-weight, notably strong multilingual performance (especially Chinese) and coding ability. |
-| **DeepSeek (V2/V3/R1)** | DeepSeek AI | Open-weight, notable for strong reasoning/coding performance at a fraction of the usual training cost, using a large sparse MoE architecture; the R1 line specifically popularized transparent chain-of-thought reasoning traces. |
-| **Vicuna** | LMSYS (UC Berkeley et al.) | Open — Llama fine-tuned on user-shared ChatGPT conversations; one of the first open models to approach GPT-3.5-level chat quality, and became an early standard chat-model benchmark. |
-| **Alpaca** | Stanford | Open — Llama instruction-tuned on ~52K self-generated instruction examples; the proof-of-concept that cheap instruction-tuning (not just scale) unlocks a lot of chat capability. |
-| **StableLM** | Stability AI | Open-weight general-purpose models from the company behind Stable Diffusion. |
+| **Llama 2 / Llama 3** | Meta | The de-facto standard open-weight base model: downloadable weights under Meta's custom license (open-weight, not fully open — see the three-categories note at the top), strong performance for its parameter count, and by far the largest downstream ecosystem of fine-tunes, tools, and tutorials. When a paper or product says "we fine-tuned an open model," the base is usually a Llama. |
+| **Mistral 7B / Mixtral 8x7B** | Mistral AI | Apache 2.0 licensed — genuinely permissive, commercial use included. Mistral 7B is the classic "small but strong" dense model that made 7B a serious size class. Mixtral 8x7B is a sparse **mixture-of-experts** (see the vocabulary section above): 47B total parameters with only ~13B active per token, so it delivers near-large-model quality at roughly a 13B model's inference cost. |
+| **Falcon** | Technology Innovation Institute (UAE) | Open-weight models trained on **RefinedWeb**, a heavily filtered and deduplicated web-text dataset — the project's lasting contribution was demonstrating that careful data curation of ordinary web text could rival proprietary data mixes. Competitive with Llama at its release. |
+| **BLOOM** | BigScience (Hugging Face-led collaboration) | Fully open in the strictest sense — weights, training code, and data documentation are all released. Built by a large open research collaboration explicitly for **multilingual** coverage (46 natural languages, 13 programming languages) and for transparency, prioritized above raw benchmark performance. |
+| **GPT-J / GPT-NeoX** | EleutherAI | Open replications of the GPT-3 architecture from before Meta released Llama. Historically important rather than currently competitive: they were what open LLM research actually ran on during the years when no major lab had released comparable weights. |
+| **Gemma** | Google DeepMind | Google's open-weight small models, distilled (see the vocabulary section) from the same research line as Gemini and deliberately sized to run on consumer hardware — a laptop or single gaming GPU rather than a server rack. |
+| **Phi (Phi-2 / Phi-3)** | Microsoft | Small open-weight models trained on curated "textbook-quality" synthetic and filtered data instead of raw web scrape. Phi is the running experiment in whether data *quality* can substitute for parameter count — which is why it scores above its size class on reasoning benchmarks. |
+| **Qwen** | Alibaba | Alibaba's open-weight family, notable for strong multilingual performance (especially Chinese, where English-centric models lag) and strong coding ability. |
+| **DeepSeek (V2/V3/R1)** | DeepSeek AI | Open-weight models notable for reaching frontier-level reasoning and coding performance at a fraction of the usual training cost, built on a large sparse mixture-of-experts architecture. The R1 line specifically popularized showing the model's full chain-of-thought reasoning trace to the user rather than hiding it. |
+| **Vicuna** | LMSYS (UC Berkeley et al.) | Llama fine-tuned by an academic group on real user-shared ChatGPT conversations. One of the first open models to approach GPT-3.5-level chat quality, which made it an early standard benchmark that other open chat models measured themselves against. |
+| **Alpaca** | Stanford | Stanford's proof-of-concept: Llama instruction-tuned (see the vocabulary section) on ~52K instruction examples that were themselves generated by an LLM, for a few hundred dollars of compute. It proved that cheap instruction-tuning — not just more scale — unlocks a large share of chat capability. |
+| **StableLM** | Stability AI | Open-weight general-purpose models from the company behind Stable Diffusion — included here for name recognition more than technical distinction; it never matched Llama-class adoption. |
 
 ## Encoder-only & domain-specific models
 
 | Model | Organization | Purpose / notes |
 |---|---|---|
-| **BERT** | Google | Open. **Bidirectional encoder-only** — not generative, not typically called an "LLM" in the modern decoder-only sense. Foundational for classification/NER/QA via fine-tuning, not text generation. |
-| **RoBERTa** | Meta | Open — BERT's pretraining recipe run longer, on more data, with tuned hyperparameters (no next-sentence-prediction task); consistently outperforms BERT on the same downstream tasks. |
-| **DistilBERT** | Hugging Face | Open — a distilled/compressed BERT: ~40% smaller, ~60% faster, retains ~97% of BERT's performance. The standard choice when latency/cost matters more than the last few points of accuracy. |
-| **T5** | Google | Open — frames *every* NLP task (classification, translation, summarization, QA) as text-to-text, unifying pretraining and fine-tuning under one objective. |
-| **BioBERT** | Korea University / Clova AI | Open — BERT **continued-pretrained** on PubMed abstracts + PMC full-text articles; for biomedical NER, relation extraction, and QA. |
-| **PubMedBERT** | Microsoft | Open — pretrained **from scratch** on PubMed text (not continued from general-domain BERT); shown to outperform continued-pretraining approaches like BioBERT on biomedical benchmarks specifically because it never wastes capacity on general-domain vocabulary. |
-| **ClinicalBERT** | Multiple groups (e.g. Alsentzer et al., MIT) | Open — pretrained on real clinical notes (e.g., MIMIC-III), for EHR-based tasks like readmission risk and clinical NLP — directly the model family behind tasks like the Hospital Readmission project. |
-| **Code Llama / StarCoder** | Meta / BigCode | Open-weight, code-specialized. Code Llama is Llama fine-tuned on code; StarCoder is trained from scratch on permissively-licensed public code — both for code completion/generation rather than general chat. |
+| **BERT** | Google | The foundational **encoder-only** model — a *reader*, not a *writer*, in the diagram above. It doesn't generate text at all; it produces rich numeric representations of text that get fine-tuned into classifiers, named-entity taggers, and QA systems. Not an "LLM" in the modern generative sense, but the ancestor of every other model in this table. Fully open. |
+| **RoBERTa** | Meta | BERT's exact architecture with a better training *recipe*: trained longer, on more data, with tuned settings and one of BERT's pretraining tasks dropped as unhelpful. It consistently beats BERT on the same downstream tasks — a standing lesson that the training recipe matters as much as the architecture. Open. |
+| **DistilBERT** | Hugging Face | A distilled BERT (see the vocabulary section for how distillation works): ~40% smaller and ~60% faster while retaining ~97% of BERT's performance. The standard choice when serving latency or cost matters more than the last few points of accuracy. Open. |
+| **T5** | Google | Google's "text-to-text" model, architecturally an encoder-decoder — a reader feeding a writer. Its big idea: reframe *every* NLP task (classification, translation, summarization, QA) as "text in, text out," so a single model and a single training objective cover all of them instead of each task needing its own model shape. Open. |
+| **BioBERT** | Korea University / Clova AI | BERT **continued-pretrained** (see the vocabulary section) on PubMed abstracts and full-text biomedical articles — the standard starting point for biomedical named-entity recognition, relation extraction, and QA. Open. |
+| **PubMedBERT** | Microsoft | The same goal as BioBERT, built the other way: pretrained **from scratch** purely on PubMed text, never starting from general-domain BERT. Because none of its vocabulary or capacity is spent on general-domain text, it outperforms continued-pretraining approaches like BioBERT on biomedical benchmarks — the cleanest head-to-head result on the from-scratch-vs-continued question. Open. |
+| **ClinicalBERT** | Multiple groups (e.g. Alsentzer et al., MIT) | BERT variants pretrained on real de-identified clinical notes (e.g. the MIMIC-III ICU dataset) rather than published papers. That distinction matters because bedside-note language — abbreviations, fragments, template text — looks nothing like journal prose, making this the right family for EHR tasks like readmission-risk prediction (directly the model family behind the Hospital Readmission project). Open. |
+| **Code Llama / StarCoder** | Meta / BigCode | The code specialists, and a repeat of the BioBERT-vs-PubMedBERT contrast two rows up: Code Llama is general Llama *fine-tuned* onto code, while StarCoder is trained *from scratch* on permissively-licensed public code. Both target code completion and generation rather than general chat. Open-weight. |
 
 ---
 

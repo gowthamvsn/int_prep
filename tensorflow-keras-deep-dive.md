@@ -1,6 +1,6 @@
 # TensorFlow / Keras Deep Dive — Built as a Chain, Not a List
 
-Same format as `pytorch-deep-dive.md`, the TensorFlow/Keras side. **Verification note, stated plainly:** this environment's global Python has a broken TensorFlow install (TF 2.15 vs. NumPy 2 — a real, pre-existing conflict, not something introduced this session). Every snippet below was actually run and verified, but in a separate, isolated virtual environment (`.venv-tf`, TensorFlow 2.10.1 — the last version with native Windows GPU support) created specifically so this verification never touched the global environment. `import tensorflow as tf` and `from tensorflow import keras` assumed throughout. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+Same format as `pytorch-deep-dive.md`, the TensorFlow/Keras side. **Verification note, stated plainly:** this environment's global Python has a broken TensorFlow install (TF 2.15 vs. NumPy 2 — a real, pre-existing conflict, not something introduced this session). Every snippet below was actually run and verified, but in a separate, isolated virtual environment (`.venv-tf`, TensorFlow 2.10.1 — the last version with native Windows GPU support) created specifically so this verification never touched the global environment. `import tensorflow as tf` and `from tensorflow import keras` assumed throughout. New to the deep-learning vocabulary (tensor, layer, loss, gradient, batch, learning rate)? The plain-English primer at the top of `deep-learning-practice.md` defines all of it once — this doc assumes those. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
 
 ---
 
@@ -19,7 +19,7 @@ outputs = layers.Dense(2, activation="softmax")(x)
 model = keras.Model(inputs=inputs, outputs=outputs)
 model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 ```
-`Sequential` only supports one input, one output, and a single linear chain of layers — the moment you need multiple inputs, multiple outputs, a skip/residual connection, or any layer reused in more than one place, `Sequential` genuinely cannot express it. The Functional API represents the model as an explicit graph of tensors, which can express all of those.
+Keras name-translations worth fixing in your head once: `Dense` is a fully-connected linear layer (PyTorch's `nn.Linear`), the `activation="softmax"` on the last layer turns raw scores into probabilities that sum to 1, and `.compile()` doesn't compile anything in the C++ sense — it just attaches the optimizer, loss, and metrics to the model before training. As for why Functional exists: `Sequential` only supports one input, one output, and a single linear chain of layers — the moment you need multiple inputs, multiple outputs, a skip/residual connection, or any layer reused in more than one place, `Sequential` genuinely cannot express it. The Functional API represents the model as an explicit graph of tensors, which can express all of those.
 
 ### 2. Given that Functional can express more than one input, how do you build a model with TWO inputs and one output — a real use case, not a toy?
 ```python
@@ -61,7 +61,7 @@ grads = tape.gradient(loss, model.trainable_weights)
 optimizer.apply_gradients(zip(grads, model.trainable_weights))
 print(float(loss))
 ```
-`GradientTape` records only what happens inside its `with` block: it watches every trainable-variable operation while open and builds a computation graph for differentiation on the fly — anything computed outside the block (or on a tensor not marked as watched) simply won't have a gradient, mirroring PyTorch's dynamic-graph model rather than TF1's static-graph approach.
+(`from_logits=True` on the loss: the model's last layer here outputs raw, pre-softmax scores — logits — and this flag tells the loss function to apply the softmax itself in one numerically stable step, the same logits-not-probabilities discipline explained in `deep-learning-practice.md` Cluster 6.) `GradientTape` records only what happens inside its `with` block: it watches every trainable-variable operation while open and builds a computation graph for differentiation on the fly — anything computed outside the block (or on a tensor not marked as watched) simply won't have a gradient, mirroring PyTorch's dynamic-graph model rather than TF1's static-graph approach.
 
 **Visual + memory hook — an actual cassette tape, recording only while it's rolling:**
 ```

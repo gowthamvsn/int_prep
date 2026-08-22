@@ -1,6 +1,6 @@
 # LangGraph Practice — Built as a Chain, Not a List
 
-Continues from `langchain-practice.md`. Same format: **question → code → why it matters**. Every snippet actually executed in `D:\nvidia\.venv-langchain` (`langgraph==1.2.9`, `langchain==1.3.14`) against the same Azure OpenAI deployment (`gpt-4.1-mini`) as the rest of this project. LangGraph is the piece LangChain 1.x now points to for anything stateful (agents, memory, human-in-the-loop) — see the deprecation warning documented at the bottom of `langchain-practice.md`. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+Continues from `langchain-practice.md`. Every snippet actually executed in `D:\nvidia\.venv-langchain` (`langgraph==1.2.9`, `langchain==1.3.14`) against the same Azure OpenAI deployment (`gpt-4.1-mini`) as the rest of this project. LangGraph is the piece LangChain 1.x now points to for anything stateful (agents, memory, human-in-the-loop) — see the deprecation warning documented at the bottom of `langchain-practice.md`. Each cluster builds on the one before it — code, then why it matters, then a self-check to confirm it actually stuck.
 
 ---
 
@@ -8,7 +8,14 @@ Continues from `langchain-practice.md`. Same format: **question → code → why
 
 ## Cluster 1 — State and Nodes: The Two Ideas Everything Else Builds On
 
-### 1. What's the minimal graph — one node, compile, run?
+> **TL;DR**
+> - A `StateGraph` is nodes (plain functions) plus a shared `State` (a `TypedDict`). Each node returns a *partial* dict, and LangGraph shallow-merges it into the running state by key.
+> - Default merge behavior is **overwrite** — fine for a single "answer" key, but it silently deletes conversation history if you use it for chat messages.
+> - `Annotated[list, add_messages]` swaps that overwrite for **append** — the one line that turns "each node's return replaces the field" into "each node's return adds to it," which is the shape every chat agent actually needs.
+
+### The minimal graph
+The smallest possible graph is one node, wired to a start and an end:
+
 ```python
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
@@ -39,9 +46,11 @@ app = graph.compile()
 result = app.invoke({"question": "What is a KV cache, one sentence?"})
 print(result)   # {'question': '...', 'answer': '...'} -- input keys survive alongside the node's output
 ```
-A node returns a *partial* dict, not the full state: every node's return value is shallow-merged into the running state by key, not swapped in wholesale — this is the entire mechanism that lets a 10-node graph have each node only "own" the keys it actually computes, without every node needing to know or re-thread the rest of the state.
+(Two Python terms doing load-bearing work here: a `TypedDict` is just a plain dict with declared key names and types — it serves as the schema of the shared state; and "shallow-merged" means merged key-by-key at the top level — keys a node returns get written in, every other key survives untouched.) The key thing to notice: a node returns a *partial* dict, not the full state. Every node's return value gets shallow-merged into the running state by key, not swapped in wholesale — that's the entire mechanism that lets a 10-node graph have each node only "own" the keys it actually computes, without every node needing to know or re-thread the rest of the state.
 
-### 2. Given a plain key gets OVERWRITTEN on each merge (question 1), how do you define a state field that APPENDS instead — the shape every chat agent actually needs?
+### Making a field append instead of overwrite
+That default merge behavior — plain overwrite — becomes a real bug the moment a graph needs to accumulate conversation history instead of just producing one answer:
+
 ```python
 from typing import Annotated
 from langgraph.graph.message import add_messages
@@ -65,10 +74,40 @@ print(len(r1["messages"]))                                   # 2: human + AI
 r2 = app.invoke({"messages": r1["messages"] + [HumanMessage("What's my name?")]})
 print(len(r2["messages"]), r2["messages"][-1].content)        # 4, and it remembers "Gowtham"
 ```
-`Annotated[list, add_messages]` and not just `list`: without a reducer, the default merge behavior from question 1 (plain overwrite) means a node returning `{"messages": [new_msg]}` would *replace* the whole history with a single message, silently deleting everything before it. `add_messages` is a specific reducer function that appends (and also handles de-duplication by message ID, and converts plain dicts/tuples to proper message objects) — this exact pattern is *the* standard way every LangGraph chat agent accumulates conversation history, and forgetting the annotation is the single most common "why did my agent forget everything" bug.
+`Annotated[list, add_messages]`, not just `list`: without a reducer, the default merge behavior (plain overwrite) means a node returning `{"messages": [new_msg]}` would *replace* the whole history with a single message, silently deleting everything before it. `add_messages` is a specific reducer function that appends (and also handles de-duplication by message ID, and converts plain dicts/tuples to proper message objects). This exact pattern is *the* standard way every LangGraph chat agent accumulates conversation history — forgetting the annotation is the single most common "why did my agent forget everything" bug.
 
-### Summary example
-A single-turn `answer_node` (question 1) merges its one `answer` key into state fine with the default shallow-merge — but the moment a graph needs conversation HISTORY rather than a single answer, that same default merge behavior becomes the bug: `Annotated[list, add_messages]` (question 2) is what turns "each node's return replaces the field" into "each node's return appends to the field," the exact distinction that separates a graph that answers once from an agent that remembers.
+The two merge behaviors side by side:
+
+```
+  Default (overwrite):                      With add_messages (append):
+
+  state = {answer: "A"}                     state = {messages: [Human, AI]}
+  node returns {answer: "B"}                node returns {messages: [AI-2]}
+        │                                          │
+        ▼                                          ▼
+  state = {answer: "B"}                     state = {messages: [Human, AI, AI-2]}
+  (A is GONE)                               (nothing lost -- AI-2 appended)
+```
+
+<details>
+<summary><strong>Self-check — answer before revealing</strong></summary>
+
+1. What does a node function actually return — the full state, or something smaller?
+2. Without `Annotated[list, add_messages]`, what happens to conversation history when a second node runs and returns `{"messages": [new_msg]}`?
+3. What does `add_messages` do beyond simple appending?
+4. Why does a 10-node graph benefit from each node only returning the keys it computed, rather than the entire state?
+5. If a chat agent "forgets" everything after the second turn, what's the first thing to check in its state schema?
+
+**Answers**
+1. A *partial* dict — just the keys that node actually computed. LangGraph shallow-merges it into the running state by key; it doesn't need the rest of the state re-supplied.
+2. It gets wiped — the default merge behavior is overwrite, so the new one-message list replaces the entire existing history instead of adding to it, with no error or warning.
+3. It also de-duplicates messages by message ID and converts plain dicts/tuples into proper message objects — not just appending, but keeping the list well-formed.
+4. It means no node needs to know about or re-thread keys it doesn't care about — each node's contract is just "the keys I own," which scales much better than every node needing full awareness of a growing state shape.
+5. Whether the `messages` field (or whatever accumulates history) is declared as `Annotated[list, add_messages]` — a plain `list` with no reducer is the single most common cause of that bug.
+</details>
+
+> **Recap**
+> Nodes return partial dicts; LangGraph merges them into state by key. Default merge is overwrite, which is fine for a single computed value but silently destroys accumulating data like chat history. `Annotated[list, add_messages]` switches that field to append-with-dedup — the one-line difference between a graph that answers once and an agent that remembers.
 
 ---
 
@@ -76,7 +115,14 @@ A single-turn `answer_node` (question 1) merges its one `answer` key into state 
 
 ## Cluster 2 — Control Flow: Conditional Edges and Runaway Recursion
 
-### 1. How do you branch based on a condition (conditional edges) — and how does a LOOP actually get built from this?
+> **TL;DR**
+> - `add_conditional_edges` is the diamond decision box in an otherwise boxes-and-arrows graph — a router function reads state and returns a *label*, and a separate dict maps that label to the actual next node.
+> - A loop isn't a special construct — it's just a node whose router sometimes points back to that same node.
+> - If a router never returns its exit label, the graph doesn't hang silently — it raises a catchable `GraphRecursionError` once it hits `recursion_limit` (default 25).
+
+### Branching, and building a loop from it
+Every `StateGraph` is boxes (nodes — plain functions) and arrows (edges — "go here next"). `add_conditional_edges` is the one arrow that's actually a diamond: it reads state and picks which arrow to follow from a dict of labeled options, instead of always going the same direction. Here's a loop built from exactly that:
+
 ```python
 class LoopState(TypedDict):
     n: int
@@ -96,9 +142,10 @@ app = g.compile()
 
 print(app.invoke({"n": 0, "total": 0}))   # {'n': 5, 'total': 10} -- looped 5 times before hitting END
 ```
-The router function returns a label string, and a separate dict maps labels to node names: decoupling "which branch to take" (the router's logic) from "which node that branch points to" (the mapping dict) means the same router function can be reused across graphs with differently-named nodes, and the graph's edges stay readable as a mapping rather than buried in conditional logic. This is also literally how a cycle is built — `add_one` pointing back to itself via `"loop": "add_one"` is a loop, not a special construct.
+The router function returns a label string, and a separate dict maps labels to node names. Decoupling "which branch to take" (the router's logic) from "which node that branch points to" (the mapping dict) means the same router function can be reused across graphs with differently-named nodes, and the graph's edges stay readable as a mapping rather than buried in conditional logic. This is also literally how a cycle gets built — `add_one` pointing back to itself via `"loop": "add_one"` is a loop, not a special construct.
 
-**Visual + memory hook — draw the graph the code actually builds, not the code itself:**
+Draw the graph the code actually builds, not the code itself:
+
 ```
                     ┌─────────────┐
          ┌─────────▶│   add_one   │────┐
@@ -111,9 +158,11 @@ The router function returns a label string, and a separate dict maps labels to n
                              n >= 5 ──▶ END
                              "done"
 ```
-**Remember it as a flowchart with a diamond decision box** — every `StateGraph` is just boxes (nodes = plain functions) and arrows (edges = "go here next"), with `add_conditional_edges` being the one arrow that's actually a diamond: it reads state and picks which arrow to follow from a dict of labeled options, rather than always going the same direction. Once you can sketch a graph this way on paper before writing any code, "why is my agent looping forever" becomes "trace the arrows and find the one that never reaches END" instead of re-reading Python control flow.
+Once you can sketch a graph this way on paper before writing any code, "why is my agent looping forever" becomes "trace the arrows and find the one that never reaches END" instead of re-reading Python control flow.
 
-### 2. Given a loop is just a router that sometimes points back to itself (question 1), what happens if the router has a BUG and never returns "done"?
+### When the router never lets go
+That same diamond-shaped router reappears here with one bug: it never returns `"done"`.
+
 ```python
 def should_continue_forever(state: LoopState) -> str:
     return "loop"     # bug: never returns "done" -- this WILL hit the limit
@@ -130,10 +179,27 @@ except Exception as e:
     print(type(e).__name__, ":", e)
 # GraphRecursionError : Recursion limit of 5 reached without hitting a stop condition.
 ```
-This matters more than it looks: the default `recursion_limit` is 25 — fine for a short deterministic loop like question 1's, but an LLM-driven agent loop (tool call → result → maybe another tool call → ...) can legitimately need more steps, or can spiral if the model keeps re-requesting a failing tool. `GraphRecursionError` is a real, catchable exception (not a silent infinite hang) — but only if something in the calling code actually catches and handles it instead of letting the whole request 500.
+Because the arrow structure is identical to the working loop above — `add_one` pointing back to itself — the graph doesn't hang silently, it raises a catchable `GraphRecursionError` at the configured limit. This matters more than it looks: the default `recursion_limit` is 25 — fine for a short deterministic loop like the one above, but an LLM-driven agent loop (tool call → result → maybe another tool call → ...) can legitimately need more steps, or can spiral if the model keeps re-requesting a failing tool. `GraphRecursionError` is a real, catchable exception, not a silent infinite hang — but only if something in the calling code actually catches and handles it instead of letting the whole request 500.
 
-### Summary example
-The exact diamond-shaped router from question 1's visual reappears in question 2 with one bug: it never returns `"done"`. Because the arrow structure is identical — `add_one` pointing back to itself — the graph doesn't hang silently, it raises a catchable `GraphRecursionError` at the configured limit, which is precisely why tracing the arrows (per the visual's advice) rather than re-reading Python control flow is the fastest way to find a router that's missing its exit condition.
+<details>
+<summary><strong>Self-check — answer before revealing</strong></summary>
+
+1. What does a router function passed to `add_conditional_edges` return — a node name, or something else?
+2. Why is a loop not a "special construct" in LangGraph?
+3. What's the default `recursion_limit`, and what exception fires when it's hit?
+4. If `should_continue_forever` never returns `"done"`, does the graph hang forever?
+5. Why does decoupling the router's label from the node-name mapping make the router function more reusable?
+
+**Answers**
+1. A label string (like `"loop"` or `"done"`) — a separate dict passed to `add_conditional_edges` maps that label to the actual node name to go to next.
+2. It's just a node whose router sometimes points back to that same node — `"loop": "add_one"` is an ordinary edge in the mapping dict, not a distinct language feature.
+3. The default is 25; hitting it raises a catchable `GraphRecursionError`, not a silent infinite hang.
+4. No — it raises `GraphRecursionError` once `recursion_limit` is reached, as long as the calling code catches it rather than letting the request fail with an uncaught exception.
+5. Because the router's logic ("which branch to take") never references actual node names — the same router function can be reused across different graphs where nodes happen to be named differently, since the label-to-node mapping lives separately.
+</details>
+
+> **Recap**
+> `add_conditional_edges` is the diamond in an otherwise linear boxes-and-arrows graph: a router returns a label, a dict maps that label to a node. A loop is just a router pointing back at its own node — nothing special. If the router never returns its exit label, the graph raises a catchable `GraphRecursionError` at `recursion_limit` (default 25) rather than hanging silently, so tracing the arrows on paper is the fastest way to find a missing exit condition.
 
 ---
 
@@ -141,7 +207,14 @@ The exact diamond-shaped router from question 1's visual reappears in question 2
 
 ## Cluster 3 — Memory: Persisting State Across Separate Calls
 
-### 1. Given a single `.invoke()` already accumulates messages within itself (Cluster 1), how do you persist that state ACROSS separate `.invoke()` calls entirely?
+> **TL;DR**
+> - A single `.invoke()` already accumulates messages within itself (Cluster 1) — a `checkpointer=` at compile time plus a stable `thread_id` in `config` is what persists that state *across* separate `.invoke()` calls.
+> - Different `thread_id`s get completely isolated histories — same mechanism LangChain 1.x's deprecation warning points at (`thread_id` is the LangGraph equivalent of `RunnableWithMessageHistory`'s `session_id`).
+> - `MemorySaver` is in-process only. Restart the Python process and every thread's history is gone, silently — `SqliteSaver`/`PostgresSaver` are the real production equivalents, same interface.
+
+### Persisting state across calls, not just within one
+Reusing the `ChatState` graph from Cluster 1, compiling with a checkpointer is what turns "remembers within one `.invoke()`" into "remembers across many separate calls":
+
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -156,10 +229,51 @@ cfg2 = {"configurable": {"thread_id": "conv-2"}}          # DIFFERENT thread_id
 r2 = app.invoke({"messages": [HumanMessage("What's my name?")]}, config=cfg2)
 print(r2["messages"][-1].content)          # has no idea -- separate thread, separate history
 ```
-**Verified: this is the exact mechanism LangChain 1.x's deprecation warning points to** (`RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead`) — `thread_id` is LangGraph's equivalent of the `session_id` from `RunnableWithMessageHistory`. **The pitfall that matters most in practice:** `MemorySaver` is in-process memory only — restart the Python process and every thread's history is gone, with no error, the next call just starts a fresh conversation silently. `SqliteSaver`/`PostgresSaver` (same interface, real persistence) are the production equivalents — `MemorySaver` is for local dev/testing only, the same way `InMemoryVectorStore` (from the LangChain doc) is.
+This is the exact mechanism LangChain 1.x's deprecation warning points to (`RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead`) — `thread_id` is LangGraph's equivalent of the `session_id` from `RunnableWithMessageHistory`.
 
-### Summary example
-`thread_id="conv-1"` (question 1) accumulates "My name is Gowtham" and correctly recalls it on the next call, while `thread_id="conv-2"` gets a completely fresh, empty history — the same isolation guarantee `session_id` gave `RunnableWithMessageHistory` in `langchain-practice.md`, just implemented via a `checkpointer=` argument at compile time instead of a wrapper around the chain. The one thing that guarantee DOESN'T cover: restart the Python process, and every `thread_id`'s history is gone with `MemorySaver`, silently — a genuinely different failure mode than picking the wrong `thread_id`.
+The pitfall that matters most in practice: `MemorySaver` is in-process memory only — restart the Python process and every thread's history is gone, with no error; the next call just starts a fresh conversation silently. `SqliteSaver`/`PostgresSaver` (same interface, real persistence) are the production equivalents — `MemorySaver` is for local dev/testing only, the same way `InMemoryVectorStore` (from the LangChain doc) is.
+
+The checkpointing flow, end to end:
+
+```
+  compile(checkpointer=MemorySaver())
+              │
+  ┌───────────┴────────────────────────────────────────┐
+  │                                                      │
+  ▼                                                      ▼
+thread_id="conv-1"                                thread_id="conv-2"
+  │                                                      │
+  invoke: "My name is Gowtham."                          │
+  │  saved to checkpoint store, keyed by thread_id        │
+  ▼                                                      ▼
+  invoke: "What's my name?"                        invoke: "What's my name?"
+  │  loads conv-1's saved history first                    │  loads conv-2's history (EMPTY)
+  ▼                                                      ▼
+  "Your name is Gowtham."                           "I don't know your name"
+  (remembered)                                       (isolated -- never saw conv-1)
+
+  ── process restart ──▶  MemorySaver's dict is gone. Both thread_ids start from empty, silently.
+```
+
+<details>
+<summary><strong>Self-check — answer before revealing</strong></summary>
+
+1. What two things does a graph need before it can remember across separate `.invoke()` calls?
+2. Why does `thread_id="conv-2"` get a completely fresh history instead of seeing `"conv-1"`'s conversation?
+3. What LangChain 1.x deprecation warning does this mechanism directly answer?
+4. What happens to `MemorySaver`'s saved histories when the Python process restarts, and does it raise an error?
+5. What's the production-grade replacement for `MemorySaver`, and how much code changes when swapping it in?
+
+**Answers**
+1. A `checkpointer=` (e.g. `MemorySaver()`) passed at `.compile()` time, and a stable `thread_id` passed in `config={"configurable": {"thread_id": ...}}` on every call.
+2. Each `thread_id` is a separate key in the checkpoint store — the checkpointer looks up saved state by that key, so a different `thread_id` simply has nothing saved under it yet.
+3. `RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead` — `thread_id` here is the direct equivalent of that class's `session_id`.
+4. Every thread's history is gone, with zero error signal — the next call just starts a fresh conversation silently, since `MemorySaver` is just an in-process Python dict.
+5. `SqliteSaver` or a Postgres-backed checkpointer — swapping it in requires no other code changes, since they share the same `BaseCheckpointSaver` interface as `MemorySaver`.
+</details>
+
+> **Recap**
+> `checkpointer=MemorySaver()` at compile time plus a stable `thread_id` in `config` is what persists a graph's state across separate `.invoke()` calls — different `thread_id`s stay fully isolated. It's the direct LangGraph equivalent of `RunnableWithMessageHistory`'s `session_id`, but `MemorySaver` itself is dev-only: a process restart silently wipes every thread's history, which is exactly what `SqliteSaver`/`PostgresSaver` fix in production.
 
 ---
 
@@ -167,7 +281,15 @@ print(r2["messages"][-1].content)          # has no idea -- separate thread, sep
 
 ## Cluster 4 — Building an Agent, and Watching It Think Step by Step
 
-### 1. Given a manual tool-execution loop was covered by hand in `langchain-practice.md`, how do you get the SAME behavior without hand-rolling it?
+> **TL;DR**
+> - `create_agent(llm, tools=[...])` gives you the same request → execute → respond loop hand-rolled manually in `langchain-practice.md`, without writing the loop yourself.
+> - Watch for the name: `langgraph.prebuilt.create_react_agent` is deprecated as of LangGraph v1.0 — the current import is `from langchain.agents import create_agent`.
+> - Under the hood, `create_agent` compiles to the exact conditional-edge loop from Cluster 2 — request a tool, route to a tool-execution node, repeat until the model stops requesting tools.
+> - `.stream(stream_mode="updates")` surfaces each of those hidden internal steps individually, instead of waiting for the final answer.
+
+### Building the agent without hand-rolling the loop
+`langchain-practice.md` walked through the tool-calling loop by hand once. `create_agent` is that same behavior, pre-built:
+
 ```python
 from langchain.agents import create_agent      # NOT langgraph.prebuilt.create_react_agent -- see note below
 from langchain_core.tools import tool
@@ -183,9 +305,25 @@ agent = create_agent(llm, tools=[exam_day_countdown])
 result = agent.invoke({"messages": [("human", "How many days until 2026-07-13?")]})
 print(result["messages"][-1].content)
 ```
-**Verified the hard way, and this is a real, current gotcha:** `langgraph.prebuilt.create_react_agent` — the function name in essentially every LangGraph tutorial and blog post up to this point — still runs, but prints `LangGraphDeprecatedSinceV10: create_react_agent has been moved to langchain.agents. Please update your import to from langchain.agents import create_agent. Deprecated in LangGraph V1.0 to be removed in V2.0.` The prebuilt ReAct-agent constructor moved from the `langgraph` package to the `langchain` package as of LangGraph v1.0 — `create_agent` (new name, new package) is the non-deprecated path. If a snippet imports `create_react_agent` from `langgraph.prebuilt`, it's targeting pre-1.0 LangGraph. Under the hood, `create_agent` compiles to exactly the kind of conditional-edge loop built by hand in Cluster 2 — request a tool, route back to a tool-execution node, repeat until the model stops requesting tools.
+This is a real, current gotcha, verified the hard way: `langgraph.prebuilt.create_react_agent` — the function name in essentially every LangGraph tutorial and blog post up to this point — still runs, but prints `LangGraphDeprecatedSinceV10: create_react_agent has been moved to langchain.agents. Please update your import to from langchain.agents import create_agent. Deprecated in LangGraph V1.0 to be removed in V2.0.` The prebuilt ReAct-agent constructor moved from the `langgraph` package to the `langchain` package as of LangGraph v1.0 — `create_agent` (new name, new package) is the non-deprecated path. If a snippet imports `create_react_agent` from `langgraph.prebuilt`, it's targeting pre-1.0 LangGraph.
 
-### 2. Given `create_agent` hides its internal graph structure, how do you see what's happening at each INTERMEDIATE step, not just the final answer?
+Under the hood, `create_agent` compiles to exactly the kind of conditional-edge loop built by hand in Cluster 2:
+
+```
+   ┌──────────────────────────────────────────┐
+   │                                            │
+   ▼                                            │
+ [ model node ]  ──requested a tool?──▶ [ tool-execution node ] ──┘
+   │       yes: route to tool node               (runs the tool,
+   │       no: route to END                        appends result)
+   ▼
+  END (final answer)
+```
+Request a tool, route back to a tool-execution node, repeat until the model stops requesting tools — the same shape as the manual `while`-style loop in `langchain-practice.md`, just wrapped behind one `create_agent(...)` call.
+
+### Watching the hidden steps fire
+`create_agent` hides that internal graph structure by default — `.invoke()` only returns the final answer. To see each intermediate step, swap in `.stream()` with the right mode:
+
 ```python
 class PipelineState(TypedDict):
     question: str
@@ -211,30 +349,47 @@ for step in app3.stream({"question": "What is attention, one sentence?"}, stream
 # dict_keys(['draft'])  {'draft': '...'}
 # dict_keys(['polish']) {'answer': '...'}
 ```
-`stream_mode="updates"` specifically: LangGraph's `.stream()` supports several modes — `"values"` (the full accumulated state after every node), `"updates"` (just what each node returned, keyed by node name — used above), and `"messages"` (token-level streaming from inside a node, for chat UIs). Picking the wrong mode is a common confusion: `"values"` re-sends the *entire* state on every step (verbose, but simple), `"updates"` shows exactly what changed (better for a progress UI showing "now running node X"), and neither one gives you token-by-token text without `"messages"` mode or per-node `.stream()` calls on the underlying LLM. The same `create_agent` from question 1, run with `.stream(..., stream_mode="updates")` instead of `.invoke()`, would show exactly which tool-execution step is running at any moment — useful for the same reason a progress UI is useful anywhere else in this hub.
+`stream_mode="updates"` specifically: LangGraph's `.stream()` supports several modes — `"values"` (the full accumulated state after every node), `"updates"` (just what each node returned, keyed by node name — used above), and `"messages"` (token-level streaming from inside a node, for chat UIs). Picking the wrong mode is a common confusion: `"values"` re-sends the *entire* state on every step (verbose, but simple), `"updates"` shows exactly what changed (better for a progress UI showing "now running node X"), and neither one gives token-by-token text without `"messages"` mode or per-node `.stream()` calls on the underlying LLM. The same `create_agent` above, run with `.stream(..., stream_mode="updates")` instead of `.invoke()`, would show exactly which tool-execution step is running at any moment — useful for the same reason a progress UI is useful anywhere else in this hub.
 
-### Summary example
-A `create_agent` agent (question 1) built with `exam_day_countdown` internally compiles to the request → route → execute → respond loop from Cluster 2, and calling it with `.stream(stream_mode="updates")` (question 2) instead of `.invoke()` surfaces each of those internal steps individually — the tool-call request, the tool's execution, and the final response — the exact same "watch the arrows fire one at a time" instinct the Cluster 2 visual encourages, just applied to a prebuilt agent's hidden graph instead of a hand-drawn one.
+<details>
+<summary><strong>Self-check — answer before revealing</strong></summary>
+
+1. What's the current, non-deprecated way to import the prebuilt ReAct-agent constructor, and what package did it move from?
+2. What does `create_agent` compile to internally, structurally?
+3. What are the three `stream_mode` options, and which one shows only what changed per step?
+4. If a snippet online imports `create_react_agent` from `langgraph.prebuilt`, what does that tell you about its vintage?
+5. Why doesn't `stream_mode="updates"` alone give you token-by-token text?
+
+**Answers**
+1. `from langchain.agents import create_agent` — it moved from the `langgraph` package (`langgraph.prebuilt.create_react_agent`, now deprecated) to the `langchain` package as of LangGraph v1.0.
+2. The same conditional-edge loop built by hand in Cluster 2 — a model node that requests a tool, routing to a tool-execution node, looping back until the model stops requesting tools.
+3. `"values"` (full accumulated state after every node), `"updates"` (just what changed, keyed by node name), and `"messages"` (token-level streaming from inside a node). `"updates"` is the one that shows only what changed.
+4. It's targeting pre-1.0 LangGraph — that import path predates the v1.0 move to `langchain.agents`, even though it still runs (with a deprecation warning) as of `1.2.9`.
+5. `"updates"` shows what each *node* returned as a whole, not intermediate tokens from inside the LLM call itself — token-by-token text needs `"messages"` mode or a per-node `.stream()` call on the underlying LLM.
+</details>
+
+> **Recap**
+> `create_agent(llm, tools=[...])` is the manual tool-calling loop, pre-built — internally it's the same conditional-edge request → execute → respond loop from Cluster 2. Import it from `langchain.agents`, not `langgraph.prebuilt` (deprecated since v1.0). `.stream(stream_mode="updates")` surfaces each hidden internal step instead of only the final answer, which is the difference between "updates" (what changed) and "values" (the whole state, resent every time).
 
 ---
 
-## Common issues & pitfalls (in detail)
+## Where People Trip Up (in Detail)
 
-**A missing `Annotated[list, add_messages]` silently deletes history instead of erroring.** Covered above, but worth restating as the single highest-frequency LangGraph bug: `messages: list` (no reducer) means every node's return overwrites the whole list. There's no exception, no warning — the agent just appears to have amnesia after the second turn. If a chat agent "forgets" mid-conversation, check the state schema's reducer before anything else.
+- **Chat agent "forgetting" everything after the second turn?** Covered above, but worth restating as the single highest-frequency LangGraph bug: `messages: list` (no reducer) means every node's return overwrites the whole list. There's no exception, no warning — the agent just appears to have amnesia. Check the state schema's reducer before anything else.
 
-**`create_react_agent` vs `create_agent` — package and name both changed in v1.0, verified above.** Any tutorial, blog post, or cached knowledge referencing `from langgraph.prebuilt import create_react_agent` predates LangGraph 1.0. It still works (with a `LangGraphDeprecatedSinceV10` warning) as of `1.2.9`, but is marked for removal in 2.0 — new code should use `from langchain.agents import create_agent`.
+- **Following a tutorial that imports `create_react_agent`?** Both the package and the name changed in v1.0, verified above. Any tutorial, blog post, or cached knowledge referencing `from langgraph.prebuilt import create_react_agent` predates LangGraph 1.0. It still works (with a `LangGraphDeprecatedSinceV10` warning) as of `1.2.9`, but is marked for removal in 2.0 — new code should use `from langchain.agents import create_agent`.
 
-**`MemorySaver` is not real persistence.** It's an in-process Python dict under the hood — a process restart, a redeploy, or even just running two separate Python processes (e.g., a dev server with auto-reload) loses every thread's history with zero error signal. For anything that needs to survive a restart, `SqliteSaver` (same `checkpointer=` interface, one extra import) or a Postgres-backed checkpointer is the real fix — swapping `MemorySaver()` for `SqliteSaver.from_conn_string(...)` requires no other code changes because they share the same `BaseCheckpointSaver` interface.
+- **Assuming `MemorySaver` survives a restart?** It's an in-process Python dict under the hood — a process restart, a redeploy, or even just running two separate Python processes (e.g., a dev server with auto-reload) loses every thread's history with zero error signal. For anything that needs to survive a restart, `SqliteSaver` (same `checkpointer=` interface, one extra import) or a Postgres-backed checkpointer is the real fix — swapping `MemorySaver()` for `SqliteSaver.from_conn_string(...)` requires no other code changes because they share the same `BaseCheckpointSaver` interface.
 
-**Forgetting `thread_id` turns every call into a brand-new conversation.** Even with a checkpointer attached, if `config={"configurable": {"thread_id": ...}}` is omitted (or a new random ID is generated per call instead of a stable per-user/per-session one), the graph has nothing to look up — it behaves exactly as if no checkpointer were configured at all, silently, with no error.
+- **Every call starting a brand-new conversation despite a checkpointer being attached?** Even with a checkpointer attached, if `config={"configurable": {"thread_id": ...}}` is omitted (or a new random ID is generated per call instead of a stable per-user/per-session one), the graph has nothing to look up — it behaves exactly as if no checkpointer were configured at all, silently, with no error.
 
-**Recursion limit is a real safety net, not decoration — it fires more often than expected.** An LLM-driven conditional edge (route based on whether the model wants to call another tool) can loop far more than a human would predict once tool failures or ambiguous model outputs are in the mix. The default of 25 is a reasonable starting point, but the fix for "hit the limit" is almost never just "raise the number" — a graph that needs 200 steps to answer a question usually has a routing bug (a condition that should route to `END` more often than it does), and raising the limit just delays the same failure into a longer, more expensive one.
+- **Hit the recursion limit and thinking "just raise the number"?** An LLM-driven conditional edge (route based on whether the model wants to call another tool) can loop far more than a human would predict once tool failures or ambiguous model outputs are in the mix. The default of 25 is a reasonable starting point, but the fix for "hit the limit" is almost never just raising it — a graph that needs 200 steps to answer a question usually has a routing bug (a condition that should route to `END` more often than it does), and raising the limit just delays the same failure into a longer, more expensive one.
 
-**Node return-value shape mismatches fail differently depending on what's wrong.** A node returning a key not declared in the `TypedDict` state schema is *not* caught by Python at runtime (`TypedDict` provides no runtime validation — it's a static-analysis-only type hint) — the extra key is silently added to the state dict and just... exists, unused by anything expecting it, which reads as "it worked" until something downstream reads `state["typo_key"]` and gets a `KeyError` far from the actual bug. Reach for a real schema-validation layer (Pydantic `BaseModel` as the state type, which LangGraph also supports) if this class of bug shows up often — it trades a small amount of ceremony for actual runtime errors at the point of the mistake.
+- **Got a `KeyError` far from where the actual bug is?** A node returning a key not declared in the `TypedDict` state schema is *not* caught by Python at runtime (`TypedDict` provides no runtime validation — it's a static-analysis-only type hint) — the extra key is silently added to the state dict and just exists, unused by anything expecting it, which reads as "it worked" until something downstream reads `state["typo_key"]` and gets a `KeyError` far from the actual bug. Reach for a real schema-validation layer (Pydantic `BaseModel` as the state type, which LangGraph also supports) if this class of bug shows up often — it trades a small amount of ceremony for actual runtime errors at the point of the mistake.
 
-**Sync `.invoke()` inside an async graph node blocks the whole graph's event loop**, same underlying issue as the LangChain doc's async pitfall — LangGraph graphs can run nodes concurrently (e.g., via `Send` for map-style fan-out, or independent branches), and a single node doing a blocking synchronous call inside an otherwise-async graph serializes work that should have been parallel. Use `ainvoke`/async node functions consistently within a graph that's driven via `.ainvoke()`/`.astream()`.
+- **Graph slower than expected even though nodes should run concurrently?** Sync `.invoke()` inside an async graph node blocks the whole graph's event loop — same underlying issue as the LangChain doc's async pitfall. LangGraph graphs can run nodes concurrently (e.g., via `Send` for map-style fan-out, or independent branches), and a single node doing a blocking synchronous call inside an otherwise-async graph serializes work that should have been parallel. Use `ainvoke`/async node functions consistently within a graph that's driven via `.ainvoke()`/`.astream()`.
 
-**Version churn is worse here than in plain LangChain.** Between the `langgraph==0.0.x`/`0.1.x` era and `1.2.9` (installed here), the prebuilt agent constructor moved packages, the recommended memory pattern solidified around checkpointers, and various graph-construction helpers were renamed. Given this project's global environment doesn't even have `langgraph` installed at all yet (checked directly: `ModuleNotFoundError` before this session's `.venv-langchain` was created), there's no legacy-version baggage here — but *any* LangGraph code copied from search results should be treated as version-suspect until checked against the actually-installed version (`pip show langgraph`), the same discipline documented for LangChain itself.
+- **Copying LangGraph code from a search result?** Version churn is worse here than in plain LangChain. Between the `langgraph==0.0.x`/`0.1.x` era and `1.2.9` (installed here), the prebuilt agent constructor moved packages, the recommended memory pattern solidified around checkpointers, and various graph-construction helpers were renamed. Given this project's global environment doesn't even have `langgraph` installed at all yet (checked directly: `ModuleNotFoundError` before this session's `.venv-langchain` was created), there's no legacy-version baggage here — but *any* LangGraph code copied from search results should be treated as version-suspect until checked against the actually-installed version (`pip show langgraph`), the same discipline documented for LangChain itself.
 
 ---
 

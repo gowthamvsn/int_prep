@@ -59,7 +59,7 @@ Exact recovery again. (With more years of data, you'd average all "Q1"s together
 
 A series is **stationary** if its mean, variance, and autocorrelation structure stay constant over time — no trend, no growing/shrinking spread, no systematic seasonal swing. Classical forecasting models (ARIMA and its relatives) are built on the mathematical assumption that the underlying process doesn't change shape over time; feed one a series with a rising trend and its forecasts will systematically miss, because it has no built-in concept of "and it keeps rising."
 
-**Our raw series is NOT stationary** — its mean is clearly rising (roughly 110 in the first half, roughly 130 in the second). The formal check is the **Augmented Dickey-Fuller (ADF) test**: null hypothesis = "this series has a unit root" (is non-stationary); a small p-value lets you reject that and treat the series as stationary. In practice: `statsmodels.tsa.stattools.adfuller(series)`.
+**Our raw series is NOT stationary** — its mean is clearly rising (roughly 110 in the first half, roughly 130 in the second). The formal check is the **Augmented Dickey-Fuller (ADF) test**: null hypothesis = "this series has a unit root" — "unit root" being the technical name for the wandering, trend-carrying behavior that makes a series non-stationary; you don't need the algebra behind the term, just that the null means *non-stationary*. A small p-value lets you reject that and treat the series as stationary. (The hypothesis-testing mechanics — null hypothesis, p-value, rejection — are `stats-scipy-practice.md`'s whole subject.) In practice: `statsmodels.tsa.stattools.adfuller(series)`.
 
 **The fix is differencing** — instead of modeling the raw values, model the change from one step to the next.
 
@@ -125,8 +125,8 @@ Notice the smoothed value visibly lags behind the raw series' actual swings — 
 
 **ARIMA(p, d, q)** — three separate knobs, each solving one problem already covered above, combined into one model:
 - **`d`** (Integrated) — how many times to difference the series to make it stationary. Comes directly from the stationarity section: 0 if already stationary, 1 if first-differencing fixed it, etc.
-- **`p`** (AutoRegressive) — how many of its own past values the model regresses on. Read off the PACF cutoff.
-- **`q`** (Moving Average) — how many past forecast errors the model regresses on. Read off the ACF cutoff.
+- **`p`** (AutoRegressive) — how many of its own past values the model regresses on (uses as inputs in a linear formula, like features in a regression). Read off the PACF cutoff.
+- **`q`** (Moving Average) — how many past forecast *errors* the model regresses on — "how wrong was I recently" becomes an input to the next prediction. Read off the ACF cutoff.
 
 So `ARIMA(1,1,1)` means: difference once to remove trend, then predict using 1 lag of the (differenced) series and 1 lag of past forecast error. `auto_arima` (the `pmdarima` package) automates this search rather than reading ACF/PACF plots by eye — worth knowing it exists, but understanding what it's searching *over* is what the ACF/PACF section above is for.
 
