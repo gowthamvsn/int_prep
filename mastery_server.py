@@ -21,6 +21,7 @@ import markdown as md
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
 
+import git_sim
 from mastery_curriculum import TOPICS, TOPICS_BY_ID, TIERS, TIERS_BY_ID
 
 load_dotenv()
@@ -191,9 +192,10 @@ def _extract_bank2(html_text: str):
         return []
     out = []
     for item in data:
+        parts = [item.get("q", "")] + item.get("o", []) + [item.get("e", "")]
         out.append({
             "label": f"Community bank (110-Q) \u2014 {item.get('id', '')} \u00b7 {item.get('d', '')}",
-            "text": " ".join([item.get("q", "")] + item.get("o", []) + [item.get("e", "")]),
+            "text": " ".join(p for p in parts if isinstance(p, str)),
         })
     return out
 
@@ -266,6 +268,7 @@ def render_nav() -> str:
         'font-family:var(--mono);font-size:.8rem;flex-wrap:wrap">'
         '<a href="/" style="text-decoration:none;font-weight:700;color:var(--accent-hi)">&#127942; Mastery Hub</a>'
         '<a href="/map" style="text-decoration:none;color:var(--muted)">Knowledge Map</a>'
+        '<a href="/git-sim" style="text-decoration:none;color:var(--muted)">Git Simulator</a>'
         f"{local_link}"
         '<form method="get" action="/search" style="margin-left:auto;display:flex;gap:.4rem">'
         '<input type="text" name="q" placeholder="&#128269; Search the hub…" '
@@ -739,6 +742,365 @@ def history():
     ).fetchall()
     conn.close()
     return jsonify({"items": [dict(r) for r in rows]})
+
+
+# ------------------------------------------------------------- git sim ----
+
+def _git_sim_box_id() -> str:
+    if "git_sim_box" not in session:
+        session.permanent = True
+        session["git_sim_box"] = secrets.token_hex(8)
+    return session["git_sim_box"]
+
+
+GIT_SIM_CSS = """
+<style>
+.wrap{max-width:min(96vw,80rem)}
+.gs-scn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.7rem;margin:1rem 0 1.4rem}
+.gs-scn-card{background:var(--panel);border:1px solid var(--line);border-radius:.5rem;padding:.8rem .9rem;cursor:pointer;text-align:left;font-family:inherit}
+.gs-scn-card:hover{border-color:var(--accent)}
+.gs-scn-card.active{border-color:var(--accent);background:var(--accent-soft)}
+.gs-scn-card h4{margin:0 0 .3rem;font-family:var(--display);font-size:.95rem}
+.gs-scn-card p{margin:0;font-size:.8rem;color:var(--muted)}
+.gs-objective{background:var(--panel2);border-left:3px solid var(--accent);border-radius:.35rem;padding:.7rem 1rem;margin:0 0 1rem;font-size:.92rem}
+.gs-objective .gs-hint{font-family:var(--mono);font-size:.76rem;color:var(--muted);margin-top:.4rem}
+.gs-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:1rem;align-items:start}
+@media (max-width:56rem){.gs-grid{grid-template-columns:1fr}}
+.gs-panel{background:var(--panel);border:1px solid var(--line);border-radius:.5rem;padding:.8rem .9rem;margin-bottom:1rem}
+.gs-panel h4{margin:0 0 .5rem;font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent-hi)}
+#gsTerm{background:var(--code-bg);border:1px solid var(--line);border-radius:.4rem;padding:.6rem .7rem;height:20rem;overflow-y:auto;font-family:var(--mono);font-size:.8rem;white-space:pre-wrap;line-height:1.5}
+#gsTerm .gsCmd{color:var(--accent-hi);font-weight:700}
+#gsTerm .gsErr{color:var(--bad)}
+#gsTerm .gsSys{color:var(--muted);font-style:italic}
+.gs-inputrow{display:flex;gap:.5rem;margin-top:.5rem}
+.gs-inputrow span{font-family:var(--mono);color:var(--muted);align-self:center}
+#gsCmdInput{flex:1;font-family:var(--mono);font-size:.85rem;border:1px solid var(--line);border-radius:.35rem;padding:.45rem .6rem;background:var(--bg);color:var(--ink)}
+.gs-graph{font-family:var(--mono);font-size:.74rem;background:var(--code-bg);border-radius:.35rem;padding:.6rem .7rem;overflow-x:auto;white-space:pre;line-height:1.5;max-height:11rem;overflow-y:auto}
+#gsFile{width:100%;box-sizing:border-box;font-family:var(--mono);font-size:.82rem;border:1px solid var(--line);border-radius:.35rem;padding:.5rem .6rem;background:var(--bg);color:var(--ink);min-height:7rem;resize:vertical}
+.gs-btnrow{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem}
+.gs-teammate-btn{font-family:var(--mono);font-size:.78rem;border:1px dashed var(--warn);background:transparent;color:var(--warn);border-radius:.35rem;padding:.45rem .7rem;cursor:pointer}
+.gs-teammate-btn:hover{background:color-mix(in srgb,var(--warn) 12%,var(--panel))}
+.gs-result{margin-top:.6rem;padding:.6rem .8rem;border-radius:.4rem;font-size:.87rem;display:none}
+.gs-result.pass{display:block;background:color-mix(in srgb,var(--ok) 14%,var(--panel));border-left:3px solid var(--ok)}
+.gs-result.fail{display:block;background:color-mix(in srgb,var(--bad) 12%,var(--panel));border-left:3px solid var(--bad)}
+.gs-status{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.4rem}
+</style>
+"""
+
+
+def _git_sim_render_scenarios(active_id):
+    cards = ""
+    for s in git_sim.SCENARIOS:
+        cls = "gs-scn-card active" if s["id"] == active_id else "gs-scn-card"
+        cards += (
+            f'<button type="button" class="{cls}" data-gs-start="{s["id"]}">'
+            f'<h4>{xml_escape(s["title"])}</h4><p>{xml_escape(s["objective"][:110])}{"…" if len(s["objective"]) > 110 else ""}</p>'
+            f"</button>"
+        )
+    return f'<div class="gs-scn-grid">{cards}</div>'
+
+
+@app.route("/git-sim")
+def git_sim_page():
+    box_id = _git_sim_box_id()
+    state = git_sim.read_state(box_id) if git_sim.exists(box_id) else {"scenario": None, "teammate_log": []}
+    active_id = state.get("scenario")
+
+    scenarios_json = json.dumps([
+        {"id": s["id"], "title": s["title"], "kind": s["kind"], "objective": s["objective"],
+         "hint": s.get("hint", ""), "teammate_actions": [{"id": a["id"], "label": a["label"]} for a in s["teammate_actions"]]}
+        for s in git_sim.SCENARIOS
+    ])
+
+    body = (
+        f"{render_nav()}{GIT_SIM_CSS}"
+        "<h1>Git Simulator</h1>"
+        '<p class="lede">A real sandboxed git repo, a scripted teammate, and a terminal that runs actual '
+        '<code>git</code> commands against it — not a fake simulation. Pick a scenario below; each one '
+        "resets to a clean bare \"remote\" repo plus your own clone. See "
+        '<a href="/topic/git-scenarios">Git Commands for Real Scenarios</a> for the write-up these scenarios pair with.</p>'
+        f'{_git_sim_render_scenarios(active_id)}'
+        '<div id="gsObjective" class="gs-objective" style="display:none">'
+        '<strong id="gsObjTitle"></strong><div id="gsObjText"></div><div class="gs-hint" id="gsObjHint"></div>'
+        "</div>"
+        '<div id="gsMain" style="display:none">'
+        '<div class="gs-grid">'
+        '<div>'
+        '<div class="gs-panel"><h4>Terminal — your clone</h4>'
+        '<div id="gsTerm"></div>'
+        '<div class="gs-inputrow"><span>$</span><input id="gsCmdInput" type="text" placeholder="git status" autocomplete="off">'
+        '<button class="btn" type="button" id="gsRunBtn">Run</button></div>'
+        '</div>'
+        '<div class="gs-panel" id="gsTeammatePanel" style="display:none"><h4>Scripted teammate</h4>'
+        '<div class="gs-btnrow" id="gsTeammateBtns"></div>'
+        '</div>'
+        '<div class="gs-panel" id="gsComparePanel" style="display:none"><h4>Merge strategy</h4>'
+        '<div class="gs-btnrow">'
+        '<button class="btn ghost" type="button" data-gs-compare="merge">Merge commit</button>'
+        '<button class="btn ghost" type="button" data-gs-compare="squash">Squash merge</button>'
+        '<button class="btn ghost" type="button" data-gs-compare="rebase">Rebase and merge</button>'
+        '</div><div class="gs-graph" id="gsCompareOut" style="margin-top:.6rem"></div>'
+        '</div>'
+        '<div class="gs-panel"><h4>Check completion</h4>'
+        '<button class="btn" type="button" id="gsCheckBtn">Check</button>'
+        '<div class="gs-result" id="gsResult"></div>'
+        '</div>'
+        "</div>"
+        '<div>'
+        '<div class="gs-panel"><h4>config.py — your working copy</h4>'
+        '<textarea id="gsFile" spellcheck="false"></textarea>'
+        '<div class="gs-btnrow"><button class="btn" type="button" id="gsSaveBtn">Save file</button>'
+        '<button class="btn ghost" type="button" id="gsReloadBtn">Reload from disk</button></div>'
+        '<div class="gs-status" id="gsStatus"></div>'
+        '</div>'
+        '<div class="gs-panel"><h4>Commit graph — you</h4><div class="gs-graph" id="gsGraphYou"></div></div>'
+        '<div class="gs-panel"><h4>Commit graph — origin (remote)</h4><div class="gs-graph" id="gsGraphRemote"></div></div>'
+        '<div class="gs-panel"><button class="btn ghost" type="button" id="gsResetBtn">Reset this scenario</button></div>'
+        "</div>"
+        "</div>"
+        "</div>"
+        f'<script>const GS_SCENARIOS={scenarios_json};const GS_ACTIVE={json.dumps(active_id)};</script>'
+        f"{GIT_SIM_JS}"
+    )
+    return render_doc_page("Git Simulator", body, "mastery-hub")
+
+
+@app.route("/api/git-sim/state")
+def git_sim_state():
+    box_id = _git_sim_box_id()
+    state = git_sim.read_state(box_id) if git_sim.exists(box_id) else {"scenario": None}
+    graph = git_sim.get_graph(box_id) if git_sim.exists(box_id) else {"you": "", "remote": "", "status": "", "config": ""}
+    return jsonify({"scenario": state.get("scenario"), "graph": graph})
+
+
+@app.route("/api/git-sim/start", methods=["POST"])
+def git_sim_start():
+    box_id = _git_sim_box_id()
+    data = request.get_json(force=True, silent=True) or {}
+    scenario_id = data.get("scenario_id")
+    s = git_sim.SCENARIOS_BY_ID.get(scenario_id)
+    if not s:
+        return jsonify({"error": "unknown scenario"}), 400
+    s["setup"](box_id)
+    st = git_sim.read_state(box_id)
+    st["scenario"] = scenario_id
+    st["teammate_log"] = st.get("teammate_log", [])
+    git_sim.write_state(box_id, st)
+    return jsonify({"graph": git_sim.get_graph(box_id)})
+
+
+@app.route("/api/git-sim/reset", methods=["POST"])
+def git_sim_reset():
+    box_id = _git_sim_box_id()
+    st = git_sim.read_state(box_id) if git_sim.exists(box_id) else {}
+    scenario_id = st.get("scenario")
+    s = git_sim.SCENARIOS_BY_ID.get(scenario_id)
+    if s:
+        s["setup"](box_id)
+        new_st = git_sim.read_state(box_id)
+        new_st["scenario"] = scenario_id
+        git_sim.write_state(box_id, new_st)
+    else:
+        git_sim.reset_sandbox(box_id)
+    return jsonify({"graph": git_sim.get_graph(box_id)})
+
+
+@app.route("/api/git-sim/run", methods=["POST"])
+def git_sim_run():
+    box_id = _git_sim_box_id()
+    data = request.get_json(force=True, silent=True) or {}
+    command = (data.get("command") or "").strip()
+    if not command:
+        return jsonify({"error": "empty command"}), 400
+    result = git_sim.run_user_command(box_id, command)
+    result["graph"] = git_sim.get_graph(box_id)
+    return jsonify(result)
+
+
+@app.route("/api/git-sim/teammate", methods=["POST"])
+def git_sim_teammate():
+    box_id = _git_sim_box_id()
+    data = request.get_json(force=True, silent=True) or {}
+    action_id = data.get("action_id")
+    st = git_sim.read_state(box_id)
+    s = git_sim.SCENARIOS_BY_ID.get(st.get("scenario"))
+    if not s:
+        return jsonify({"error": "no active scenario"}), 400
+    action = next((a for a in s["teammate_actions"] if a["id"] == action_id), None)
+    if not action:
+        return jsonify({"error": "unknown teammate action"}), 400
+    ok, output = action["fn"](box_id)
+    return jsonify({"ok": ok, "output": output, "graph": git_sim.get_graph(box_id)})
+
+
+@app.route("/api/git-sim/check", methods=["POST"])
+def git_sim_check():
+    box_id = _git_sim_box_id()
+    st = git_sim.read_state(box_id)
+    s = git_sim.SCENARIOS_BY_ID.get(st.get("scenario"))
+    if not s or not s.get("check"):
+        return jsonify({"error": "no active scenario"}), 400
+    passed, message = s["check"](box_id)
+    return jsonify({"passed": passed, "message": message})
+
+
+@app.route("/api/git-sim/file", methods=["GET", "POST"])
+def git_sim_file():
+    box_id = _git_sim_box_id()
+    if not git_sim.exists(box_id):
+        git_sim.reset_sandbox(box_id)
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        git_sim.write_file(box_id, data.get("content", ""))
+        return jsonify({"ok": True})
+    return jsonify({"content": git_sim.read_file(box_id)})
+
+
+@app.route("/api/git-sim/compare", methods=["POST"])
+def git_sim_compare():
+    box_id = _git_sim_box_id()
+    data = request.get_json(force=True, silent=True) or {}
+    strategy = data.get("strategy")
+    if strategy not in ("merge", "squash", "rebase"):
+        return jsonify({"error": "unknown strategy"}), 400
+    graph = git_sim.apply_merge_strategy(box_id, strategy)
+    st = git_sim.read_state(box_id)
+    st["scenario"] = "merge-strategies"
+    git_sim.write_state(box_id, st)
+    return jsonify({"graph": graph})
+
+
+GIT_SIM_JS = """
+<script>
+(function(){
+"use strict";
+function esc(s){return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+const term=document.getElementById("gsTerm");
+function termLine(cls,text){const d=document.createElement("div");if(cls)d.className=cls;d.textContent=text;term.appendChild(d);term.scrollTop=term.scrollHeight;}
+
+let cmdHistory=[],histIdx=-1;
+
+function scenarioById(id){return GS_SCENARIOS.find(s=>s.id===id);}
+
+function renderTeammateButtons(scn){
+  const panel=document.getElementById("gsTeammatePanel"),wrap=document.getElementById("gsTeammateBtns");
+  if(!scn||!scn.teammate_actions.length){panel.style.display="none";wrap.innerHTML="";return;}
+  panel.style.display="block";
+  wrap.innerHTML=scn.teammate_actions.map(a=>'<button type="button" class="gs-teammate-btn" data-gs-teammate="'+esc(a.id)+'">'+esc(a.label)+'</button>').join("");
+}
+
+function activateScenario(scn){
+  document.querySelectorAll("[data-gs-start]").forEach(b=>b.classList.toggle("active",b.dataset.gsStart===scn.id));
+  document.getElementById("gsObjective").style.display="block";
+  document.getElementById("gsObjTitle").textContent=scn.title;
+  document.getElementById("gsObjText").textContent=scn.objective;
+  document.getElementById("gsObjHint").innerHTML=scn.hint?("Hint: "+scn.hint):"";
+  document.getElementById("gsMain").style.display="block";
+  document.getElementById("gsComparePanel").style.display=(scn.kind==="compare")?"block":"none";
+  document.getElementById("gsCheckBtn").closest(".gs-panel").style.display=(scn.kind==="compare")?"none":"block";
+  renderTeammateButtons(scn);
+  document.getElementById("gsResult").className="gs-result";
+  term.innerHTML="";
+  termLine("gsSys","sandbox ready — type a git command below.");
+}
+
+function renderGraph(graph){
+  document.getElementById("gsGraphYou").textContent=graph.you||"(no commits)";
+  document.getElementById("gsGraphRemote").textContent=graph.remote||"(no commits)";
+  document.getElementById("gsStatus").textContent=graph.status||"";
+}
+
+async function startScenario(id){
+  const scn=scenarioById(id);if(!scn)return;
+  activateScenario(scn);
+  const res=await fetch("/api/git-sim/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({scenario_id:id})});
+  const data=await res.json();
+  renderGraph(data.graph);
+  const fres=await fetch("/api/git-sim/file");const fdata=await fres.json();
+  document.getElementById("gsFile").value=fdata.content||"";
+}
+
+async function runCommand(cmd){
+  if(!cmd)return;
+  termLine("gsCmd","$ "+cmd);
+  cmdHistory.push(cmd);histIdx=cmdHistory.length;
+  const res=await fetch("/api/git-sim/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command:cmd})});
+  const data=await res.json();
+  if(data.output)termLine(data.ok?"":"gsErr",data.output);
+  if(data.graph)renderGraph(data.graph);
+}
+
+document.getElementById("gsRunBtn").addEventListener("click",()=>{
+  const inp=document.getElementById("gsCmdInput");const cmd=inp.value.trim();inp.value="";runCommand(cmd);
+});
+document.getElementById("gsCmdInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){const inp=e.target;const cmd=inp.value.trim();inp.value="";runCommand(cmd);}
+  else if(e.key==="ArrowUp"){if(histIdx>0){histIdx--;e.target.value=cmdHistory[histIdx]||"";}e.preventDefault();}
+  else if(e.key==="ArrowDown"){if(histIdx<cmdHistory.length-1){histIdx++;e.target.value=cmdHistory[histIdx]||"";}else{histIdx=cmdHistory.length;e.target.value="";}e.preventDefault();}
+});
+
+document.getElementById("gsSaveBtn").addEventListener("click",async()=>{
+  const content=document.getElementById("gsFile").value;
+  await fetch("/api/git-sim/file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})});
+  document.getElementById("gsStatus").textContent="saved to disk (not committed yet)";
+  const res=await fetch("/api/git-sim/state");const data=await res.json();renderGraph(data.graph);
+});
+document.getElementById("gsReloadBtn").addEventListener("click",async()=>{
+  const res=await fetch("/api/git-sim/file");const data=await res.json();
+  document.getElementById("gsFile").value=data.content||"";
+});
+
+document.getElementById("gsCheckBtn").addEventListener("click",async()=>{
+  const res=await fetch("/api/git-sim/check",{method:"POST"});
+  const data=await res.json();
+  const el=document.getElementById("gsResult");
+  el.className="gs-result "+(data.passed?"pass":"fail");
+  el.textContent=data.message||data.error||"";
+});
+
+document.getElementById("gsResetBtn").addEventListener("click",async()=>{
+  const res=await fetch("/api/git-sim/reset",{method:"POST"});
+  const data=await res.json();
+  renderGraph(data.graph);
+  term.innerHTML="";termLine("gsSys","sandbox reset.");
+  const fres=await fetch("/api/git-sim/file");const fdata=await fres.json();
+  document.getElementById("gsFile").value=fdata.content||"";
+  document.getElementById("gsResult").className="gs-result";
+});
+
+document.addEventListener("click",async e=>{
+  const startBtn=e.target.closest("[data-gs-start]");
+  if(startBtn){startScenario(startBtn.dataset.gsStart);return;}
+  const tmBtn=e.target.closest("[data-gs-teammate]");
+  if(tmBtn){
+    tmBtn.disabled=true;
+    const res=await fetch("/api/git-sim/teammate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action_id:tmBtn.dataset.gsTeammate})});
+    const data=await res.json();
+    termLine("gsSys","(teammate) "+(data.output||(data.ok?"pushed.":"failed.")));
+    if(data.graph)renderGraph(data.graph);
+    tmBtn.disabled=false;
+    return;
+  }
+  const cmpBtn=e.target.closest("[data-gs-compare]");
+  if(cmpBtn){
+    const res=await fetch("/api/git-sim/compare",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({strategy:cmpBtn.dataset.gsCompare})});
+    const data=await res.json();
+    document.getElementById("gsCompareOut").textContent=data.graph||data.error||"";
+    return;
+  }
+});
+
+if(GS_ACTIVE){
+  const scn=scenarioById(GS_ACTIVE);
+  if(scn){
+    activateScenario(scn);
+    fetch("/api/git-sim/state").then(r=>r.json()).then(data=>renderGraph(data.graph));
+    fetch("/api/git-sim/file").then(r=>r.json()).then(data=>{document.getElementById("gsFile").value=data.content||"";});
+  }
+}
+})();
+</script>
+"""
 
 
 if __name__ == "__main__":

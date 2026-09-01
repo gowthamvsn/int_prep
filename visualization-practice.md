@@ -1,12 +1,14 @@
 # Data Visualization Practice — Built as a Chain, Not a List
 
-`import matplotlib.pyplot as plt, seaborn as sns` assumed. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+`import matplotlib.pyplot as plt, seaborn as sns` is assumed throughout.
+
+Each cluster is one continuous thread. Every question builds on the answer before it, and each cluster closes with a worked summary example.
 
 ---
 
 ## Cluster 1 — Which Chart, and How to Actually Build the Figure
 
-### 1. Before any how-to — which chart do you even reach for?
+### 1. Which chart do you even reach for?
 **Visual + memory hook — one question decides almost every chart choice: how many variables, and what type?**
 ```
  1 variable                2 variables                    3+ variables
@@ -23,9 +25,13 @@
                             one numeric OVER TIME:           the other option)
                               line chart, never bars
 ```
-**Remember it as "count the variables, then name their types"** — a line chart for a categorical x-axis is wrong (implies a connection between categories that doesn't exist); a scatterplot needs two genuinely numeric axes; the moment you need a 3rd variable, reach for color or small multiples first, since both stay flat and easy to read accurately.
+**Remember it as "count the variables, then name their types."**
 
-### 2. Once you know the chart type, how do you build a figure with more than one panel?
+A line chart on a categorical x-axis is wrong — it implies a connection between categories that doesn't actually exist. A scatterplot needs two genuinely numeric axes.
+
+The moment you need a 3rd variable, reach for color or small multiples first. Both stay flat and easy to read accurately.
+
+### 2. Building a figure with more than one panel
 ```python
 fig, axes = plt.subplots(1, 2, figsize=(10, 4))   # 1 row, 2 columns; axes is an ARRAY of Axes objects
 axes[0].plot([1, 2, 3], [4, 5, 6])
@@ -33,9 +39,11 @@ axes[1].scatter([1, 2, 3], [6, 5, 4])
 fig.tight_layout()      # prevents overlapping titles/labels between subplots
 plt.show()
 ```
-The object-oriented API (explicit `fig`/`ax`) is what you need the moment you have more than one subplot or need to modify a specific axes later — the pyplot "state machine" API (`plt.plot`, `plt.xlabel`, ...) implicitly acts on "whichever axes was last active," which gets confusing and error-prone with multiple subplots.
+The object-oriented API — explicit `fig`/`ax` objects — is what you need the moment you have more than one subplot, or need to modify a specific axes later.
 
-### 3. Given a figure and axes, how do you make it actually readable — labeled?
+The pyplot "state machine" API (`plt.plot`, `plt.xlabel`, ...) implicitly acts on "whichever axes was last active." That gets confusing and error-prone once you have multiple subplots.
+
+### 3. Making a chart actually readable — labels
 ```python
 fig, ax = plt.subplots()
 ax.plot(x, y)
@@ -44,67 +52,98 @@ ax.set_ylabel("Loss")
 ax.set_title("Loss vs. training step")
 ax.legend(["run A"])     # or pass label="run A" to plot() and just call ax.legend()
 ```
-A chart with no axis labels/units is frequently unusable to anyone but the person who made it five minutes ago — in an interview or a real deliverable, an unlabeled chart reads as unfinished work, not a stylistic omission.
+A chart with no axis labels or units is often unusable to anyone but the person who just made it. Five minutes later, even they might not remember what it shows.
 
-### 4. Once the chart looks right on screen, how do you save it without losing anything at the edges?
+In an interview, or in a real deliverable, an unlabeled chart reads as unfinished work — not a stylistic choice.
+
+### 4. Saving a chart without losing anything at the edges
 ```python
 fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
 fig.savefig("chart.png", dpi=150, bbox_inches="tight")
 ```
-Without `bbox_inches="tight"`, saved figures often clip axis labels or legends that sit outside the default bounding box — this one argument fixes the single most common "my saved chart cut off the label" complaint.
+Without `bbox_inches="tight"`, saved figures often clip axis labels or legends that sit outside the default bounding box.
+
+This one argument fixes the single most common complaint: "my saved chart cut off the label."
 
 ### Summary example
-Building a two-panel comparison for a report: `fig, axes = plt.subplots(1, 2, figsize=(10,4))`, each panel labeled with `set_xlabel`/`set_ylabel`/`set_title` so it stands alone if screenshotted out of context, saved with `fig.savefig("comparison.png", dpi=150, bbox_inches="tight")` so the legend on the right panel doesn't get silently clipped off in the exported file.
+Say you're building a two-panel comparison for a report.
+
+1. `fig, axes = plt.subplots(1, 2, figsize=(10,4))`.
+2. Label each panel with `set_xlabel`/`set_ylabel`/`set_title`, so it stands alone even if it gets screenshotted out of context.
+3. Save it: `fig.savefig("comparison.png", dpi=150, bbox_inches="tight")`.
+
+That last argument keeps the legend on the right panel from getting silently clipped off in the exported file.
 
 ---
 
 ## Cluster 2 — Showing a Single Distribution
 
-### 1. How do you plot a histogram, and what actually goes wrong if you pick the bin count carelessly?
+### 1. Plotting a histogram — and what goes wrong with a careless bin count
 ```python
 fig, ax = plt.subplots()
 ax.hist(data, bins=30, edgecolor="white")
 ```
-Too few bins (e.g. 5) can hide a bimodal distribution by averaging two peaks into one bar; too many (e.g. 500) makes the histogram noisy and hard to read. There's no universally correct number — always try a couple of values (or use `bins="auto"` as a reasonable Freedman-Diaconis-rule-based default) rather than accepting the first result uncritically.
+Too few bins — 5, say — can hide a bimodal distribution, by averaging two peaks into one bar. Too many — 500, say — makes the histogram noisy and hard to read.
 
-### 2. What if you want the distribution's SHAPE as a smooth curve instead of discrete bins?
+There's no universally correct number. Always try a couple of values. `bins="auto"` is a reasonable default, based on the Freedman-Diaconis rule — but don't accept the first result uncritically either way.
+
+### 2. Showing the distribution's SHAPE as a smooth curve instead
 ```python
 sns.kdeplot(data=df, x="wear_pct", hue="depot", fill=True, common_norm=False)
 ```
-`common_norm=False` matters: with it True, multiple groups' KDEs are normalized so their AREAS sum to a shared total — comparing shapes gets distorted if group sizes differ a lot. Setting it False normalizes each group's density independently, so you're comparing SHAPE, not shape-weighted-by-sample-count.
+`common_norm=False` matters here. Leave it `True`, and multiple groups' KDEs get normalized so their AREAS sum to one shared total — that distorts the comparison if the group sizes differ a lot.
 
-### 3. What if you need to compare a distribution ACROSS categories, not just look at one?
+Set it `False`, and each group's density gets normalized independently. Now you're comparing SHAPE, not shape-weighted-by-sample-count.
+
+### 3. Comparing a distribution ACROSS categories, not just looking at one
 ```python
 sns.boxplot(data=df, x="depot", y="wear_pct")       # shows median, IQR, and outliers per category
 sns.violinplot(data=df, x="depot", y="wear_pct")     # ALSO shows the full shape of the distribution
 ```
-A boxplot summarizes with 5 numbers (min/Q1/median/Q3/max-ish, the same IQR machinery as `stats-scipy-practice.md`'s outlier-detection cluster) and can make a bimodal distribution look identical to a unimodal one with the same quartiles. A violin plot's width shows the actual density shape — the same KDE idea from question 2, just laid sideways per category — catching bimodality a boxplot would hide, at the cost of being harder to read with small sample sizes (density estimates get noisy).
+A boxplot summarizes a distribution with 5 numbers — min, Q1, median, Q3, max-ish. That's the same IQR machinery as `stats-scipy-practice.md`'s outlier-detection cluster. Two distributions with the same quartiles can look identical as boxplots, even if one is bimodal and the other isn't.
+
+A violin plot's width shows the actual density shape instead — the same KDE idea from question 2, just laid sideways, per category. It catches bimodality a boxplot would hide.
+
+The tradeoff: violin plots get harder to read with small sample sizes, because the density estimate itself gets noisy.
 
 ### Summary example
-Wear percentage across 3 depots, one of which secretly has two distinct equipment generations mixed together (a bimodal distribution). A boxplot would show all 3 depots as similarly-shaped single boxes, completely hiding the bimodality. Switching to `sns.violinplot` for the same data reveals the two-humped shape in that one depot immediately — the same underlying data, a materially different amount of information visible.
+Say you're looking at wear percentage across 3 depots. One of them secretly mixes two distinct equipment generations together — a bimodal distribution.
+
+1. A boxplot shows all 3 depots as similarly-shaped single boxes. It completely hides the bimodality.
+2. Switch to `sns.violinplot` on the same data, and the two-humped shape in that one depot shows up immediately.
+
+Same underlying data. A materially different amount of information visible.
 
 ---
 
 ## Cluster 3 — Relationships Between Variables
 
-### 1. How do you show the relationship between two continuous variables, and reveal a third at the same time?
+### 1. Showing the relationship between two continuous variables, plus a third
 ```python
 sns.scatterplot(data=df, x="age_days", y="wear_pct", hue="depot", size="mileage")
 ```
-Encoding a categorical variable as color (`hue`) and a continuous one as point size (`size`) shows 4 variables in one 2-D scatterplot (x, y, category, magnitude) — genuinely useful, but don't stack more than 2-3 encodings before the chart becomes unreadable; that's a real limit, not a stylistic preference, directly the same "3+ variables" branch from Cluster 1's decision tree.
+Encode a categorical variable as color (`hue`), and a continuous one as point size (`size`), and you get 4 variables into one 2-D scatterplot: x, y, category, and magnitude. Genuinely useful.
 
-### 2. Given a scatterplot, how do you show the OVERALL trend, not just the raw cloud of points?
+Don't stack more than 2-3 encodings, though — past that, the chart becomes unreadable. That's a real limit, not a stylistic preference. It's the same "3+ variables" branch from Cluster 1's decision tree.
+
+### 2. Showing the OVERALL trend, not just the raw cloud of points
 ```python
 sns.regplot(data=df, x="age_days", y="wear_pct", scatter_kws={"alpha": 0.4}, line_kws={"color": "red"})
 ```
-`alpha` (transparency) on the scatter points matters specifically with many overlapping points — a solid scatter hides how DENSE a region actually is; semi-transparent points let overlapping regions visually darken, showing density directly on the same plot without a separate density chart.
+`alpha` — transparency — on the scatter points matters specifically when you have many overlapping points. A solid scatter hides how DENSE a region actually is.
 
-### 3. What if you need to see EVERY pairwise relationship among many numeric columns at once, not just two?
+Semi-transparent points let overlapping regions visually darken instead. That shows density directly, on the same plot, without needing a separate density chart.
+
+### 3. Seeing EVERY pairwise relationship among many numeric columns at once
 ```python
 corr = df.select_dtypes("number").corr()
 sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", center=0, vmin=-1, vmax=1)
 ```
-Without `center=0` and fixed `vmin=-1, vmax=1`, the color scale auto-ranges to the DATA's actual min/max — a correlation heatmap with no strong negative correlations would then render weak positive correlations in the same "cool" color as if they were negative. Fixing the scale to the TRUE possible range of correlation (-1 to 1) with 0 as the visually neutral midpoint makes color comparisons consistent and honest, including across different heatmaps compared side by side.
+Without `center=0` and fixed `vmin=-1, vmax=1`, the color scale auto-ranges to the DATA's actual min and max.
+
+Say a correlation heatmap has no strong negative correlations. Auto-ranging would then render its weak positive correlations in the same "cool" color you'd expect for a negative one.
+
+Fixing the scale to correlation's TRUE possible range — -1 to 1, with 0 as the neutral midpoint — makes color comparisons consistent and honest. That holds even across different heatmaps compared side by side.
 
 **Visual + memory hook — auto-ranged color vs. fixed-range color, same underlying numbers:**
 ```
@@ -119,71 +158,95 @@ Auto-ranged (data min=-0.1, max=0.6)      Fixed (-1 to 1, center=0)
 **Remember it as:** an auto-ranged color scale answers "what's coolest/warmest IN THIS DATASET," not "what's actually strong or weak" — fixing the range to correlation's true bounds (-1 to 1) is what makes the color itself mean something absolute, comparable across any two heatmaps you ever build.
 
 ### Summary example
-Comparing feature correlations across two different model datasets side by side: with auto-ranged color scales, dataset A's strongest correlation (0.4) and dataset B's strongest correlation (0.9) could both render as the same "hottest" red — visually implying equally strong relationships. Fixing both heatmaps to `vmin=-1, vmax=1, center=0` makes the color itself an honest, comparable signal: A's 0.4 renders visibly cooler than B's 0.9, exactly reflecting the real difference in relationship strength.
+Say you're comparing feature correlations across two different model datasets, side by side.
+
+1. With auto-ranged color scales, dataset A's strongest correlation (0.4) and dataset B's strongest correlation (0.9) could both render as the same "hottest" red. That visually implies equally strong relationships — which is wrong.
+2. Fix both heatmaps to `vmin=-1, vmax=1, center=0` instead. Now the color itself is an honest, comparable signal: A's 0.4 renders visibly cooler than B's 0.9, exactly reflecting the real difference in strength.
 
 ---
 
 ## Cluster 4 — Time Series Specifically
 
-### 1. How do you plot a time series properly?
+### 1. Plotting a time series properly
 ```python
 fig, ax = plt.subplots(figsize=(10, 4))
 ax.plot(df["date"], df["wear_pct"])
 ax.tick_params(axis="x", rotation=45)     # avoids overlapping/unreadable date labels
 fig.tight_layout()
 ```
-Bars imply discrete, unrelated categories; a line implies (correctly, for most time series) a continuous underlying process connecting each point — using bars for genuinely continuous time series data is a common chart-type mismatch that subtly misleads the reader, the same "count the variables, name their types" logic from Cluster 1 applied specifically to the time axis.
+Bars imply discrete, unrelated categories. A line implies a continuous underlying process connecting each point — which is correct, for most time series.
 
-### 2. What if there are MULTIPLE entities' time series to show on the same axes?
+Using bars for genuinely continuous time series data is a common chart-type mismatch. It subtly misleads the reader. Same "count the variables, name their types" logic from Cluster 1, just applied to the time axis specifically.
+
+### 2. Showing MULTIPLE entities' time series on the same axes
 ```python
 fig, ax = plt.subplots(figsize=(10, 4))
 for unit, group in df.groupby("unit"):
     ax.plot(group["date"], group["wear_pct"], label=unit, marker="o", markersize=3)
 ax.legend(title="Unit")
 ```
-Grouping first (the same `groupby` split from `pandas-practice.md`) and plotting one line per group with a legend is what keeps multiple entities visually distinguishable rather than an unreadable tangle of unlabeled lines.
+Group first — the same `groupby` split from `pandas-practice.md` — then plot one line per group, with a legend.
+
+That's what keeps multiple entities visually distinguishable. Skip it, and you get an unreadable tangle of unlabeled lines instead.
 
 ### Summary example
-Plotting wear trends for 5 locomotives on one chart: `groupby("unit")` splits the data, each unit gets its own labeled line via the loop, and the legend makes it possible to trace any single locomotive's trajectory — a single `ax.plot(df["date"], df["wear_pct"])` without the groupby would instead draw one tangled, meaningless zigzag line jumping between different units' unrelated values at each date.
+Say you're plotting wear trends for 5 locomotives on one chart.
+
+1. `groupby("unit")` splits the data by locomotive.
+2. Each unit gets its own labeled line, via the loop.
+3. The legend makes it possible to trace any single locomotive's trajectory.
+
+Skip the groupby, and a single `ax.plot(df["date"], df["wear_pct"])` would instead draw one tangled, meaningless zigzag — jumping between different units' unrelated values at each date.
 
 ---
 
 ## Cluster 5 — Small Multiples and Consistent Styling
 
-### 1. Instead of overlaying many groups on ONE chart (Cluster 4), what if you want one panel PER category, side by side?
+### 1. One panel PER category, side by side, instead of overlaying groups on one chart
 ```python
 g = sns.FacetGrid(df, col="depot", col_wrap=3, height=3)
 g.map_dataframe(sns.histplot, x="wear_pct")
 g.set_titles("{col_name}")
 ```
-`FacetGrid` over a manual loop of subplots matters because it automatically handles consistent axis SCALES across panels (so panels are honestly comparable at a glance) and legend/title placement — worth learning specifically because "same chart, once per category, on a shared scale" is one of the most common real EDA needs, and the "3+ variables" branch of Cluster 1's decision tree pointed at exactly this as the alternative to over-stacking color encodings.
+`FacetGrid` beats a manual loop of subplots for one reason: it automatically handles consistent axis SCALES across panels, so they're honestly comparable at a glance. It also handles legend and title placement for you.
 
-### 2. Across an entire notebook or report, how do you keep every chart looking like one coherent piece of work?
+Worth learning specifically because "same chart, once per category, on a shared scale" is one of the most common real EDA needs. It's exactly what Cluster 1's "3+ variables" branch pointed at, as the alternative to over-stacking color encodings.
+
+### 2. Keeping every chart in a notebook looking like one coherent piece of work
 ```python
 sns.set_theme(style="whitegrid", palette="deep")
 ```
-Setting this once at the top of a notebook is what makes every chart in a report look like one coherent piece of work instead of a patchwork of default-matplotlib and default-seaborn charts pasted together inconsistently.
+Set this once, at the top of a notebook. Every chart in the report then looks like one coherent piece of work, instead of a patchwork of default-matplotlib and default-seaborn charts pasted together inconsistently.
 
-### 3. Given a consistent theme, how do you make sure the color choices themselves are actually readable by everyone?
+### 3. Making sure the color choices are actually readable by everyone
 ```python
 sns.set_palette("colorblind")     # seaborn ships a palette specifically designed to be distinguishable
 ```
-Roughly 1 in 12 men have some form of color vision deficiency — a red/green categorical distinction (a very common default choice) is exactly the pairing most likely to be indistinguishable to them; the `"colorblind"` palette avoids problematic pairings by design.
+Roughly 1 in 12 men have some form of color vision deficiency. A red/green categorical distinction — a very common default choice — is exactly the pairing most likely to be indistinguishable to them.
+
+The `"colorblind"` palette avoids problematic pairings by design.
 
 ### Summary example
-A report with 6 different EDA charts: `sns.set_theme(...)` and `sns.set_palette("colorblind")` set once at the very top apply consistently to every subsequent chart, so a `FacetGrid` panel-per-depot histogram, a correlation heatmap, and a time series plot all share the same visual language and remain distinguishable to a colorblind reviewer — without repeating style arguments on every single plotting call.
+Say you're building a report with 6 different EDA charts.
+
+1. Set `sns.set_theme(...)` and `sns.set_palette("colorblind")` once, at the very top.
+2. Every chart after that — a `FacetGrid` panel-per-depot histogram, a correlation heatmap, a time series plot — shares the same visual language automatically.
+
+No need to repeat style arguments on every single plotting call, and every chart stays distinguishable to a colorblind reviewer.
 
 ---
 
 ## Cluster 6 — Honest and Precisely Annotated Charts
 
-### 1. What's the classic way a bar chart can accidentally (or deliberately) mislead?
+### 1. The classic way a bar chart can accidentally — or deliberately — mislead
 ```python
 fig, ax = plt.subplots()
 ax.bar(["A", "B"], [98, 99])
 ax.set_ylim(0, 100)     # start bars at a TRUE zero baseline, not wherever the data happens to start
 ```
-A bar chart with a y-axis starting at 95 instead of 0 can make a 1-point difference look like a 20x difference visually — bar charts specifically encode value as HEIGHT from a baseline, so that baseline MUST be zero to be honest.
+A bar chart with a y-axis starting at 95, instead of 0, can make a 1-point difference look like a 20x difference visually.
+
+Bar charts specifically encode value as HEIGHT from a baseline. That baseline MUST be zero, or the chart isn't honest.
 
 **Visual + memory hook — same two numbers, two very different visual stories:**
 ```
@@ -197,25 +260,37 @@ Truncated axis (starts at 95)       Honest axis (starts at 0)
 ```
 **Remember it as:** this rule is specific to BARS, because bars claim "height = value, measured from zero" as their whole visual language — a line chart zooming into a narrow y-range is a different, usually legitimate choice, since a line's slope (not its height from zero) is what it's actually communicating.
 
-### 2. Beyond an honest baseline, how do you point at one SPECIFIC point on a chart without cluttering it?
+### 2. Pointing at one SPECIFIC point on a chart, without cluttering it
 ```python
 fig, ax = plt.subplots()
 ax.plot(x, y)
 ax.annotate("anomaly here", xy=(peak_x, peak_y), xytext=(peak_x, peak_y + 5),
             arrowprops=dict(arrowstyle="->"))
 ```
-`xy` is the point being pointed AT (the real data location); `xytext` is where the TEXT label itself is drawn — separating them lets you place a label somewhere legible (not directly on top of a busy part of the chart) while an arrow still points precisely at the actual data point.
+`xy` is the point being pointed AT — the real data location. `xytext` is where the TEXT label itself gets drawn.
 
-### 3. What if the data itself spans several orders of magnitude — does a normal linear axis still work?
+Separating the two lets you place the label somewhere legible, away from a busy part of the chart, while an arrow still points precisely at the actual data point.
+
+### 3. When the data spans several orders of magnitude — does a normal linear axis still work?
 ```python
 fig, ax = plt.subplots()
 ax.plot(x, y)
 ax.set_yscale("log")
 ```
-Data spanning several orders of magnitude (company revenues from thousands to billions) is unreadable on a linear axis — small values compress to an indistinguishable line near zero. Log scale is also the right choice for visualizing multiplicative/percentage change (equal visual DISTANCE = equal RATIO, not equal absolute difference), which is exactly right for something like loss curves during training, where an early drop from 4.0→2.0 and a later drop from 0.4→0.2 are the SAME proportional improvement and should look visually equivalent.
+No. Data spanning several orders of magnitude — company revenues from thousands to billions, say — is unreadable on a linear axis. The small values compress into an indistinguishable line near zero.
+
+Log scale fixes that. It's also the right choice for visualizing multiplicative or percentage change, because on a log scale, equal visual DISTANCE means equal RATIO — not equal absolute difference.
+
+That's exactly right for a training loss curve. An early drop from 4.0 to 2.0, and a later drop from 0.4 to 0.2, are the SAME proportional improvement. They should look visually equivalent, and on a log scale, they do.
 
 ### Summary example
-Presenting a "99% vs 98% accuracy" comparison honestly: a bar chart MUST use `set_ylim(0, 100)` — anything else visually lies about the magnitude of a 1-point difference. Separately, plotting a training loss curve that drops from 4.0 to 0.04 over training needs `set_yscale("log")` specifically so the early dramatic drop and the later fine-tuning improvements are both visible on the same axis, instead of the early drop swallowing all the visual detail of what happens later on a linear scale.
+Say you're presenting a "99% vs 98% accuracy" comparison honestly.
+
+1. A bar chart MUST use `set_ylim(0, 100)`. Anything else visually lies about the magnitude of a 1-point difference.
+
+Separately, say you're plotting a training loss curve that drops from 4.0 to 0.04 over training.
+
+2. That needs `set_yscale("log")` specifically. On a linear scale, the early dramatic drop swallows all the visual detail of what happens later. On a log scale, both the early drop and the later fine-tuning improvements stay visible on the same axis.
 
 ---
 

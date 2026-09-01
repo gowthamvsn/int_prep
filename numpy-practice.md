@@ -1,6 +1,10 @@
 # NumPy Practice — Built as a Chain, Not a List
 
-Every snippet here is runnable on its own (`import numpy as np` assumed). Each cluster is one continuous thread — every question inherits directly from the one before it, closing with a worked summary example. Run each snippet yourself, don't just read it — muscle memory is the point.
+Every snippet here runs on its own. `import numpy as np` is assumed throughout.
+
+Each cluster builds on the one before it — one continuous thread, not a random list. Every cluster ends with one worked example that ties the pieces together.
+
+Run each snippet yourself. Don't just read it. Muscle memory is the actual point.
 
 ---
 
@@ -8,37 +12,45 @@ Every snippet here is runnable on its own (`import numpy as np` assumed). Each c
 
 ## Cluster 1 — Creating and Shaping Arrays
 
-### 1. How do you create an array with a specific shape, filled with zeros/ones/a constant?
+### 1. Making an array of zeros, ones, or a constant
 ```python
 import numpy as np
 a = np.zeros((3, 4))          # shape=(3,4): a tuple, not two args — np.zeros(3,4) is a common typo error
 b = np.ones((2, 2), dtype=np.int32)   # dtype controls memory (int32=4 bytes) vs default float64 (8 bytes)
 c = np.full((2, 3), 7)        # fill_value is positional — the array is entirely 7s
 ```
-`np.zeros` takes ONE `shape` argument, which must already be a tuple — `np.zeros(3,4)` passes `4` as a second positional argument (`dtype`) instead of folding it into the shape, which is exactly why that typo errors or silently does the wrong thing. `dtype` matters beyond correctness too: the default float64 doubles memory vs. float32/int32 for no benefit if you don't need that precision — a real difference at DataFrame/array scale, not pedantry.
+`np.zeros` takes one argument: `shape`. That shape must already be a tuple, like `(3, 4)`.
 
-### 2. Instead of a fixed shape, how do you generate evenly spaced numbers across a range?
+Write `np.zeros(3, 4)` instead, and NumPy reads `4` as a second positional argument — `dtype` — not as part of the shape. That's exactly why the typo errors, or silently does the wrong thing.
+
+`dtype` matters for more than just correctness, too. The default is float64, which uses 8 bytes per number. `float32` or `int32` use half that, 4 bytes. If you don't need the extra precision, you're just doubling your memory use for nothing. At real array or DataFrame scale, that's a real cost, not pedantry.
+
+### 2. Generating evenly spaced numbers instead of a fixed shape
 ```python
 np.arange(0, 10, 2)      # [0,2,4,6,8] — stop is EXCLUSIVE, like Python range
 np.linspace(0, 10, 5)    # [0., 2.5, 5., 7.5, 10.] — 5 points INCLUSIVE of both ends
 ```
-`arange`'s step can drift with floats due to rounding; `linspace`'s `num` argument (how many points, not step size) is exact — prefer `linspace` whenever you need a guaranteed endpoint or an exact count of points.
+`arange`'s step size can drift when you use floats, because of rounding. `linspace`'s `num` argument — how many points you want, not a step size — is exact.
 
-### 3. Once an array exists, how do you change its SHAPE without touching the underlying data?
+Prefer `linspace` whenever you need a guaranteed endpoint, or an exact count of points.
+
+### 3. Changing an array's shape without touching its data
 ```python
 a = np.arange(12)
 b = a.reshape(3, 4)     # view, not copy — modifying b changes a
 c = a.reshape(3, -1)    # -1 means "infer this dimension" — here, infers 4
 ```
-`-1` lets you reshape without hardcoding a dimension that depends on the array's size — critical when the size varies (e.g., the last batch of a dataset is smaller than the rest).
+`-1` means: figure out this dimension for me. Use it whenever you don't want to hardcode a dimension that depends on the array's size.
 
-### 4. `reshape` says it returns "a view, not a copy" — how do you actually confirm that, and why does it matter?
+That matters when the size varies — for example, the last batch of a dataset is often smaller than the rest.
+
+### 4. Confirming reshape gives you a view, not a copy — and why it matters
 ```python
 a = np.arange(12)
 b = a.reshape(3, 4)
 print(b.base is a)      # True = view (shares memory); None = copy
 ```
-Silently mutating a view mutates the ORIGINAL array too — a classic source of bugs when you think you copied data but didn't. When you genuinely need independence:
+A view shares memory with the original array. Mutate the view, and you silently mutate the original too. That's a classic source of bugs — you think you copied the data, but you didn't. When you genuinely need independence:
 ```python
 b = a.copy()             # always a real copy, independent memory
 ```
@@ -56,54 +68,79 @@ VIEW (b = a.reshape(...))          COPY (b = a.copy())
 **Remember it as:** `a` and `b` are just two name-tags stuck on the same box until `.copy()` actually builds a second box — `b.base is a` is literally asking "do these two tags point at the same box."
 
 ### Summary example
-Loading a flat sensor log of 12 readings and reshaping it into a 3×4 grid (3 sensors × 4 timestamps): `b = a.reshape(3, 4)` — `b.base is a` confirms `True`, so a later `b[0, 0] = 999` would silently corrupt the original flat log too, unless you'd called `a.copy()` first specifically because you needed the two to diverge.
+Say you load a flat sensor log — 12 readings — and reshape it into a 3×4 grid (3 sensors × 4 timestamps).
+
+1. `b = a.reshape(3, 4)`.
+2. Check `b.base is a` — it's `True`. So `b` is a view, not a copy.
+3. Set `b[0, 0] = 999`. This silently corrupts the original flat log too.
+
+If you needed the two to diverge, you'd have called `a.copy()` first.
 
 ---
 
 ## Cluster 2 — Selecting and Filtering
 
-### 1. Given an array of positive and negative values, how do you pull out just the positives?
+### 1. Pulling out just the positive values
 ```python
 a = np.array([1, -2, 3, -4, 5])
 mask = a > 0              # array([ True, False,  True, False,  True])
 positives = a[mask]       # array([1, 3, 5])
 a[a < 0] = 0              # in-place conditional replacement — clip negatives to 0
 ```
-This is **boolean masking** — vectorized, running as a fast C-level loop; the alternative, a Python `for` loop with an `if`, is 10-100x slower on large arrays.
+This is called **boolean masking**. It runs as a fast, vectorized C-level loop.
 
-### 2. That approach needs a separate `mask` variable — how do you do the same thing in one line?
+The alternative — a Python `for` loop with an `if` inside it — is 10 to 100 times slower on large arrays.
+
+### 2. Doing the same thing without a separate mask variable
 ```python
 np.where(a > 0, a, 0)     # ternary-style: where condition, take a, else take 0
 ```
-`np.where`'s three arguments (condition, value-if-true, value-if-false) are all broadcast, so the same call handles more than a simple clip — `np.where(a > 0, a, -a)` computes absolute value in one line.
+`np.where`'s three arguments — condition, value-if-true, value-if-false — all broadcast together. That means the same call can do more than a simple clip.
 
-### 3. Instead of the filtered VALUES, how do you get the INDICES where a condition is true?
+`np.where(a > 0, a, -a)`, for example, computes absolute value in one line.
+
+### 3. Getting the indices where a condition is true, not the values
 ```python
 np.argwhere(a > 0).flatten()     # array([0, 2, 4]) — the indices, not the values
 np.nonzero(a > 0)                 # tuple of arrays, one per dimension (same info, different shape)
 ```
 
 ### Summary example
-Given sensor readings `[1, -2, 3, -4, 5]`, flagging faulty (negative) sensors: `mask = a < 0` gives `[False, True, False, True, False]`, `np.argwhere(mask).flatten()` gives `[1, 3]` — sensor indices 1 and 3 are the ones to physically inspect, while `a[~mask]` (`[1, 3, 5]`) is the clean data safe to keep aggregating from.
+Say you have sensor readings `[1, -2, 3, -4, 5]`, and you want to flag the faulty (negative) ones.
+
+1. `mask = a < 0` gives `[False, True, False, True, False]`.
+2. `np.argwhere(mask).flatten()` gives `[1, 3]` — those are the sensor indices to physically go inspect.
+3. `a[~mask]` gives `[1, 3, 5]` — the clean data, safe to keep aggregating from.
 
 ---
 
 ## Cluster 3 — Broadcasting
 
-### 1. How do you combine a smaller array with a bigger one without writing a loop?
+### 1. Combining a smaller array with a bigger one, without a loop
 ```python
 a = np.ones((3, 4))
 row = np.array([1, 2, 3, 4])       # shape (4,)
 result = a + row                    # row is broadcast across all 3 rows automatically
 ```
-NumPy aligns shapes from the RIGHT, and a dimension of size 1 (or missing) stretches to match — `(3,4) + (4,)` works because `4` matches `4`; `(3,4) + (3,)` does NOT work, because `3` doesn't align with the trailing `4`.
+NumPy has one rule for this, and it's worth learning as a small checklist:
 
-### 2. Given that alignment rule, how would you broadcast DOWN rows (a column vector) instead of ACROSS columns?
+1. Line up the two shapes from the RIGHT — like lining up decimal points in two numbers.
+2. Compare each pair of aligned dimensions, one pair at a time.
+3. They're compatible if they're equal, or if one of them is 1 (or missing entirely) — a `1` stretches to match whatever's on the other side.
+4. If any pair fails step 3, broadcasting fails.
+
+Walk through `(3,4) + (4,)`: aligned from the right, that's `4` against `4`. They match. It works.
+
+Now walk through `(3,4) + (3,)`: aligned from the right, that's `4` against `3`. Neither is 1, and they aren't equal. It fails.
+
+### 2. Broadcasting DOWN rows instead of ACROSS columns
 ```python
 col = np.array([1, 2, 3]).reshape(-1, 1)   # shape (3,1), NOT (3,) — the reshape is the whole trick
 result = a + col      # now broadcasts down each row
 ```
-A 1-D array of shape `(3,)` broadcasts as a ROW; to broadcast as a COLUMN you need shape `(3,1)` explicitly — this single distinction causes a large fraction of real broadcasting bugs.
+A 1-D array shaped `(3,)` broadcasts as a ROW. To broadcast as a COLUMN instead, you need shape `(3,1)` — explicitly.
+
+That one distinction — `(3,)` vs `(3,1)` — causes a large fraction of real broadcasting bugs.
 
 **Visual + memory hook — line up shapes on the RIGHT, like lining up decimal points, and any size-1 (or missing) slot stretches to fit:**
 ```
@@ -116,19 +153,27 @@ A 1-D array of shape `(3,)` broadcasts as a ROW; to broadcast as a COLUMN you ne
 **Remember it as:** broadcasting is decimal-point alignment — write both shapes flush-right, and every column either matches exactly, or one side is a `1` that stretches, or it fails. `(3,)` failing against `(3,4)` isn't NumPy being difficult, it's `3` landing under the wrong column (under the `4`, not the `3`) once you align from the right.
 
 ### Summary example
-A `(3,4)` grid of sensor readings (3 units × 4 timestamps) needs two adjustments: subtract a per-TIMESTAMP calibration offset (shape `(4,)`, broadcasts across all 3 rows automatically) and a per-UNIT baseline (shape `(3,1)`, needs the explicit `.reshape(-1,1)` to broadcast down instead of across) — both in the same line, `a - calibration_offset - unit_baseline.reshape(-1,1)`, because each correction is stretching along a different axis.
+Say you have a `(3,4)` grid of sensor readings — 3 units, 4 timestamps — and you need two separate adjustments.
+
+1. Subtract a per-TIMESTAMP calibration offset. Its shape is `(4,)`, so it broadcasts across all 3 rows automatically.
+2. Subtract a per-UNIT baseline. Its shape needs to be `(3,1)` — you have to call `.reshape(-1,1)` explicitly, so it broadcasts down instead of across.
+3. Do both in one line: `a - calibration_offset - unit_baseline.reshape(-1,1)`.
+
+Each correction stretches along a different axis, which is exactly why the two shapes need to be different.
 
 ---
 
 ## Cluster 4 — Aggregating Across an Axis
 
-### 1. How do you compute a sum per-column vs. per-row on a 2D array?
+### 1. Summing per-column vs. per-row on a 2D array
 ```python
 a = np.array([[1, 2, 3], [4, 5, 6]])
 a.sum(axis=0)   # array([5, 7, 9])  — sum DOWN each column (collapses rows, axis 0)
 a.sum(axis=1)   # array([ 6, 15])   — sum ACROSS each row (collapses columns, axis 1)
 ```
-`axis=0` collapses the FIRST dimension (rows) — the result has one entry per column. This is the single most common NumPy/Pandas confusion; say it out loud as "axis=0 walks down."
+`axis=0` collapses the FIRST dimension — the rows. What's left is one entry per column.
+
+This is the single most common NumPy/pandas confusion. Say it out loud: "axis=0 walks down."
 
 **Visual + memory hook — the axis number is which direction the arrow travels, not which thing survives:**
 ```
@@ -141,55 +186,66 @@ row1  [   4    5    6  ]              ──▶ result: [5, 7, 9]  (one per COLU
 ```
 **Remember it as:** the axis number tells you which direction the arrow WALKS, and the result always has one entry per thing that arrow passed THROUGH multiple of — `axis=0`'s arrow walks down through multiple rows, landing on one number per column.
 
-### 2. Aggregating collapses a dimension away — what if you need it to STAY, for a later broadcast?
+### 2. Keeping the collapsed dimension around, for a later broadcast
 ```python
 a.sum(axis=1, keepdims=True)   # shape (2,1) instead of (2,) — stays broadcastable against a
 ```
-Without `keepdims`, `a - a.mean(axis=1)` breaks on a shape mismatch; with `keepdims=True`, the result stays 2-D and broadcasts cleanly for exactly the "subtract the row mean from every row" pattern — the same broadcasting rules from Cluster 3, now feeding directly off an aggregate instead of a hand-built array.
+Without `keepdims`, `a - a.mean(axis=1)` breaks — the shapes don't match. With `keepdims=True`, the result stays 2-D, and it broadcasts cleanly.
 
-### 3. Instead of the aggregate VALUE, how do you get the INDEX of the max/min?
+That's the exact pattern for "subtract the row mean from every row." Same broadcasting rules from Cluster 3, just fed by an aggregate instead of a hand-built array.
+
+### 3. Getting the INDEX of the max, not the value
 ```python
 a = np.array([3, 7, 1, 9, 4])
 a.argmax()          # 3 — the INDEX of the max value (9), not the value itself
 ```
-Confusing `argmax()` (index) with `max()` (value) — expecting one but getting the other — is a common, easy-to-make mistake since both names look similar.
+It's easy to confuse `argmax()` (the index) with `max()` (the value) — the names look similar, and it's a common mistake to expect one but get the other.
 
-### 4. What if you need the FULL ORDER, not just the single max index?
+### 4. Getting the full sort order, not just one index
 ```python
 a = np.array([30, 10, 20])
 np.sort(a)          # array([10, 20, 30]) — sorted values
 np.argsort(a)        # array([1, 2, 0])   — indices that WOULD sort a
 ```
-`argsort` lets you sort one array by the order of ANOTHER — e.g. `scores[np.argsort(scores)[::-1]]` for descending, or sorting names by a parallel score array they don't share an ordering with on their own.
+`argsort` lets you sort one array by the order of ANOTHER. For example: `scores[np.argsort(scores)[::-1]]` sorts descending. Or sort a list of names by a parallel score array that doesn't already share an order with them.
 
-### 5. A full sort is O(n log n) — what if you only need the top-k, not the full order?
+### 5. Getting just the top-k, without a full sort
 ```python
 a = np.array([5, 1, 9, 3, 7, 2])
 k = 3
 idx = np.argpartition(a, -k)[-k:]     # O(n) partition, not O(n log n) full sort
 top_k_sorted = idx[np.argsort(a[idx])][::-1]
 ```
-`argpartition` only guarantees the top-k end up in the last k positions (unordered among themselves) — you then only sort those k elements, which is cheap. Fully sorting a huge array just to read off the top 5 wastes real time at scale.
+`argpartition` only guarantees one thing: the top-k values end up in the last k positions. It doesn't sort them among themselves.
+
+You then sort just those k elements — cheap, since k is small. Fully sorting a huge array just to read off the top 5 wastes real time at scale.
 
 ### Summary example
-Grading 6 exam scores `[5, 1, 9, 3, 7, 2]` (out of 10) and reporting the top-3: `np.argpartition(a, -3)[-3:]` cheaply isolates indices `[4, 2, ...]` (the top 3, unordered), then sorting just those 3 gives `[9, 7, 5]` — without ever fully sorting all 6, which matters once "6" becomes 6 million.
+Say you're grading 6 exam scores, `[5, 1, 9, 3, 7, 2]` (out of 10), and you need the top 3.
+
+1. `np.argpartition(a, -3)[-3:]` cheaply isolates indices `[4, 2, ...]` — the top 3, but unordered.
+2. Sort just those 3 elements: `[9, 7, 5]`.
+
+You never had to fully sort all 6 scores. That matters once "6" becomes 6 million.
 
 ---
 
 ## Cluster 5 — Combining Arrays
 
-### 1. Given two 1-D arrays, how do you combine them into a 2D array vs. one long array?
+### 1. Combining two 1-D arrays into a 2D array, vs. one long array
 ```python
 a = np.array([1, 2, 3]); b = np.array([4, 5, 6])
 np.vstack([a, b])     # stacks as new rows -> shape (2,3)
 np.hstack([a, b])     # concatenates end-to-end -> shape (6,)
 ```
 
-### 2. What if you want to combine them along a genuinely NEW axis, not an existing one?
+### 2. Combining them along a genuinely NEW axis
 ```python
 np.stack([a, b], axis=1)  # NEW axis inserted at position 1 -> shape (3,2), interleaved
 ```
-`vstack`/`hstack` combine along an EXISTING axis; `stack` creates a brand-new axis entirely — reach for `stack` when you want to preserve each array as a distinct "slice" (e.g., stacking multiple grayscale images into one 3-D array, where you want "which image" to be its own dimension, not merged into the pixel data).
+`vstack`/`hstack` combine along an EXISTING axis. `stack` creates a brand-new axis entirely.
+
+Reach for `stack` when you want each array to stay a distinct "slice" — stacking several grayscale images into one 3-D array, for example, where "which image" needs to be its own dimension, not merged into the pixel data.
 
 **Visual + memory hook — vstack/hstack squeeze into an EXISTING axis, stack builds a NEW shelf:**
 ```
@@ -205,52 +261,70 @@ vstack: [[1,2,3],        hstack: [1,2,3,4,5,6]        stack(axis=1): [[1,4],
 **Remember it as:** vstack/hstack answer "which existing direction do these glue onto" (a new row, or a longer row) — stack answers "I want a brand new dimension whose job is just to say WHICH original array this slice came from," which is exactly what you want for a batch of images where "which image" must stay its own countable axis.
 
 ### Summary example
-Combining 3 separate grayscale image arrays (each shape `(28,28)`) into one batch: `np.stack([img1, img2, img3], axis=0)` gives shape `(3,28,28)` — a genuinely new "which image" axis — versus `np.hstack` or `np.vstack`, which would instead try to merge them along an existing pixel dimension and produce a distorted, unintended shape.
+Say you have 3 grayscale image arrays, each shaped `(28,28)`, and you want to combine them into one batch.
+
+1. `np.stack([img1, img2, img3], axis=0)` gives shape `(3,28,28)` — a genuinely new "which image" axis.
+2. Compare that to `np.hstack` or `np.vstack`: both would instead try to merge the images along an existing pixel dimension, producing a distorted shape you didn't want.
 
 ---
 
 ## Cluster 6 — Linear Algebra Operations
 
-### 1. Multiplying two matrices — is `*` the same as real matrix multiplication?
+### 1. Is `*` the same as real matrix multiplication?
 ```python
 A = np.array([[1, 2], [3, 4]])
 B = np.array([[5, 6], [7, 8]])
 A @ B            # real matrix multiplication (dot product of rows·columns)
 A * B            # element-wise: A[i,j]*B[i,j], same shape required
 ```
-No — and this is dangerous specifically because both produce a same-shaped array, so using `*` when you meant `@` doesn't raise an error, it silently produces a structurally-valid WRONG answer. Always sanity-check output values, not just shape, when this distinction matters.
+No.
 
-### 2. Given real matrix multiplication, how do you solve a linear system `Ax = b` for `x`?
+That's dangerous specifically because both produce a same-shaped array. Use `*` when you meant `@`, and you don't get an error — you get a structurally valid, silently wrong answer.
+
+Always sanity-check the actual output values, not just the shape, whenever this distinction matters.
+
+### 2. Solving a linear system `Ax = b` for `x`
 ```python
 A = np.array([[3, 1], [1, 2]])
 b_vec = np.array([9, 8])
 x = np.linalg.solve(A, b_vec)     # exact solve via LU decomposition, NOT np.linalg.inv(A) @ b
 ```
-`np.linalg.inv(A) @ b` is a textbook anti-pattern — computing the explicit inverse is slower and numerically less stable than solving directly; `solve` is the correct tool every time you have a concrete `b`, not a symbolic need for the inverse itself.
+`np.linalg.inv(A) @ b` is a textbook anti-pattern. Computing the explicit inverse is slower, and numerically less stable, than solving directly.
 
-### 3. Beyond solving a system, how do you find the special directions a matrix doesn't rotate (eigenvectors)?
+Use `solve` every time you have a concrete `b`. Only reach for the explicit inverse when you have a genuine symbolic need for it.
+
+### 3. Finding the directions a matrix doesn't rotate — eigenvectors
 ```python
 vals, vecs = np.linalg.eig(A)     # vals: eigenvalues; vecs: columns are the eigenvectors
 ```
-`vecs[:, i]` (a COLUMN) is the eigenvector for `vals[i]` — indexing a ROW by mistake is a common bug, since it's easy to forget eigenvectors are stored column-wise here. (See `math-foundations-refresher.md` for what an eigenvector actually represents geometrically, and how PCA uses this exact computation.)
+`vecs[:, i]` — a COLUMN — is the eigenvector for `vals[i]`. Indexing a row by mistake is a common bug here, since it's easy to forget eigenvectors are stored column-wise.
+
+(See `math-foundations-refresher.md` for what an eigenvector actually represents geometrically, and how PCA uses this exact computation.)
 
 ### Summary example
-Solving `3x + y = 9, x + 2y = 8` directly: `np.linalg.solve([[3,1],[1,2]], [9,8])` gives `x=2, y=3` — verified by `3(2)+3=9` ✓ and `2+2(3)=8` ✓ — computed via LU decomposition internally, never via an explicit (slower, less stable) matrix inverse.
+Say you need to solve `3x + y = 9` and `x + 2y = 8` directly.
+
+1. `np.linalg.solve([[3,1],[1,2]], [9,8])` gives `x=2, y=3`.
+2. Check it: `3(2)+3=9` ✓ and `2+2(3)=8` ✓.
+
+NumPy computes this via LU decomposition internally — never via an explicit, slower, less stable matrix inverse.
 
 ---
 
 ## Cluster 7 — Randomness and Reproducibility
 
-### 1. How do you generate random numbers that are still reproducible across runs?
+### 1. Generating random numbers that stay reproducible across runs
 ```python
 rng = np.random.default_rng(seed=42)   # modern API — NOT np.random.seed(42) (legacy, global, less safe)
 rng.random(5)              # 5 uniform floats in [0, 1)
 rng.integers(0, 10, size=5)  # 5 random ints in [0, 10) -- high is EXCLUSIVE by default
 rng.normal(loc=0, scale=1, size=5)   # 5 samples from N(0,1)
 ```
-`np.random.seed` mutates NumPy's legacy GLOBAL random state, shared across your entire program — unrelated code elsewhere can silently affect your "reproducible" randomness. `default_rng` returns an isolated `Generator` instance and is the modern recommended API since NumPy 1.17.
+`np.random.seed` mutates NumPy's legacy GLOBAL random state. That state is shared across your entire program — unrelated code elsewhere can silently affect your "reproducible" randomness.
 
-### 2. Given a reproducible generator, how do you shuffle a feature matrix `X` and its labels `y` TOGETHER, without desynchronizing them?
+`default_rng` returns an isolated `Generator` instance instead. It's been the modern, recommended API since NumPy 1.17.
+
+### 2. Shuffling a feature matrix `X` and its labels `y` together, without desynchronizing them
 ```python
 X = np.arange(20).reshape(10, 2)    # 10 samples, 2 features -- stand-in for a real feature matrix
 y = np.arange(10)                    # 10 labels, aligned with X's rows
@@ -259,47 +333,68 @@ idx = rng.permutation(10)     # a shuffled array of 0..9 — apply the SAME idx 
 X_shuffled = X[idx]
 y_shuffled = y[idx]
 ```
-Calling `rng.permutation` TWICE (once for `X`, once for `y`) produces two DIFFERENT random orderings, silently desynchronizing every row of `X` from its true label. Generating one shuffled index array and applying that same array to both is the only safe pattern.
+Call `rng.permutation` twice — once for `X`, once for `y` — and you get two DIFFERENT random orderings. That silently desynchronizes every row of `X` from its true label.
+
+The only safe pattern: generate one shuffled index array, and apply that same array to both.
 
 ### Summary example
-Shuffling a 10-sample dataset before a train/test split: `idx = rng.permutation(10)` might give `[3,7,0,9,...]` — applying that exact same `idx` to both `X[idx]` and `y[idx]` keeps sample 3's features paired with sample 3's true label after shuffling; calling `rng.permutation(10)` a second time for `y` instead would almost certainly produce a different order and silently mislabel every row.
+Say you're shuffling a 10-sample dataset before a train/test split.
+
+1. `idx = rng.permutation(10)` might give `[3,7,0,9,...]`.
+2. Apply that exact same `idx` to both `X[idx]` and `y[idx]`. Sample 3's features stay paired with sample 3's true label.
+
+Call `rng.permutation(10)` a second time for `y` instead, and you'd almost certainly get a different order — silently mislabeling every row.
 
 ---
 
 ## Cluster 8 — Cleaning and Practical Numeric Operations
 
-### 1. How does a single missing value (NaN) affect an aggregate like `.mean()`?
+### 1. How one missing value (NaN) poisons an aggregate like `.mean()`
 ```python
 a = np.array([1.0, np.nan, 3.0])
 a.mean()          # nan — ANY nan poisons a normal aggregate
 ```
-A single `NaN` anywhere in the array makes the ENTIRE aggregate `NaN` — it doesn't just get skipped, it silently spreads.
+A single `NaN`, anywhere in the array, makes the ENTIRE aggregate `NaN`. It doesn't get skipped. It silently spreads.
 
-### 2. Given that, how do you compute an aggregate that actually ignores NaNs?
+### 2. Computing an aggregate that actually ignores NaNs
 ```python
 np.nanmean(a)      # 2.0 — ignores nan values
 np.isnan(a)        # array([False,  True, False]) — boolean mask of where NaNs are
 ```
-A silently-propagating `NaN` through a pipeline (e.g., into a loss function) can make an entire training run produce `NaN` outputs with no obvious error — check for NaNs explicitly with `np.isnan` rather than assuming aggregates handle them gracefully.
+A `NaN` that silently propagates through a pipeline — into a loss function, say — can make an entire training run produce `NaN` outputs, with no obvious error pointing at why.
 
-### 3. Beyond missing values, how do you keep numbers within a safe range (e.g., before a `log()` call)?
+Check for NaNs explicitly, with `np.isnan`. Don't assume an aggregate will handle them gracefully on its own.
+
+### 3. Keeping numbers inside a safe range — before a `log()` call, say
 ```python
 a = np.array([-5, 0, 5, 10, 15])
 np.clip(a, 0, 10)    # array([ 0,  0,  5, 10, 10]) — a_min, a_max, both inclusive
 ```
-This is exactly how gradient clipping (`np.clip(grad, -1, 1)`) and safe-log operations (clipping a probability away from exactly 0 before `log()`, avoiding `log(0) = -inf`) work in practice — the same clipping idea from `math-foundations-refresher.md`'s log-curve section, just applied defensively before a numerically dangerous input.
+This is exactly how gradient clipping works in practice: `np.clip(grad, -1, 1)`.
 
-### 4. How do you smooth out a noisy 1-D signal without pandas (a rolling average)?
+It's also how safe-log operations work — clip a probability away from exactly 0 before calling `log()`, so you avoid `log(0) = -inf`.
+
+Same clipping idea as the log-curve section in `math-foundations-refresher.md`, just applied defensively, ahead of a numerically dangerous input.
+
+### 4. Smoothing a noisy 1-D signal without pandas — a rolling average
 ```python
 a = np.array([1, 2, 3, 4, 5, 6])
 window = 3
 kernel = np.ones(window) / window
 moving_avg = np.convolve(a, kernel, mode="valid")   # array([2., 3., 4., 5.])
 ```
-`mode="full"` pads with zeros at the edges (distorting the average near boundaries); `mode="valid"` only returns positions where the window fully overlaps real data — the correct choice whenever the moving average needs to be trustworthy, not just the right length.
+`mode="full"` pads with zeros at the edges. That distorts the average near the boundaries.
+
+`mode="valid"` only returns positions where the window fully overlaps real data. That's the right choice whenever the moving average needs to be trustworthy — not just the right length.
 
 ### Summary example
-Cleaning a sensor stream `[1.0, NaN, 3.0, 108.0, 4.0]` (one missing reading, one obvious outlier spike): `np.isnan(a)` flags index 1 for the missing value; `np.clip(a, 0, 10)` caps the 108.0 spike down to 10 (assuming 0-10 is the sensor's valid range); `np.nanmean(clipped)` then computes a trustworthy average that's immune to both problems at once, in that order — clip the impossible values, then average around whatever's still missing.
+Say you're cleaning a sensor stream `[1.0, NaN, 3.0, 108.0, 4.0]` — one missing reading, one obvious outlier spike.
+
+1. `np.isnan(a)` flags index 1 as the missing value.
+2. `np.clip(a, 0, 10)` caps the 108.0 spike down to 10 (assuming 0–10 is the sensor's valid range).
+3. `np.nanmean(clipped)` computes a trustworthy average, immune to both problems at once.
+
+That order matters: clip the impossible values first, then average around whatever's still missing.
 
 ---
 
@@ -339,7 +434,11 @@ A: `np.nanmean` returns `2.0` because it ignores NaN values when averaging. Plai
 
 ## Video-Sourced Practice MCQs
 
-A second practice set for NumPy Practice, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube interview-prep video for this subject, then written up as original multiple-choice questions here (the source video mostly asked these as open-ended questions -- the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video). Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
+This is a second practice set, built the same way as this hub's NCA-GENL community bank. The topics are checked against a real YouTube interview-prep video for this subject. The questions themselves are written up fresh here as original multiple-choice questions.
+
+The source video mostly asked these as open-ended questions. The wrong-answer options and their explanations below are original — written to match this hub's "explain every option" convention, not copied from the video.
+
+Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
 
 <script type="application/json" class="topic-quiz-data" data-title="NumPy Practice">
 [

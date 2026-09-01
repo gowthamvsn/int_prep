@@ -1,6 +1,6 @@
 # Pandas Practice — Built as a Chain, Not a List
 
-`import pandas as pd, numpy as np` assumed throughout. Each cluster is one continuous thread — every question inherits directly from the answer before it, closing with a worked summary example. Every snippet has been run and verified against data of the right shape.
+`import pandas as pd, numpy as np` assumed throughout. Each cluster is one continuous thread — every question builds on the answer before it, and closes with a worked summary example. Every snippet here has been run and checked against data of the right shape.
 
 ---
 
@@ -17,14 +17,19 @@ df = pd.DataFrame({
 })   # dict insertion order = column order in modern Python/pandas — no separate 'columns=' needed
 ```
 
-### 2. Given a DataFrame, how do you select one specific cell — by its LABEL or by its raw POSITION?
+### 2. How do you select one cell — by its label, or by its raw position?
 ```python
 df.loc[0, "wear_pct"]     # LABEL-based: row label 0, column name "wear_pct"
 df.iloc[0, 1]              # POSITION-based: first row, second column, by integer position only
 ```
-After filtering or sorting, row LABELS often aren't `0,1,2,...` anymore — `.iloc[0]` always means "the first row physically present," `.loc[0]` means "the row labeled 0," which may not exist or may not be first. Mixing them up is one of the most common real pandas bugs.
+Here's the trap. After you filter or sort a DataFrame, the row labels usually stop being `0, 1, 2, ...` in order.
 
-**Visual + memory hook — a library shelf (label) vs. "the 3rd book from the left" (position):**
+- `.iloc[0]` always means "the row that's physically first, right now."
+- `.loc[0]` means "the row labeled 0" — wherever that row ended up, or whether it's even still around.
+
+Mixing these two up is one of the most common real pandas bugs.
+
+**Picture a library shelf.** A book's call number is its label — it never changes, no matter where the book gets moved. Its spot on the shelf is its position — that changes every time someone reorganizes.
 ```
 Original df:           After df = df.sort_values("wear_pct"):
   label 0: wear=42       label 2: wear=18   ← now PHYSICALLY first
@@ -34,23 +39,33 @@ Original df:           After df = df.sort_values("wear_pct"):
   df.loc[0]  → still finds the row LABELED 0 (wear=42), wherever it now sits
   df.iloc[0] → always the row now sitting FIRST (wear=18) — label is irrelevant
 ```
-**Remember it as:** `.loc` follows the name tag wherever it moves; `.iloc` only cares about physical shelf position, name tags be damned — a fresh `df.reset_index(drop=True)` after sorting is what makes the two agree again.
+Remember it this way: `.loc` follows the name tag wherever it moves. `.iloc` only cares about physical shelf position, name tags be damned. A fresh `df.reset_index(drop=True)` after sorting is what makes the two agree again.
 
-### 3. Given that, how do you actually filter rows by a condition?
+### 3. How do you filter rows by a condition?
 ```python
 df[df["wear_pct"] > 40]                       # boolean mask, same idea as NumPy
 df.query("wear_pct > 40 and depot == 'KC'")    # readable for complex conditions; column names as bare words
 ```
-`.query()` avoids repeating `df["col"]` over and over on long chained conditions, and is often faster on large DataFrames since it can use a faster expression evaluator (numexpr) under the hood.
+`.query()` saves you from repeating `df["col"]` over and over inside a long condition. It's often faster too, on large DataFrames, since it can lean on a faster expression engine (numexpr) under the hood.
 
-### 4. Combining multiple conditions inside the bracket form — why does plain `and`/`or` fail?
+### 4. Why does plain `and`/`or` fail when you combine conditions inside brackets?
 ```python
 df[(df["wear_pct"] > 40) & (df["depot"] == "KC")]   # MUST use & and |, not 'and'/'or'
 ```
-Python's `and`/`or` short-circuit on a SINGLE boolean; a pandas boolean Series isn't one boolean, it's element-wise across every row. You need the bitwise `&`/`|` operators, and each condition MUST be wrapped in parentheses because `&` binds tighter than `>` — this is the exact same "not a single boolean" reasoning already covered for NumPy boolean masks in `numpy-practice.md`, just with pandas' extra parenthesization requirement layered on top.
+Walk through why, step by step:
+1. Python's `and`/`or` are built to handle one single true/false value.
+2. A pandas boolean Series isn't one value — it's a whole column of true/false, one per row.
+3. So you need `&` and `|` instead. Those work row by row, the way you actually want here.
+4. Each condition also needs its own parentheses, because `&` binds tighter than `>`. Skip the parentheses and Python groups the wrong pieces together.
+
+Same underlying issue as NumPy boolean masks in `numpy-practice.md` — pandas just adds that parenthesization requirement on top.
 
 ### Summary example
-A dataset of 500 units gets filtered and sorted by wear before selecting the worst offender: `df_sorted = df[df["wear_pct"] > 40].sort_values("wear_pct", ascending=False)`. `df_sorted.iloc[0]` correctly gets the single worst row regardless of what label it originally had; `df_sorted.loc[0]` would instead try to find whatever row was ORIGINALLY labeled 0 — which might not even be in the filtered set anymore, or might not be the worst offender at all.
+A dataset of 500 units gets filtered and sorted by wear before pulling out the single worst offender.
+```python
+df_sorted = df[df["wear_pct"] > 40].sort_values("wear_pct", ascending=False)
+```
+`df_sorted.iloc[0]` correctly gets the worst row, no matter what label it started with. `df_sorted.loc[0]` would instead go hunting for whatever row was *originally* labeled 0 — which might not even be in the filtered set anymore, and almost certainly isn't the worst offender.
 
 ---
 
@@ -62,9 +77,9 @@ df.groupby("depot")["wear_pct"].mean()                     # one aggregate colum
 df.groupby("depot").agg(avg_wear=("wear_pct", "mean"),      # named aggregation: clear output column names
                           max_wear=("wear_pct", "max"))
 ```
-The plain `.agg({"wear_pct": ["mean","max"]})` form produces confusing multi-index columns; named aggregation (`agg(name=(col, func))`) gives flat, readable column names directly.
+The plain `.agg({"wear_pct": ["mean","max"]})` form produces confusing multi-index columns. Named aggregation — `agg(name=(col, func))` — gives you flat, readable column names directly instead.
 
-**Visual + memory hook — every groupby, no matter how complex the aggregation, is always the same 3-step shape:**
+**Every groupby, however complex the aggregation, is the same 3-step shape:**
 ```
 SPLIT                    APPLY                    COMBINE
 depot=A: [40,45]    ──▶  mean → 42.5         ──▶  depot | avg_wear
@@ -72,13 +87,13 @@ depot=B: [30]       ──▶  mean → 30.0         ──▶    A   |  42.5
 depot=C: [50,55,60] ──▶  mean → 55.0         ──▶    B   |  30.0
                                                       C   |  55.0
 ```
-**Remember it as "Split-Apply-Combine"** — the actual technical name for this pattern (from Hadley Wickham's original paper it's named after).
+That's called **Split-Apply-Combine**, and it's the actual name of the pattern, from the paper it's named after.
 
-### 2. That COMBINE step collapses to one row per group. What if you need the group's stat attached to EVERY original row instead?
+### 2. What if you need the group's stat attached to EVERY original row, not collapsed into a summary table?
 ```python
 df["dev_from_depot_mean"] = df["wear_pct"] - df.groupby("depot")["wear_pct"].transform("mean")
 ```
-`.agg` draws the right-hand table above (one row per group); `.transform` broadcasts that same result back onto every original row instead of collapsing — essential when you need a per-row column (like "how far is THIS unit from its depot's average"), not a summary table.
+`.agg` produces the right-hand table above — one row per group. `.transform` takes that same result and paints it back onto every original row instead of collapsing anything. You need this whenever the output has to be a per-row column, like "how far is THIS unit from its depot's average."
 
 ### 3. What if the thing you want per group isn't a simple aggregate at all — say, the top 2 rows by wear, per depot?
 ```python
@@ -86,17 +101,21 @@ def top2(group):
     return group.nlargest(2, "wear_pct")
 df.groupby("depot", group_keys=False).apply(top2)    # top 2 highest-wear rows PER depot
 ```
-This is still Split-Apply-Combine — APPLY is just a custom function returning multiple rows instead of one number. `group_keys=False` matters here specifically: without it, the groupby key gets added as an extra index level on the result, which isn't wanted when the function already returns full, complete rows.
+This is still Split-Apply-Combine. The APPLY step is just a custom function now, and it returns multiple rows instead of one number. `group_keys=False` matters here specifically: leave it off, and the groupby key gets tacked on as an extra index level in the result — not what you want when the function already returns whole, complete rows.
 
-### 4. After a groupby+aggregate, the group column often ends up as the INDEX, not a normal column — how do you fix that?
+### 4. After a groupby+aggregate, the group column often ends up as the INDEX instead of a normal column. How do you fix that?
 ```python
 df = df.rename(columns={"wear_pct": "wear_percent"})
 df = df.groupby("depot")["wear_percent"].mean().reset_index()   # turn the group-by index back into a column
 ```
-`reset_index()` converts the grouping column back to a normal column, which most downstream code (merges, plotting, `to_csv`) expects rather than an index.
+`reset_index()` turns the grouping column back into a normal column. Most downstream code — merges, plotting, `to_csv` — expects a normal column, not an index.
 
 ### Summary example
-Flagging which units are unusually worn FOR THEIR DEPOT (not worn overall): `df["dev_from_depot_mean"] = df["wear_pct"] - df.groupby("depot")["wear_pct"].transform("mean")` gives a per-unit column, then `df[df["dev_from_depot_mean"] > 10]` finds units that are 10+ points worse than their OWN depot's average — a genuinely different, more useful flag than a global `wear_pct > 40` threshold would give, since it accounts for depots that just run hotter/dirtier on average.
+Flagging which units are unusually worn *for their depot*, not worn in some global sense.
+```python
+df["dev_from_depot_mean"] = df["wear_pct"] - df.groupby("depot")["wear_pct"].transform("mean")
+```
+That line gives you a per-unit column. `df[df["dev_from_depot_mean"] > 10]` then finds units running 10+ points worse than their own depot's average — a genuinely different, more useful flag than a flat `wear_pct > 40` threshold, since it accounts for depots that just run hotter or dirtier on average to begin with.
 
 ---
 
@@ -108,9 +127,9 @@ pd.merge(df1, df2, on="unit", how="left")   # keep every row of df1; unmatched d
 pd.merge(df1, df2, on="unit", how="inner")   # keep only rows with a match in BOTH
 pd.merge(df1, df2, on="unit", how="outer")   # keep every row from BOTH, NaN where unmatched
 ```
-`inner` silently drops rows that don't match — if `df2` is missing a unit due to a data issue, an inner join hides that unit from your entire downstream analysis with no warning. Default to `left` when `df1` is your "source of truth" and you want to KNOW about missing matches, not silently lose them.
+`inner` quietly drops any row that doesn't match. If `df2` is missing a unit because of some data issue, an inner join hides that unit from your entire downstream analysis, with no warning at all. Default to `left` when `df1` is your source of truth and you want to *know* about missing matches instead of silently losing them.
 
-**Visual + memory hook — identical picture to SQL's joins (`sql-practice.md`), pandas is just a different syntax for the same operation:**
+**Same picture as SQL's joins (`sql-practice.md`) — pandas is just different syntax for the same operation:**
 ```
 how="inner"                how="left"                 how="outer"
   ______   ______           ______   ______           ______   ______
@@ -119,31 +138,35 @@ how="inner"                how="left"                 how="outer"
  \______/ \______/         \######/ \______/         \######/ \######/
   only the overlap        all of df1 + overlap       everything, NaN
 ```
-**Remember it as:** `how="left"` shades df1 entirely — "every row of df1 survives, no matter what." If a row count shrinks after a merge you expected to be safe, `how` is the first thing to check against this picture.
+Think of `how="left"` as shading df1 entirely — every row of df1 survives, no matter what. If a merge you expected to be safe shrinks your row count, `how` is the first thing to check against this picture.
 
-### 2. What if the join key has a DIFFERENT name in each table?
+### 2. What if the join key has a different name in each table?
 ```python
 pd.merge(df1, df2, left_on="unit_id", right_on="unit", how="left")
 ```
 
-### 3. A merge can silently multiply rows if the key isn't actually unique on one side — how do you catch that before it corrupts your analysis?
+### 3. A merge can silently multiply rows if the key isn't actually unique on one side. How do you catch that before it corrupts your analysis?
 ```python
 pd.merge(df1, df2, on="unit", how="left", validate="one_to_one")   # raises MergeError if not truly 1:1
 ```
-If `df2` accidentally has duplicate `unit` values, a plain merge silently multiplies rows in the output (a many-to-one blowup) with no error — `validate` catches this AT merge time instead of you discovering row counts don't match hours later, deep into an already-corrupted analysis.
+If `df2` accidentally has duplicate `unit` values, a plain merge multiplies rows in the output — a many-to-one blowup — with no error raised. `validate` catches this at merge time. That's a lot better than discovering hours later, deep into an already-corrupted analysis, that the row counts don't add up.
 
 ### Summary example
-Joining a `units` table (1 row per unit) with a `maintenance_events` table (potentially MANY rows per unit): `pd.merge(units, events, on="unit", how="left", validate="one_to_many")` is the honest declaration of intent — if `events` unexpectedly had duplicate rows that would make it "many-to-many" instead, `validate` raises immediately rather than silently producing a row-count blowup that looks like real data until someone notices the totals don't add up.
+Joining a `units` table (1 row per unit) with a `maintenance_events` table (potentially many rows per unit):
+```python
+pd.merge(units, events, on="unit", how="left", validate="one_to_many")
+```
+That `validate` is an honest declaration of intent. If `events` unexpectedly had duplicate rows — making the real relationship many-to-many instead — it raises immediately, rather than silently producing a row-count blowup that looks like real data until someone notices the totals are off.
 
 ---
 
 ## Cluster 4 — Reshaping Between Wide and Long
 
-### 1. How do you reshape long data (one row per depot-quarter) into a wide pivot table (one row per depot, one column per quarter)?
+### 1. How do you turn long data (one row per depot-quarter) into a wide pivot table (one row per depot, one column per quarter)?
 ```python
 df.pivot_table(index="depot", columns="quarter", values="wear_pct", aggfunc="mean")
 ```
-If `(depot, quarter)` isn't unique in the source data, `pivot_table` needs to know HOW to combine duplicates into one cell — plain `pivot()` (no `_table`) requires uniqueness and errors otherwise; `pivot_table` always requires an aggregation function for exactly this reason.
+If `(depot, quarter)` isn't unique in the source data, `pivot_table` needs to know how to combine the duplicates into one cell. Plain `pivot()` (no `_table`) requires uniqueness and errors otherwise — `pivot_table` always needs an aggregation function for exactly this reason.
 
 ### 2. How do you go the other direction — wide back to long?
 ```python
@@ -151,7 +174,7 @@ df.melt(id_vars=["depot"], value_vars=["Q1", "Q2", "Q3"], var_name="quarter", va
 ```
 The exact inverse of `pivot_table` above.
 
-**Visual + memory hook — the shape actually flipping:**
+**The shape actually flipping:**
 ```
 LONG (one row per depot-quarter)      WIDE (one row per depot)
  depot  quarter  wear_pct              depot   Q1   Q2   Q3
@@ -161,33 +184,37 @@ LONG (one row per depot-quarter)      WIDE (one row per depot)
   LA      Q1       30          melt     LA     30   35   NaN
   LA      Q2       35
 ```
-**Remember it as:** pivot makes the table WIDER and SHORTER (values move from rows into new columns); melt makes it TALLER and NARROWER (column headers move back into a single "quarter" column) — the two are exact inverses, and you can always sanity-check a pivot by melting it back and confirming you land on the original long data.
+Pivot makes the table wider and shorter — values move out of rows and into new columns. Melt makes it taller and narrower — column headers move back into a single "quarter" column. The two are exact inverses. A good sanity check for any pivot: melt it back and confirm you land on the original long data.
 
 ### Summary example
-Wear percentage logged long-format across 3 quarters for 2 depots. `pivot_table(index="depot", columns="quarter", values="wear_pct", aggfunc="mean")` gives a 2×3 wide table ready for a heatmap; `melt`-ing that wide table back with the same `id_vars`/`value_vars` recovers the original long rows exactly — confirming the reshape didn't silently drop or duplicate anything.
+Wear percentage logged in long format across 3 quarters for 2 depots.
+```python
+df.pivot_table(index="depot", columns="quarter", values="wear_pct", aggfunc="mean")
+```
+gives a 2×3 wide table, ready for a heatmap. Melting that same table back, with the same `id_vars`/`value_vars`, recovers the original long rows exactly — confirming the reshape didn't silently drop or duplicate anything.
 
 ---
 
 ## Cluster 5 — Applying Functions: Row-wise, Element-wise, and When to Avoid Both
 
-### 1. How do you apply a custom function to every value in a column vs. across a whole row?
+### 1. How do you apply a custom function to every value in a column, versus across a whole row?
 ```python
 df["wear_category"] = df["wear_pct"].apply(lambda x: "high" if x > 40 else "low")   # element-wise on a Series
 df["combo"] = df.apply(lambda row: f"{row['unit']}-{row['depot']}", axis=1)          # row-wise across a DataFrame
 ```
-`df.apply` defaults to `axis=0` (apply down each column); `axis=1` applies ACROSS each row, giving your lambda a full row (Series) to read multiple columns from — forgetting `axis=1` when you need row-wise logic spanning columns is a frequent bug.
+`df.apply` defaults to `axis=0` — apply down each column. `axis=1` applies across each row instead, handing your lambda a whole row (a Series) so it can read multiple columns at once. Forgetting `axis=1` when you need row-wise logic is a frequent bug.
 
-### 2. Given that `.apply` works, why avoid it when a vectorized option exists?
+### 2. `.apply` works fine. So why avoid it when a vectorized option exists?
 ```python
 # slow: recomputes a Python-level function call per row
 df["wear_category"] = df["wear_pct"].apply(lambda x: "high" if x > 40 else "low")
 # fast: vectorized C-level comparison, no per-row Python call
 df["wear_category"] = np.where(df["wear_pct"] > 40, "high", "low")
 ```
-`.apply` still loops in Python under the hood, one function call per row. On a few hundred rows the difference is invisible; on millions of rows, `np.where`/vectorized string methods can be an order of magnitude faster — the exact same vectorized-vs-Python-loop tradeoff already covered for boolean masking in `numpy-practice.md`.
+`.apply` still loops in Python under the hood, one function call per row. On a few hundred rows you won't notice. On millions of rows, `np.where` or a vectorized string method can be an order of magnitude faster — the same vectorized-vs-Python-loop tradeoff already covered for NumPy boolean masking in `numpy-practice.md`.
 
 ### Summary example
-Categorizing 2 million wear readings as high/low: the `.apply(lambda x: ...)` version takes several seconds of pure Python-loop overhead; `np.where(df["wear_pct"] > 40, "high", "low")` computes the identical result via one vectorized C-level pass — the same logic, the same output, an order-of-magnitude difference in wall-clock time purely from avoiding the per-row Python function call.
+Categorizing 2 million wear readings as high/low. The `.apply(lambda x: ...)` version takes several seconds of pure Python-loop overhead. `np.where(df["wear_pct"] > 40, "high", "low")` computes the identical result in one vectorized C-level pass. Same logic, same output — an order-of-magnitude difference in wall-clock time, purely from skipping the per-row Python function call.
 
 ---
 
@@ -198,22 +225,27 @@ Categorizing 2 million wear readings as high/low: the `.apply(lambda x: ...)` ve
 df.isna().sum()                      # count of NaNs per column — always check this before modeling
 ```
 
-### 2. Given that count, how do you actually handle the missing values — drop, or fill?
+### 2. How do you actually handle the missing values — drop them, or fill them?
 ```python
 df.dropna(subset=["wear_pct"])        # drop rows missing THIS column specifically, not any column
 df["wear_pct"].fillna(df["wear_pct"].median())   # median is robust to outliers; mean is not
 df.fillna(method="ffill")             # forward-fill: carry the last valid value forward (time series)
 ```
-Without `subset`, `dropna()` drops a row if ANY column has a NaN, which can silently discard far more data than intended — always scope it to the columns that actually matter for the current step.
+Without `subset`, `dropna()` drops a row if *any* column has a NaN. That can quietly throw away far more data than you meant to lose — always scope it to just the columns that matter for the step you're on.
 
-### 3. Separately from missing values, how do you find and handle DUPLICATE rows?
+### 3. Separately from missing values, how do you find and handle duplicate rows?
 ```python
 df.duplicated(subset=["unit"]).sum()          # count duplicates by a key, not the whole row
 df.drop_duplicates(subset=["unit"], keep="last")   # keep is 'first' by default — 'last' keeps most recent
 ```
 
 ### Summary example
-A dataset has 12 missing `wear_pct` values and 5 duplicate `unit` entries (likely re-submitted readings). Checking `df.isna().sum()` first reveals the 12 gaps; `df["wear_pct"].fillna(median)` fills them robustly (median resists the influence of a few extreme outlier readings, unlike mean); `df.drop_duplicates(subset=["unit"], keep="last")` then keeps only each unit's most recent reading — running duplicate-removal BEFORE the fillna would have let a stale duplicate's value influence the median calculation, so the order here matters.
+A dataset has 12 missing `wear_pct` values and 5 duplicate `unit` entries — likely re-submitted readings.
+1. `df.isna().sum()` first reveals the 12 gaps.
+2. `df["wear_pct"].fillna(median)` fills them robustly — median resists the pull of a few extreme outlier readings, where a mean wouldn't.
+3. `df.drop_duplicates(subset=["unit"], keep="last")` then keeps only each unit's most recent reading.
+
+Order matters here. Running duplicate-removal *before* the fillna would have let a stale duplicate's value influence the median calculation.
 
 ---
 
@@ -225,44 +257,48 @@ df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
 df["month"] = df["date"].dt.month
 df["day_of_week"] = df["date"].dt.day_name()
 ```
-Without `format=`, pandas guesses the date format per-value — slow on large data, and it can silently misparse ambiguous dates (e.g., `01/02/2026` as Jan 2 vs. Feb 1). `errors="coerce"` turns unparseable values into `NaT` instead of crashing the whole conversion.
+Without `format=`, pandas guesses the date format per value. That's slow on large data, and it can silently misparse an ambiguous date — `01/02/2026` as Jan 2 versus Feb 1, for instance. `errors="coerce"` turns anything unparseable into `NaT` instead of crashing the whole conversion.
 
-### 2. Given real dates, how do you compute a value relative to N periods ago, per entity?
+### 2. How do you compute a value relative to N periods ago, per entity?
 ```python
 df = df.sort_values("date")
 df["wear_change"] = df.groupby("unit")["wear_pct"].diff()        # difference from the PREVIOUS row per group
 df["wear_pct_lag1"] = df.groupby("unit")["wear_pct"].shift(1)     # the previous row's raw value per group
 ```
-Without `.groupby("unit")`, `diff()`/`shift()` would compute differences ACROSS different units' boundaries, mixing unrelated time series together — the exact same "forgot to partition" bug already covered for SQL window functions in `sql-practice.md`.
+Skip `.groupby("unit")` here and `diff()`/`shift()` compute differences straight across different units' boundaries, mixing unrelated time series together. Same "forgot to partition" bug already covered for SQL window functions in `sql-practice.md`.
 
-### 3. Given lagged values work per-group, how do you compute a ROLLING statistic (e.g., a 3-reading moving average) the same way?
+### 3. Lagged values work per group. How do you compute a rolling statistic — say, a 3-reading moving average — the same way?
 ```python
 df["rolling_mean_3"] = df.groupby("unit")["wear_pct"].rolling(window=3, min_periods=1).mean().reset_index(level=0, drop=True)
 ```
-Without `min_periods=1`, the first 2 rows of each group (which don't have 3 prior values yet) become `NaN` — `min_periods=1` lets the window compute with however many values are actually available, avoiding unnecessary NaNs right at the start of each group's history.
+Without `min_periods=1`, the first 2 rows of each group — which don't have 3 prior values yet — come out `NaN`. `min_periods=1` lets the window compute with however many values are actually available, so you don't get unnecessary NaNs right at the start of each group's history.
 
 ### Summary example
-Tracking wear trend per locomotive over time: after `pd.to_datetime` and sorting, `groupby("unit")["wear_pct"].diff()` flags any single-reading jump, while `groupby("unit")["wear_pct"].rolling(3, min_periods=1).mean()` smooths out single-reading noise into a 3-reading trend — the diff catches a sudden spike, the rolling mean shows the underlying trajectory, and both are computed per-unit so one locomotive's history never bleeds into another's.
+Tracking wear trend per locomotive over time. After `pd.to_datetime` and sorting:
+- `groupby("unit")["wear_pct"].diff()` flags any single-reading jump.
+- `groupby("unit")["wear_pct"].rolling(3, min_periods=1).mean()` smooths single-reading noise into a 3-reading trend.
+
+The diff catches a sudden spike. The rolling mean shows the underlying trajectory. Both are computed per unit, so one locomotive's history never bleeds into another's.
 
 ---
 
 ## Cluster 8 — Memory, Dtypes, and Safe Mutation
 
-### 1. How do you check which columns are numeric vs. text?
+### 1. How do you check which columns are numeric versus text?
 ```python
 df.select_dtypes(include="number")     # all numeric columns
 df.select_dtypes(include="object")      # all string/object columns
 ```
 
-### 2. Given a large DataFrame, how do you actually check and reduce its memory footprint?
+### 2. How do you check and reduce a large DataFrame's actual memory footprint?
 ```python
 df.memory_usage(deep=True).sum() / 1e6      # actual MB, deep=True includes string object overhead
 df["depot"] = df["depot"].astype("category")   # repeated strings -> compact integer codes internally
 df["wear_pct"] = pd.to_numeric(df["wear_pct"], downcast="integer")   # int64 -> smallest sufficient int type
 ```
-A column like "depot" with a handful of repeated string values stored as `object` duplicates the FULL string in memory for every row; `category` stores each unique value once and uses small integer codes per row — often a 10x+ memory reduction, and it also speeds up groupby on that column.
+A column like "depot," with a handful of repeated string values stored as `object`, duplicates the full string in memory for every single row. `category` stores each unique value once, and uses small integer codes per row instead — often a 10x+ memory reduction, and it speeds up groupby on that column too.
 
-### 3. Given a filtered subset of a DataFrame, why does editing it sometimes raise a confusing warning?
+### 3. Why does editing a filtered subset of a DataFrame sometimes raise a confusing warning?
 ```python
 # risky: is filtered a view or a copy? pandas isn't always sure, and warns
 filtered = df[df["wear_pct"] > 40]
@@ -272,9 +308,9 @@ filtered["flag"] = True     # may or may not affect df — the warning exists be
 filtered = df[df["wear_pct"] > 40].copy()
 filtered["flag"] = True     # unambiguously independent now
 ```
-`SettingWithCopyWarning` isn't decorative — it's pandas telling you it can't guarantee whether `filtered` is a view into `df` or a throwaway copy, so it can't guarantee whether your edit lands on the original data too. `.copy()` removes the ambiguity by stating your intent explicitly — the exact same view-vs-copy distinction already covered for NumPy arrays in `numpy-practice.md`, just triggered here by a filter instead of a reshape.
+`SettingWithCopyWarning` isn't decorative. It's pandas telling you it can't guarantee whether `filtered` is a view into `df` or a throwaway copy — so it can't guarantee whether your edit lands on the original data too. `.copy()` removes that ambiguity by stating your intent up front. Same view-vs-copy distinction already covered for NumPy arrays in `numpy-practice.md`, just triggered here by a filter instead of a reshape.
 
-**Visual + memory hook — the same "one box, two labels" ambiguity as NumPy's view/copy, now with a genuine "pandas isn't sure which one this is" in the middle:**
+**The same "one box, two labels" ambiguity as NumPy's view/copy — except here, pandas itself genuinely isn't sure which one you have:**
 ```
 filtered = df[mask]              filtered = df[mask].copy()
                                   
@@ -288,7 +324,12 @@ filtered = df[mask]              filtered = df[mask].copy()
 ```
 
 ### Summary example
-Flagging high-wear units for a report, without corrupting the source data: `filtered = df[df["wear_pct"] > 40].copy()` then `filtered["flag"] = True` — the explicit `.copy()` guarantees `df` itself stays completely untouched, versus skipping it and getting a `SettingWithCopyWarning` that's really pandas saying "I don't know if I just silently edited your original dataset too."
+Flagging high-wear units for a report, without touching the source data.
+```python
+filtered = df[df["wear_pct"] > 40].copy()
+filtered["flag"] = True
+```
+The explicit `.copy()` guarantees `df` itself stays completely untouched. Skip it, and you'd get a `SettingWithCopyWarning` — which is really pandas saying "I don't know if I just silently edited your original dataset too."
 
 ---
 
@@ -299,63 +340,69 @@ Flagging high-wear units for a report, without corrupting the source data: `filt
 df["depot"] = df["depot"].str.strip().str.upper()      # .str accessor: vectorized string ops, chainable
 df["has_kc"] = df["depot"].str.contains("KC", na=False)  # na=False avoids NaN making the whole mask unusable
 ```
-`.str.contains` on a NaN value returns NaN, not True/False — leaving `na` at its default can produce a boolean mask that isn't actually all True/False, breaking downstream filtering. Setting `na=False` explicitly avoids that ambiguity.
+`.str.contains` on a NaN value returns NaN, not True/False. Leave `na` at its default and you can end up with a boolean mask that isn't actually all True/False — which breaks downstream filtering. Setting `na=False` explicitly avoids that.
 
-### 2. Given a cleaned numeric column, how do you bin it into meaningful categories?
+### 2. How do you bin a cleaned numeric column into meaningful categories?
 ```python
 df["wear_bucket"] = pd.cut(df["wear_pct"], bins=[0, 25, 50, 75, 100], labels=["low", "med", "high", "critical"])
 ```
-`cut` uses YOUR bin edges (meaningful thresholds, e.g. regulatory cutoffs); `pd.qcut` instead splits into equal-sized groups by count regardless of what the values actually mean — use `cut` when the boundaries carry real-world meaning, `qcut` when you just want quartiles/deciles with no inherent threshold.
+`cut` uses bin edges you choose — meaningful thresholds like regulatory cutoffs. `pd.qcut` instead splits into equal-sized groups by count, regardless of what the values mean. Use `cut` when the boundaries carry real-world meaning, `qcut` when you just want quartiles or deciles with no inherent threshold.
 
 ### 3. What if the file itself is too big to load into memory in one shot?
 ```python
 for chunk in pd.read_csv("big_file.csv", chunksize=100_000):
     process(chunk)     # each chunk is a normal DataFrame of up to 100,000 rows
 ```
-A file bigger than available RAM crashes a plain `read_csv`; chunked reading processes it in bounded-memory pieces — the standard fix before reaching for something heavier like Dask or Spark.
+A file bigger than available RAM crashes a plain `read_csv`. Chunked reading processes it in bounded-memory pieces instead — the standard fix before reaching for something heavier like Dask or Spark.
 
 ### Summary example
-Processing a 50 GB CSV of raw sensor strings that won't fit in memory: reading it via `chunksize=100_000` keeps memory bounded; within each chunk, `.str.strip().str.upper()` cleans a messy depot-code column, `pd.cut` buckets wear percentages into regulatory-meaningful categories, and each cleaned chunk gets written out or aggregated incrementally — the same per-chunk cleaning logic that would work fine on a small in-memory DataFrame, just looped over pieces instead of loaded all at once.
+Processing a 50 GB CSV of raw sensor strings that won't fit in memory.
+1. Reading it via `chunksize=100_000` keeps memory bounded.
+2. Within each chunk, `.str.strip().str.upper()` cleans a messy depot-code column.
+3. `pd.cut` buckets wear percentages into regulatory-meaningful categories.
+4. Each cleaned chunk gets written out or aggregated incrementally.
+
+Same per-chunk cleaning logic that would work fine on a small in-memory DataFrame — just looped over pieces instead of loaded all at once.
 
 ---
 
 ## Practice Q&A (Self-Test)
 
 **Q1. What's the difference between `df.loc[0, "wear_pct"]` and `df.iloc[0, 1]`, and why can they silently point to different rows after filtering?**
-A: `.loc` is label-based — `df.loc[0]` means "the row labeled 0." `.iloc` is position-based — `df.iloc[0]` always means "the first row physically present," regardless of its label. After filtering or sorting, row labels are often no longer 0,1,2,... so `loc[0]` may not exist or may not be the first row anymore.
+A: `.loc` is label-based — `df.loc[0]` means "the row labeled 0." `.iloc` is position-based — `df.iloc[0]` always means "the first row physically present," regardless of its label. After filtering or sorting, row labels are often no longer 0, 1, 2, ..., so `loc[0]` may not exist, or may not point at the first row anymore.
 
 **Q2. Why does `df[df["wear_pct"] > 40 and df["depot"] == "KC"]` fail, and what's the fix?**
-A: Python's `and`/`or` short-circuit on a single boolean, but a pandas boolean Series is element-wise, not a single boolean. The fix is `df[(df["wear_pct"] > 40) & (df["depot"] == "KC")]`, using the bitwise `&`/`|` operators with each condition parenthesized (since `&` binds tighter than `>`).
+A: Python's `and`/`or` handle a single boolean, but a pandas boolean Series is one true/false per row, not a single value. The fix is `df[(df["wear_pct"] > 40) & (df["depot"] == "KC")]` — the bitwise `&`/`|` operators, with each condition parenthesized, since `&` binds tighter than `>`.
 
-**Q3. Given `df["dev_from_depot_mean"] = df["wear_pct"] - df.groupby("depot")["wear_pct"].transform("mean")`, why use `.transform` instead of `.agg` here?**
-A: `.agg`/plain aggregation collapses each group to one summary row, but `.transform` broadcasts the group's aggregate result back to every original row, preserving the DataFrame's row count. This is required here because the result is a per-row column (each row's deviation from its own group's mean), not a summary table.
+**Q3. In `df["dev_from_depot_mean"] = df["wear_pct"] - df.groupby("depot")["wear_pct"].transform("mean")`, why use `.transform` instead of `.agg` here?**
+A: `.agg` collapses each group down to one summary row. `.transform` broadcasts the group's aggregate result back onto every original row instead, keeping the DataFrame's row count intact. That's required here, since the result is a per-row column — each row's deviation from its own group's mean — not a summary table.
 
-**Q4. Why can `pd.merge(df1, df2, on="unit", how="inner")` silently produce misleading downstream analysis?**
-A: An inner join keeps only rows with a match in both tables, so any `unit` present in `df1` but missing from `df2` (e.g., due to a data issue) gets silently dropped with no warning. That missing unit disappears from the entire downstream analysis, which is why defaulting to `how="left"` when df1 is the source of truth is the safer default.
+**Q4. Why can `pd.merge(df1, df2, on="unit", how="inner")` silently produce a misleading downstream analysis?**
+A: An inner join keeps only rows with a match in both tables. Any `unit` present in `df1` but missing from `df2` — say, from a data issue — gets dropped with no warning. That missing unit then disappears from the entire downstream analysis, which is why `how="left"` is the safer default when `df1` is the source of truth.
 
 **Q5. What does passing `validate="one_to_one"` to `pd.merge` protect against?**
-A: It protects against silent row duplication: if `df2` unexpectedly has duplicate `unit` values, a plain merge would multiply rows in the output (a many-to-one blowup) with no error. `validate` raises a `MergeError` immediately instead of letting you discover mismatched row counts hours later.
+A: Silent row duplication. If `df2` unexpectedly has duplicate `unit` values, a plain merge multiplies rows in the output — a many-to-one blowup — with no error. `validate` raises a `MergeError` immediately instead, rather than letting you discover mismatched row counts hours later.
 
 **Q6. In `df.apply(lambda row: f"{row['unit']}-{row['depot']}", axis=1)`, what does `axis=1` control, and what happens if you forget it?**
-A: `axis=1` makes the lambda receive a full row (a Series spanning multiple columns) so it can combine values from `row['unit']` and `row['depot']`. `df.apply` defaults to `axis=0` (applying down each column), so forgetting `axis=1` when row-wise logic across columns is needed is a frequent bug.
+A: `axis=1` makes the lambda receive a full row — a Series spanning multiple columns — so it can combine `row['unit']` and `row['depot']`. `df.apply` defaults to `axis=0` (down each column), so forgetting `axis=1` when you need row-wise logic across columns is a frequent bug.
 
 **Q7. Why prefer `np.where(df["wear_pct"] > 40, "high", "low")` over `df["wear_pct"].apply(lambda x: ...)` for the same result?**
-A: `.apply` still loops in Python under the hood, calling the lambda once per row; `np.where` is vectorized at the C level. On a few hundred rows the difference is invisible, but on millions of rows the vectorized version can be an order of magnitude faster.
+A: `.apply` still loops in Python under the hood, calling the lambda once per row. `np.where` is vectorized at the C level. On a few hundred rows the difference is invisible. On millions of rows, the vectorized version can be an order of magnitude faster.
 
 **Q8. What does `df.dropna(subset=["wear_pct"])` do differently from a bare `df.dropna()`?**
-A: A bare `df.dropna()` drops a row if ANY column has a NaN, which can silently discard far more data than intended. `subset=["wear_pct"]` scopes the drop to only rows missing that specific column, keeping rows that have NaNs elsewhere but valid data in the column that actually matters.
+A: A bare `df.dropna()` drops a row if any column has a NaN, which can quietly discard far more data than intended. `subset=["wear_pct"]` scopes the drop to rows missing that specific column, keeping rows with NaNs elsewhere as long as the column that actually matters is filled in.
 
 **Q9. Why does converting `df["depot"]` to `astype("category")` reduce memory, and what's the added benefit?**
-A: An `object` column stores the full string in memory for every repeated occurrence; `category` stores each unique value once and uses compact integer codes per row instead, often yielding a 10x+ reduction for repetitive string columns like a handful of depot names. It also speeds up groupby operations on that column.
+A: An `object` column stores the full string in memory for every repeated occurrence. `category` stores each unique value once, and uses compact integer codes per row instead — often a 10x+ reduction for repetitive string columns like a handful of depot names. It also speeds up groupby operations on that column.
 
 **Q10. Why does `filtered = df[df["wear_pct"] > 40]; filtered["flag"] = True` trigger a `SettingWithCopyWarning`, and what removes it?**
-A: pandas can't always guarantee whether `filtered` is a view into `df` or an independent copy, so it warns because the assignment's effect on the original `df` is ambiguous. Explicitly calling `.copy()` when creating `filtered` states your intent and removes the ambiguity, guaranteeing the edit is independent of `df`.
+A: pandas can't always guarantee whether `filtered` is a view into `df` or an independent copy, so the effect of the assignment on the original `df` is ambiguous — and it warns because of that. Calling `.copy()` explicitly when creating `filtered` states your intent and removes the ambiguity, guaranteeing the edit stays independent of `df`.
 
 ---
 
 ## Video-Sourced Practice MCQs
 
-A second practice set for Pandas Practice, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube interview-prep video for this subject, then written up as original multiple-choice questions here (the source video mostly asked these as open-ended questions -- the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video). Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
+A second practice set for Pandas Practice, built the same way as this hub's NCA-GENL community bank. The topics were checked against a real YouTube interview-prep video for this subject, then written up here as original multiple-choice questions — the source video mostly asked these as open-ended questions, so the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video. Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
 
 <script type="application/json" class="topic-quiz-data" data-title="Pandas Practice">
 [

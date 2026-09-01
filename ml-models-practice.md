@@ -1,12 +1,16 @@
-# Classical ML Models Practice — Built as a Chain, Not a List
+# Classical ML Models Practice
 
-`X_train, X_test, y_train, y_test` assumed to already exist (see `sklearn-practice.md` for the split). New to the core vocabulary — fitting, overfitting, hyperparameters, leakage? The five-term primer at the top of `sklearn-practice.md` defines them once; this doc builds on those. Each cluster below is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+This doc assumes `X_train, X_test, y_train, y_test` already exist. See `sklearn-practice.md` for how that split gets made.
+
+New to terms like fitting, overfitting, hyperparameters, or leakage? `sklearn-practice.md` has a short primer at the top that defines all five. This doc builds on those definitions instead of repeating them.
+
+Each cluster below is one continuous thread. Every question builds on the answer before it. Each cluster ends with one worked example, using real numbers, start to finish.
 
 ---
 
 ## Cluster 1 — Linear Models
 
-### 1. How do you fit a plain linear regression and read the coefficients?
+### 1. How do you fit a plain linear regression, and what do the coefficients mean?
 ```python
 from sklearn.linear_model import LinearRegression
 reg = LinearRegression()
@@ -14,28 +18,48 @@ reg.fit(X_train, y_train)
 print(dict(zip(X_train.columns, reg.coef_)))    # one coefficient per feature
 print("intercept:", reg.intercept_)
 ```
-Linear regression fits a straight-line formula: `prediction = intercept + coef₁·feature₁ + coef₂·feature₂ + …` — each **coefficient** is the learned multiplier on one feature ("for every extra unit of this feature, add this much to the prediction"), and the **intercept** is the prediction when every feature is zero. One reading trap: a coefficient's SIZE reflects both the feature's real effect AND its raw scale — a feature measured in thousands will have a tiny coefficient even if it matters a lot, while one measured in single digits gets an inflated-looking coefficient. Standardize features first if you want to compare coefficient magnitudes as "importance."
+Linear regression fits a straight-line formula:
+```
+prediction = intercept + coef1·feature1 + coef2·feature2 + ...
+```
+Each **coefficient** is the learned multiplier on one feature. Read it as "for every extra unit of this feature, add this much to the prediction." The **intercept** is just the prediction when every feature is zero.
 
-### 2. Given raw coefficients can overfit to noise, how do you add regularization, and how do you choose L1 vs. L2?
+Here's a reading trap worth knowing about. A coefficient's size reflects two things at once: the feature's real effect, and its raw scale. A feature measured in the thousands (like income) will get a tiny coefficient even if it matters a lot. A feature measured in single digits (like years of experience) gets an inflated-looking coefficient just from being on a smaller scale. If you want to compare coefficients as "importance," standardize the features first — otherwise you're comparing apples to oranges.
+
+### 2. Raw coefficients can overfit to noise. How do you add regularization, and how do you choose L1 vs. L2?
 ```python
 from sklearn.linear_model import Ridge, Lasso, ElasticNet
 ridge = Ridge(alpha=1.0)    # L2: shrinks all coefficients toward zero, rarely to exactly zero
 lasso = Lasso(alpha=0.1)    # L1: can shrink coefficients to EXACTLY zero -- performs feature selection
 elastic = ElasticNet(alpha=0.1, l1_ratio=0.5)   # mix of both
 ```
-**Regularization** means adding a penalty on coefficient size to the quantity being minimized during fitting — the model now has to justify every large coefficient with real predictive payoff, which stops it from contorting itself around training noise. The exact L1-vs-L2 distinction is worked out with real numbers in `math-foundations-refresher.md`'s norms section: if you suspect only a handful of features actually matter and want the model to tell you which, Lasso's exact-zero property does real feature selection. Ridge is the better default when you believe most features contribute a little (multicollinearity especially) and don't want to discard any outright. `alpha` is the regularization STRENGTH — higher alpha = more shrinkage = simpler model, tuned via cross-validation, not guessed.
+**Regularization** means adding a penalty on coefficient size to whatever quantity the model is minimizing during fitting. Every large coefficient now has to justify itself with real predictive payoff. That's what stops the model from contorting itself around training noise.
 
-### 3. Given a CLASSIFICATION target instead of a continuous one, how does a linear model's coefficient even apply, and how do you interpret it?
+The L1-vs-L2 distinction, worked out with real numbers, lives in `math-foundations-refresher.md`'s norms section. The short version:
+- **Lasso (L1)** can shrink a coefficient all the way to exactly zero. That's real feature selection — if you suspect only a handful of features actually matter, Lasso will tell you which ones by zeroing out the rest.
+- **Ridge (L2)** shrinks every coefficient toward zero, but rarely reaches exactly zero. Use it as the default when you believe most features contribute a little (especially with multicollinearity) and you don't want to throw any of them out entirely.
+
+`alpha` is the regularization strength. Higher alpha means more shrinkage, which means a simpler model. Tune it with cross-validation — don't guess it.
+
+### 3. The target is a classification, not a number. How does a coefficient even apply, and how do you read it?
 ```python
 from sklearn.linear_model import LogisticRegression
 clf = LogisticRegression()
 clf.fit(X_train, y_train)
 odds_ratios = np.exp(clf.coef_[0])    # exponentiate the log-odds coefficient to get an interpretable odds ratio
 ```
-First, the vocabulary: **odds** are probability-of-happening divided by probability-of-not-happening (a 75% probability is odds of 3-to-1, written as just 3), and **log-odds** are the natural logarithm of that number — the scale logistic regression actually works in internally, because it turns "multiply the odds" into "add to the score." So logistic regression's coefficients are in LOG-ODDS units, not probability units — a coefficient of 0.69 doesn't mean "69% more likely," it means the odds multiply by `e^0.69 ≈ 2.0` (twice the odds) for a one-unit increase in that feature (the same `eˣ` mechanics from `math-foundations-refresher.md`'s calculus section). Reporting the raw coefficient instead of the odds ratio is a common source of misinterpreting logistic regression output.
+Two quick definitions first. **Odds** are probability-of-happening divided by probability-of-not-happening — a 75% probability is odds of 3-to-1, written just as the number 3. **Log-odds** are the natural logarithm of that number. That's the scale logistic regression actually works in internally, because taking a log turns "multiply the odds" into "add to the score" (see `math-foundations-refresher.md`'s calculus section for why `eˣ` and `ln` pair up like this).
+
+So a logistic regression's coefficients are in log-odds units, not probability units. A coefficient of 0.69 does not mean "69% more likely." Here's what it actually means, step by step:
+
+1. Take the coefficient: `0.69`.
+2. Exponentiate it: `e^0.69 ≈ 2.0`.
+3. Read that 2.0 as an odds ratio: a one-unit increase in that feature roughly doubles the odds.
+
+Reporting the raw coefficient instead of the odds ratio is one of the most common ways people misread logistic regression output.
 
 ### Summary example
-A logistic regression predicting equipment failure has a coefficient of 0.69 on "age_days" — reported raw, this looks unremarkable; `np.exp(0.69) ≈ 2.0` reveals the real story: each additional standardized unit of age roughly DOUBLES the odds of failure, which is the number worth putting in front of a stakeholder, not the log-odds coefficient itself.
+A logistic regression predicting equipment failure has a coefficient of 0.69 on `age_days`. Reported raw, that number looks unremarkable. Run it through `np.exp(0.69) ≈ 2.0` and the real story shows up: each additional standardized unit of age roughly doubles the odds of failure. That's the number worth putting in front of a stakeholder — not the raw log-odds coefficient.
 
 ---
 
@@ -50,31 +74,47 @@ tree = DecisionTreeClassifier(max_depth=3, min_samples_leaf=10, random_state=42)
 tree.fit(X_train, y_train)
 plot_tree(tree, feature_names=X_train.columns, filled=True, fontsize=8)
 ```
-A **decision tree** is a learned flowchart of yes/no questions on feature values ("is `wear_pct` > 40? → is `age_days` > 300? → predict FAIL") — prediction means walking a new row down the flowchart to a **leaf** (an end node) and answering with whatever the training rows that landed there mostly were. `max_depth` caps how many questions deep the flowchart can go; `min_samples_leaf` prevents a leaf from being created based on just 1-2 data points (almost certainly noise, not signal) — both are regularization levers against overfitting, and a tree with unconstrained `min_samples_leaf` can still overfit badly even at a modest depth by creating tiny, unreliable leaves.
+A **decision tree** is a learned flowchart of yes/no questions on feature values: "is `wear_pct` > 40? → is `age_days` > 300? → predict FAIL." To make a prediction, you walk a new row down the flowchart until it lands on a **leaf** — an end node — and answer with whatever the training rows in that leaf mostly were.
 
-### 2. Given a tree with both depth and leaf-size capped, how does it actually DECIDE where to split in the first place?
+Two settings control how big the flowchart is allowed to get:
+- `max_depth` caps how many questions deep it can go.
+- `min_samples_leaf` stops a leaf from being created based on just 1-2 data points, which is almost certainly noise, not signal.
+
+Both are regularization levers against overfitting. And they matter together, not separately — a tree can still overfit badly even at a modest `max_depth` if `min_samples_leaf` is left unconstrained, because it can grow tiny, unreliable leaves instead of going deeper.
+
+### 2. How does the tree actually decide where to split?
 ```python
 from sklearn.tree import DecisionTreeClassifier
 tree = DecisionTreeClassifier(criterion="gini")   # or criterion="entropy"
 ```
-At each candidate split, the tree measures how "impure" (mixed-class) each resulting group would be — Gini impurity and entropy are two different mathematical measures of that mixedness, and the tree picks whichever split reduces impurity the most. They usually agree on the best split in practice; Gini is slightly cheaper to compute (no logarithm) and is scikit-learn's default for that reason.
+At each candidate split, the tree measures how "impure" — how mixed-class — each resulting group would be. Gini impurity and entropy are two different mathematical measures of that mixedness. The tree just picks whichever split reduces impurity the most.
+
+In practice they usually agree on the best split. Gini is slightly cheaper to compute, since it skips the logarithm entropy needs, which is why it's scikit-learn's default.
 
 ### Summary example
-A tree splitting on "wear_pct > 40": before the split, the node is a 50/50 mix of pass/fail (Gini impurity near its maximum); after the split, one branch is 90% fail and the other is 90% pass (both branches far purer) — that impurity REDUCTION is exactly what the tree is scoring when it considers this split against every other candidate threshold on every other feature, at every node.
+A tree considers splitting on `wear_pct > 40`. Before the split, the node is a 50/50 mix of pass and fail — Gini impurity near its maximum. After the split, one branch is 90% fail and the other is 90% pass. Both branches are now far purer.
+
+That impurity reduction is exactly what the tree scores when comparing this split against every other candidate threshold, on every other feature, at every node.
 
 ---
 
 ## Cluster 3 — Ensembles: Bagging vs. Boosting
 
-### 1. Given that a single tree overfits easily, how do you combine MANY trees to do better, and why does that even help?
+### 1. A single tree overfits easily. How do you combine many trees to do better, and why does that even help?
 ```python
 from sklearn.ensemble import RandomForestClassifier
 rf = RandomForestClassifier(n_estimators=300, max_features="sqrt", random_state=42, n_jobs=-1)
 rf.fit(X_train, y_train)
 ```
-An **ensemble** is many models voting together — the idea being that individual models' mistakes partly cancel out, the way averaging many noisy measurements gets you closer to the truth than trusting one. A Random Forest is the "bagging" kind of ensemble: each tree trains on a **bootstrap sample** (rows drawn at random *with replacement*, so each tree sees a slightly different version of the data), and — the part people forget — each tree is also only ALLOWED to consider a random subset of features (`max_features="sqrt"`, sqrt(total) by convention) at every split, forcing trees to be different from each other even on the same data. Without this feature-level randomness, all trees would tend to make similar splits on the same dominant features and the ensemble wouldn't reduce variance much — the feature subsampling is what actually decorrelates the trees and makes averaging them powerful.
+An **ensemble** is many models voting together. The idea: individual models' mistakes partly cancel out, the same way averaging many noisy measurements gets you closer to the truth than trusting just one.
 
-### 2. A Random Forest averages many INDEPENDENT trees. What's the alternative — building trees that learn from each other SEQUENTIALLY (boosting)?
+A Random Forest is the "bagging" kind of ensemble. Each tree trains on a **bootstrap sample** — rows drawn at random *with replacement*, so each tree sees a slightly different version of the data.
+
+Here's the part people forget: each tree is also only allowed to consider a random subset of features at every split (`max_features="sqrt"`, meaning the square root of the total feature count, by convention). That forces the trees to differ from each other even when trained on the same data.
+
+Why this matters: without that feature-level randomness, all the trees would tend to make similar splits on the same dominant features. The ensemble wouldn't reduce variance much, because the trees would be too similar to each other to average out any real error. The feature subsampling is what actually decorrelates the trees, and that decorrelation is what makes averaging them powerful.
+
+### 2. A Random Forest averages independent trees. What's the alternative — trees that learn from each other in sequence?
 ```python
 import xgboost as xgb
 model = xgb.XGBClassifier(
@@ -83,9 +123,11 @@ model = xgb.XGBClassifier(
 )
 model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 ```
-A Random Forest builds many INDEPENDENT trees and averages them (reduces variance); boosting builds trees SEQUENTIALLY, where each new tree is trained specifically to correct the PREVIOUS ensemble's errors (reduces bias) — this is why boosting typically needs a low `learning_rate` (how much each new tree's correction counts) and MORE trees, trading training time for often-higher accuracy, and why it's more prone to overfitting if not regularized (`subsample`, `colsample_bytree`, `max_depth` all exist to fight that).
+That alternative is **boosting**. A Random Forest builds many independent trees and averages them, which reduces variance. Boosting builds trees sequentially instead — each new tree is trained specifically to correct the previous ensemble's errors, which reduces bias.
 
-**The two shapes, side by side — parallel voters vs. an error-correcting relay:**
+That sequential correction is why boosting typically needs a low `learning_rate` (how much each new tree's correction counts) and more trees than a forest would use. You're trading training time for often-higher accuracy. It's also why boosting is more prone to overfitting if left unregularized — `subsample`, `colsample_bytree`, and `max_depth` all exist to fight that.
+
+Here are the two shapes side by side: parallel voters vs. an error-correcting relay.
 ```
 BAGGING (Random Forest)                    BOOSTING (XGBoost / LightGBM)
 
@@ -102,32 +144,40 @@ BAGGING (Random Forest)                    BOOSTING (XGBoost / LightGBM)
  (errors cancel in the average)            each tree only makes sense given the ones before
 ```
 
-### 3. Given that boosting needs both `learning_rate` AND `n_estimators`, why must they be tuned TOGETHER rather than independently?
+### 3. Boosting needs both `learning_rate` and `n_estimators`. Why must they be tuned together, not separately?
 ```python
 # a lower learning_rate needs MORE estimators to reach the same fit -- they trade off directly
 model_a = xgb.XGBClassifier(n_estimators=100, learning_rate=0.3)   # fast, coarse corrections
 model_b = xgb.XGBClassifier(n_estimators=1000, learning_rate=0.01)  # slow, fine corrections
 ```
-A high learning rate with few trees converges fast but can overshoot/oscillate and generalize worse; a low learning rate with many trees is slower to train but each correction is gentler, typically generalizing better — this is the single most important pair of hyperparameters to tune together in any gradient boosting model, not independently.
+A high learning rate with few trees converges fast, but it can overshoot, oscillate, and generalize worse. A low learning rate with many trees trains slower, but each correction is gentler and it typically generalizes better.
 
-### 4. Rather than guessing the right `n_estimators` for that tradeoff, how do you let the model stop itself at the right point?
+This is the single most important hyperparameter pair to tune together in any gradient boosting model. Tuning either one alone misses how strongly they interact.
+
+### 4. Instead of guessing the right `n_estimators`, how do you let the model stop itself at the right point?
 ```python
 model = xgb.XGBClassifier(n_estimators=1000, learning_rate=0.05, early_stopping_rounds=20)
 model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 print("best iteration:", model.best_iteration)
 ```
-`early_stopping_rounds` stops training automatically once the validation score hasn't improved for 20 consecutive rounds — directly implementing the "stop at the validation-loss minimum" idea from the loss-curve diagnostic (`ds-fundamentals`), using real held-out performance rather than a fixed, guessed tree count.
+`early_stopping_rounds` stops training automatically once the validation score hasn't improved for 20 consecutive rounds. It directly implements the "stop at the validation-loss minimum" idea from the loss-curve diagnostic (`ds-fundamentals`), using real held-out performance instead of a fixed, guessed tree count.
 
-### 5. Is there a THIRD variant beyond bagging (Random Forest) and boosting (XGBoost) worth knowing, and how does it differ in practice?
+### 5. Is there a third variant beyond bagging (Random Forest) and boosting (XGBoost) worth knowing?
 ```python
 import lightgbm as lgb
 model = lgb.LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=31, random_state=42)
 model.fit(X_train, y_train)
 ```
-LightGBM is still boosting (same sequential-correction idea as question 2), but grows trees LEAF-WISE (always splitting whichever leaf reduces loss the most next) rather than LEVEL-WISE (splitting every leaf at the current depth, like XGBoost's default) — this can reach a better fit with fewer splits, but `num_leaves` needs capping DIRECTLY (rather than just depth) because a leaf-wise tree can otherwise grow very unevenly deep down one branch, overfitting a small subset of data.
+LightGBM. It's still boosting — same sequential-correction idea as question 2 — but it grows trees differently. XGBoost's default grows **level-wise**, splitting every leaf at the current depth before going deeper. LightGBM grows **leaf-wise**, always splitting whichever single leaf reduces loss the most next.
+
+Leaf-wise growth can reach a better fit with fewer splits. The tradeoff: `num_leaves` needs capping directly, not just depth, because a leaf-wise tree can grow very unevenly deep down one branch and overfit a small subset of the data.
 
 ### Summary example
-The same dataset fit three ways: `RandomForestClassifier` averages 300 independent, feature-subsampled trees (reduces variance, parallelizable, less tuning-sensitive); `XGBClassifier` with `early_stopping_rounds=20` builds trees sequentially correcting prior errors (reduces bias, needs `learning_rate`/`n_estimators` tuned together, but often edges out the forest in raw accuracy); `LGBMClassifier` does the same sequential correction but leaf-wise, often faster on large data at the cost of needing `num_leaves` watched closely so one branch doesn't run away.
+The same dataset, fit three ways.
+
+1. `RandomForestClassifier` averages 300 independent, feature-subsampled trees. It reduces variance, parallelizes well, and is less sensitive to tuning.
+2. `XGBClassifier` with `early_stopping_rounds=20` builds trees sequentially, each one correcting the prior ensemble's errors. It reduces bias, needs `learning_rate` and `n_estimators` tuned together, and often edges out the forest in raw accuracy.
+3. `LGBMClassifier` does the same sequential correction, but leaf-wise. It's often faster on large data — at the cost of needing `num_leaves` watched closely so one branch doesn't run away.
 
 ---
 
@@ -138,39 +188,47 @@ The same dataset fit three ways: `RandomForestClassifier` averages 300 independe
 import pandas as pd
 importance = pd.Series(model.feature_importances_, index=X_train.columns).sort_values(ascending=False)
 ```
-The default (`"gain"`-based by column, check `importance_type`) can overweight high-cardinality features — columns with many distinct values, like a ZIP code or anything ID-like — that get used for many splits just because they offer more possible split points, not because they're more predictive.
+Worth knowing before you trust this list: the default importance (`"gain"`-based by column — check `importance_type`) can overweight high-cardinality features. Those are columns with many distinct values, like a ZIP code or anything ID-like. They tend to get used for a lot of splits simply because they offer more possible split points to choose from, not because they're actually more predictive.
 
-### 2. Given that built-in tree importance can mislead, how do you get a more trustworthy, model-agnostic version?
+### 2. Built-in tree importance can mislead. How do you get a more trustworthy, model-agnostic version?
 ```python
 from sklearn.inspection import permutation_importance
 result = permutation_importance(rf, X_test, y_test, n_repeats=10, random_state=42, n_jobs=-1)
 importance = pd.Series(result.importances_mean, index=X_test.columns).sort_values(ascending=False)
 ```
-Permutation importance directly measures how much a MODEL'S ACTUAL TEST PERFORMANCE drops when one feature's values are randomly shuffled (breaking its relationship with the target) — this works identically for any model type (not just trees) and isn't biased by a feature's cardinality or how a specific algorithm happens to count "usage."
+**Permutation importance** measures something more direct: how much a model's actual test performance drops when one feature's values get randomly shuffled, breaking its relationship with the target. If shuffling a feature barely hurts performance, it wasn't doing much real work.
+
+This works identically for any model type, not just trees, and it isn't biased by a feature's cardinality or by how a specific algorithm happens to count "usage."
 
 ### Summary example
-An XGBoost model's built-in importance ranks a high-cardinality `customer_id`-adjacent feature as the top predictor — permutation importance on the same model reveals shuffling that feature barely hurts test performance at all, exposing the built-in ranking as an artifact of split-count, not real predictive value.
+An XGBoost model's built-in importance ranks a high-cardinality `customer_id`-adjacent feature as the top predictor. Permutation importance on that same model tells a different story: shuffling that feature barely hurts test performance at all. The built-in ranking turns out to be an artifact of split-count, not real predictive value.
 
 ---
 
 ## Cluster 5 — Support Vector Machines: the Concepts, Before the Real Numbers
 
-### 1. How do you fit an SVM, and why does the KERNEL choice matter so much?
+### 1. How do you fit an SVM, and why does the kernel choice matter so much?
 ```python
 from sklearn.svm import SVC
 svm_linear = SVC(kernel="linear", C=1.0)
 svm_rbf = SVC(kernel="rbf", C=1.0, gamma="scale")
 ```
-A linear kernel can only separate classes with a straight line/plane; the RBF (radial basis function) kernel implicitly projects data into a much higher-dimensional space where a straight-line separator in THAT space corresponds to a curved boundary in the original space — use linear when you believe the true boundary is roughly linear (also faster, more interpretable), RBF when you suspect a genuinely non-linear boundary and have enough data to estimate it reliably.
+A linear kernel can only separate classes with a straight line, or a flat plane in higher dimensions. The RBF (radial basis function) kernel does something cleverer: it implicitly projects the data into a much higher-dimensional space, where a straight-line separator in *that* space corresponds to a curved boundary back in the original space.
 
-### 2. Given that RBF projects into a higher-dimensional space, what do the two knobs controlling THAT projection (`C` and `gamma`) actually do?
+Use linear when you believe the true boundary is roughly straight — it's also faster and more interpretable. Use RBF when you suspect a genuinely non-linear boundary and you have enough data to estimate one reliably.
+
+### 2. RBF projects into a higher-dimensional space. What do the two knobs controlling that projection, `C` and `gamma`, actually do?
 ```python
 SVC(kernel="rbf", C=100, gamma=0.01)   # high C: less tolerance for misclassified training points (can overfit)
 SVC(kernel="rbf", C=0.1, gamma=10)      # low C: more tolerant of margin violations (can underfit); high gamma: very local/wiggly boundary
 ```
-**Why both matter together, not separately:** `C` trades margin width against training-error tolerance (high C = narrow margin, fewer training errors allowed, risk of overfitting); `gamma` controls how far a single training point's influence reaches (high gamma = very local, wiggly decision boundary, also overfitting-prone). A grid search over BOTH jointly (not one at a time) is standard, because their effects interact.
+They control different things, and both matter together:
+- `C` trades margin width against training-error tolerance. A high `C` means a narrow margin, few training errors allowed, and real risk of overfitting.
+- `gamma` controls how far a single training point's influence reaches. A high `gamma` means a very local, wiggly decision boundary — also prone to overfitting.
 
-**Visual + memory hook — the classic dartboard, because "high C" and "high gamma" above are really just two ways of describing the same underlying bias/variance knob every model in this doc has, by a different name each time:**
+A grid search over both jointly, not one at a time, is standard practice, because their effects interact.
+
+Here's a memory hook for both of them: the classic dartboard. "High C" and "high gamma" are really just two different names for the same underlying bias/variance knob that every model in this doc has, in a different costume each time.
 ```
                     LOW VARIANCE            HIGH VARIANCE
                  (predictions consistent)  (predictions scattered)
@@ -187,18 +245,22 @@ SVC(kernel="rbf", C=0.1, gamma=10)      # low C: more tolerant of margin violati
                   tight cluster,             scattered AND
                   but off-center             off-center — worst case
 ```
-**Remember it as:** underfitting is the top-left-to-bottom-left move (predictions get consistent but consistently WRONG — high `gamma`→too-smooth, `C` too low, tree too shallow, `k` in kNN too large); overfitting is the move to the right side (predictions get scattered — chasing individual training points instead of the real pattern: `C` too high, `gamma` too high, tree too deep, `k` too small). Every regularization knob in this entire doc — `max_depth`, `min_samples_leaf`, `num_leaves`, `C`, `gamma`, `k` — is turning the SAME dial between these four quadrants, just with a different name per algorithm; once this picture is automatic, a new hyperparameter you've never seen before is just "which direction does turning this move me on the dartboard," not a fact to look up.
+Remember it this way: underfitting is the move from top-left toward bottom-left — predictions get consistent, but consistently wrong. That's `gamma` too smooth, `C` too low, a tree too shallow, or `k` in kNN too large. Overfitting is the move toward the right side — predictions get scattered, chasing individual training points instead of the real pattern. That's `C` too high, `gamma` too high, a tree too deep, or `k` too small.
+
+Every regularization knob in this entire doc — `max_depth`, `min_samples_leaf`, `num_leaves`, `C`, `gamma`, `k` — is turning this same dial between the four quadrants, just wearing a different name per algorithm. Once this picture is automatic, a new hyperparameter you've never seen before becomes an easy question: which direction does turning this move me on the dartboard? Not a fact you need to look up.
 
 ### Summary example
-An RBF SVM with `C=100, gamma=10` scores 99% train accuracy but only 71% test — squarely the overfitting corner of the dartboard (both knobs cranked toward "chase every training point"). Backing off to `C=1, gamma="scale"` (sklearn's data-informed default) drops train accuracy to 93% but lifts test accuracy to 90% — a smaller train/test gap and a genuinely more useful model, the exact tradeoff the dartboard visual is describing.
+An RBF SVM with `C=100, gamma=10` scores 99% train accuracy but only 71% test accuracy. That's squarely the overfitting corner of the dartboard — both knobs cranked toward "chase every training point."
 
-The next section goes deeper on exactly this SVM/PCA material — not sketched, but computed for real on actual fitted models and a real dataset, so every number below is verifiable rather than illustrative.
+Back off to `C=1, gamma="scale"` (sklearn's data-informed default), and train accuracy drops to 93%, but test accuracy climbs to 90%. Smaller train/test gap, genuinely more useful model. That's the exact tradeoff the dartboard visual is describing.
+
+The next section goes deeper on this same SVM and PCA material. Nothing sketched this time — every number is computed for real on actual fitted models and a real dataset, so it's verifiable, not just illustrative.
 
 ---
 
 ## SVM & PCA — Detailed, Pictorial
 
-Everything below is computed, not sketched: a real `sklearn.svm.SVC` fitted on a small hand-checkable dataset, a real `np.linalg.eigh` eigendecomposition, and a real pipeline on the actual UCI Wine dataset. Hover any box in a diagram for a one-line definition.
+Everything below is computed, not sketched. A real `sklearn.svm.SVC` fitted on a small hand-checkable dataset. A real `np.linalg.eigh` eigendecomposition. A real pipeline on the actual UCI Wine dataset. Hover any box in a diagram for a one-line definition.
 
 ### SVM, step by step — what "maximum margin" actually means
 
@@ -208,27 +270,31 @@ Margin width:         2 / ||w||
 Classify a new point: sign(w · x + b)
 </div>
 
-A Support Vector Machine doesn't just find *a* line that separates two classes — it finds the line with the **widest possible margin** to the nearest point of either class. Those nearest points are the **support vectors**: the only training points that actually determine the boundary. Every other point could be deleted and the boundary wouldn't move.
+A Support Vector Machine doesn't just find *a* line that separates two classes. It finds the line with the **widest possible margin** to the nearest point of either class. Those nearest points are the **support vectors** — the only training points that actually determine where the boundary sits. Every other point could be deleted and the boundary wouldn't move at all.
 
-Fitted for real on 6 points — class +1 at (3,3), (4,3), (3,4); class −1 at (0,0), (1,0), (0,1) — with `SVC(kernel="linear", C=1000)`:
+Here it is fitted for real, on 6 points: class +1 at (3,3), (4,3), (3,4); class −1 at (0,0), (1,0), (0,1). Fit with `SVC(kernel="linear", C=1000)`:
 
 <figure class="fig" data-mlviz="svmmargin" id="mlviz-svmmargin"></figure>
 
-Only **3 of the 6 points** became support vectors: (1,0), (0,1), and (3,3) — not (0,0), (4,3), or (3,4), because those three sit strictly farther from the boundary and contribute nothing to defining it. The real fitted boundary is `0.4001·x₁ + 0.3999·x₂ − 1.3999 = 0` (very close to `x₁+x₂=3.5`, matching the geometric midpoint intuition), with a real margin width of **3.536** — computed as `2/||w||`, not estimated by eye.
+Only 3 of the 6 points became support vectors: (1,0), (0,1), and (3,3). The other three — (0,0), (4,3), (3,4) — sit strictly farther from the boundary and contribute nothing to defining it. The real fitted boundary is `0.4001·x1 + 0.3999·x2 − 1.3999 = 0`, which is very close to `x1+x2=3.5` — matching the geometric midpoint intuition. The real margin width is **3.536**, computed as `2/||w||`, not estimated by eye.
 
 ### Why the kernel choice is the single biggest SVM decision
 
 <figure class="fig" data-mlviz="svmkernel" id="mlviz-svmkernel"></figure>
 
-A real, dramatic difference on a real dataset (200 points arranged as two concentric circles, 30% held out as test): a **linear** kernel can only cut with a straight line, so on genuinely circular data it does barely better than a coin flip — **53.3% test accuracy**. The **RBF kernel** implicitly lifts the data into a higher-dimensional space where a flat cut *there* corresponds to a curved boundary *here* — **100% test accuracy**, same data, same train/test split, only the kernel changed.
+Here's a real, dramatic difference on a real dataset: 200 points arranged as two concentric circles, 30% held out as test. A **linear** kernel can only cut with a straight line, so on genuinely circular data it does barely better than a coin flip: **53.3% test accuracy**. The **RBF kernel** implicitly lifts the data into a higher-dimensional space, where a flat cut *there* corresponds to a curved boundary *here*: **100% test accuracy**. Same data, same train/test split — only the kernel changed.
 
 ### What `C` actually controls — margin width vs. tolerance for violations
 
 <figure class="fig" data-mlviz="svmc" id="mlviz-svmc"></figure>
 
-`C` is a real, measurable trade-off, not a vague "regularization knob." Fitted at three real values of C on the same overlapping dataset: as C climbs from 0.01 → 1.0 → 1000, the **margin width shrinks** (2.695 → 0.957 → 0.855) and the **number of support vectors shrinks** (118 → 31 → 27 of 140 training points) — a small C tolerates more points inside/across the margin (wide margin, many support vectors, more regularized); a large C insists on getting almost every training point right (narrow margin, few support vectors, more prone to overfitting on noisy data).
+`C` is a real, measurable trade-off, not a vague "regularization knob." Here it's fit at three real values on the same overlapping dataset. As C climbs from 0.01 to 1.0 to 1000:
+- The margin width shrinks: 2.695 → 0.957 → 0.855.
+- The number of support vectors shrinks: 118 → 31 → 27, out of 140 training points.
 
-<div class="callout"><span class="tag">Honest note</span>In this particular dataset, test accuracy stayed flat (93.3%) across all three C values — the classes are separated enough that C's effect on generalization didn't show up here. What DID change, measurably, is exactly what C is defined to control: margin width and support-vector count. Don't let a flat accuracy number hide that C is still doing real, verifiable work.</div>
+A small `C` tolerates more points inside or across the margin — wide margin, many support vectors, more regularized. A large `C` insists on getting almost every training point right — narrow margin, few support vectors, more prone to overfitting on noisy data.
+
+<div class="callout"><span class="tag">Honest note</span>In this particular dataset, test accuracy stayed flat at 93.3% across all three C values — the classes are separated enough that C's effect on generalization didn't show up here. What did change, measurably, is exactly what C is defined to control: margin width and support-vector count. Don't let a flat accuracy number hide that C is still doing real, verifiable work.</div>
 
 ---
 
@@ -241,11 +307,15 @@ A real, dramatic difference on a real dataset (200 points arranged as two concen
 4. Project onto top-k eigenvectors (sorted by eigenvalue, descending)
 </div>
 
-PCA doesn't "shrink" data randomly — it finds the exact direction the data varies the most along (the top eigenvector of the covariance matrix), and that direction becomes the new first axis. If "eigenvector" and "covariance" are unfamiliar words: the covariance matrix is a table of how strongly each pair of features moves together, and an eigenvector is a direction that matrix stretches without rotating — both worked with small real numbers in `math-foundations-refresher.md`. Real numbers, computed on 10 points (`np.cov` + `np.linalg.eigh`, not estimated):
+PCA doesn't shrink data randomly. It finds the exact direction the data varies the most along — the top eigenvector of the covariance matrix — and that direction becomes the new first axis.
+
+Two words worth pinning down if they're unfamiliar: the covariance matrix is a table of how strongly each pair of features moves together, and an eigenvector is a direction that matrix stretches without rotating. Both are worked through with small real numbers in `math-foundations-refresher.md`. Below, everything is computed on 10 real points, using `np.cov` and `np.linalg.eigh` — not estimated:
 
 <figure class="fig" data-mlviz="pcaeig" id="mlviz-pcaeig"></figure>
 
-Real covariance matrix `[[0.617, 0.615], [0.615, 0.717]]` (the large off-diagonal value, 0.615, is why the two features are so correlated — points move up-and-right together). Real eigenvalues: **1.284** (PC1) and **0.049** (PC2) — PC1 alone captures **96.3%** of all the variance in the data, PC2 only 3.7%. Projecting all 10 points onto PC1 alone — throwing away the second dimension entirely — gives a mean squared reconstruction error of just **0.044**, because PC2 barely mattered to begin with.
+The real covariance matrix here is `[[0.617, 0.615], [0.615, 0.717]]`. That large off-diagonal value, 0.615, is why the two features are so correlated — points move up-and-right together. The real eigenvalues are **1.284** (PC1) and **0.049** (PC2). PC1 alone captures **96.3%** of all the variance in the data; PC2 only adds 3.7%.
+
+Projecting all 10 points onto PC1 alone — throwing away the second dimension entirely — gives a mean squared reconstruction error of just **0.044**. PC2 barely mattered to begin with, so dropping it costs almost nothing.
 
 <figure class="fig" data-mlviz="pcascree" id="mlviz-pcascree"></figure>
 
@@ -253,13 +323,21 @@ Real covariance matrix `[[0.617, 0.615], [0.615, 0.717]]` (the large off-diagona
 
 <figure class="fig" data-mlviz="pcasvm" id="mlviz-pcasvm"></figure>
 
-Real UCI Wine dataset: 178 samples, 13 real chemical-composition features, 3 wine cultivars. An RBF-kernel SVM on all 13 (scaled) features gets **98.15% test accuracy**. Compressing down to just the **top 2 principal components first** — which capture only **54.9%** of the total variance — and then fitting the exact same SVM gets **96.30% test accuracy**: barely worse, using 2 numbers instead of 13, and needing fewer support vectors to do it (33 vs. 57). This is the real, practical reason PCA and SVM get paired in practice: PCA buys visualization (you can actually plot 2 dimensions) and speed, at a small, measurable, honestly-reported accuracy cost — not a free lunch, a real trade you can quantify before making it.
+The real UCI Wine dataset: 178 samples, 13 real chemical-composition features, 3 wine cultivars.
 
-<div class="callout"><span class="tag">Where this shows up</span>SVM's max-margin idea generalizes to margin-based deep learning losses (hinge loss, triplet loss). PCA's "find the direction of max variance" idea is the same math behind whitening, some anomaly-detection methods, and — at a much larger scale — the intuition behind why embedding spaces can be compressed without losing most of their useful structure.</div>
+1. An RBF-kernel SVM fit on all 13 scaled features gets **98.15% test accuracy**.
+2. Compress down to just the top 2 principal components first — which capture only **54.9%** of the total variance.
+3. Fit the exact same SVM on those 2 numbers instead of 13. It gets **96.30% test accuracy**.
+
+That's barely worse, using 2 numbers instead of 13, and it needed fewer support vectors to do it — 33 versus 57.
+
+This is the real, practical reason PCA and SVM get paired in practice. PCA buys you visualization (you can actually plot 2 dimensions) and speed, at a small, measurable, honestly-reported accuracy cost. It's a real trade you can quantify before making it, not a free lunch.
+
+<div class="callout"><span class="tag">Where this shows up</span>SVM's max-margin idea generalizes to margin-based deep learning losses, like hinge loss and triplet loss. PCA's "find the direction of max variance" idea is the same math behind whitening, some anomaly-detection methods, and — at a much larger scale — the intuition behind why embedding spaces can be compressed without losing most of their useful structure.</div>
 
 ## Cluster 6 — K-Nearest Neighbors and Naive Bayes
 
-### 1. How do you fit K-Nearest Neighbors, and why does feature scaling matter MORE here than for the tree-based models above?
+### 1. How do you fit K-Nearest Neighbors, and why does feature scaling matter more here than for the tree models above?
 ```python
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
@@ -267,9 +345,11 @@ from sklearn.pipeline import make_pipeline
 knn_pipe = make_pipeline(StandardScaler(), KNeighborsClassifier(n_neighbors=5))
 knn_pipe.fit(X_train, y_train)
 ```
-KNN classifies a point by finding its nearest neighbors using raw Euclidean (or similar) distance — a feature measured in the thousands (e.g., mileage) will completely dominate the distance calculation over a feature measured in single digits (e.g., number of inspections), regardless of which one is actually more predictive. Trees split one feature at a time and never compute cross-feature distance, so they don't have this problem; for KNN, unlike for trees, scaling isn't a minor tuning detail, it's a correctness requirement.
+KNN classifies a point by finding its nearest neighbors, using raw Euclidean (or similar) distance. A feature measured in the thousands, like mileage, will completely dominate that distance calculation over a feature measured in single digits, like number of inspections — regardless of which one is actually more predictive.
 
-### 2. Given that scaling is required, how do you choose `k` (n_neighbors) itself — the same bias-variance dial as `C`/`gamma`/`max_depth` above?
+Trees don't have this problem. They split one feature at a time and never compute cross-feature distance. For KNN, scaling isn't a minor tuning detail — it's a correctness requirement.
+
+### 2. Scaling is required. How do you choose `k` (n_neighbors) itself — the same bias-variance dial as `C`, `gamma`, and `max_depth` above?
 ```python
 from sklearn.model_selection import cross_val_score
 for k in [3, 5, 7, 9, 15, 25]:
@@ -277,7 +357,9 @@ for k in [3, 5, 7, 9, 15, 25]:
     scores = cross_val_score(pipe, X_train, y_train, cv=5)
     print(k, scores.mean())
 ```
-A very small k (like 1) fits training data almost perfectly but is extremely sensitive to noise/outliers (high variance — the scattered-right side of Cluster 5's dartboard); a very large k smooths over real local structure, tending toward just predicting the overall majority class (high bias — the top side of the dartboard) — cross-validation, not intuition, should pick it.
+A very small `k`, like 1, fits training data almost perfectly, but it's extremely sensitive to noise and outliers. That's high variance — the scattered-right side of Cluster 5's dartboard. A very large `k` smooths over real local structure and drifts toward just predicting the overall majority class. That's high bias — the top side of the dartboard.
+
+Cross-validation should pick `k`, not intuition.
 
 ### 3. Moving away from distance-based methods entirely — how does Naive Bayes classify, and what's actually "naive" about it?
 ```python
@@ -285,14 +367,18 @@ from sklearn.naive_bayes import GaussianNB
 nb = GaussianNB()
 nb.fit(X_train, y_train)
 ```
-It assumes every feature is CONDITIONALLY INDEPENDENT of every other feature, given the class — an assumption that's almost never exactly true in real data (features usually correlate with each other) — but the classifier often still works well in practice even when that assumption is violated, because it only needs the RELATIVE ranking of class probabilities to be right, not the exact probability values, and errors from the independence assumption often partially cancel out.
+It assumes every feature is conditionally independent of every other feature, given the class. In real data that's almost never exactly true — features usually correlate with each other some amount.
+
+Even so, the classifier often works well in practice, violated assumption and all. Here's why: it only needs the relative ranking of class probabilities to be right, not the exact probability values, and errors from the independence assumption often partially cancel out.
 
 ### Summary example
-20 features, several of them correlated with each other (violating Naive Bayes' independence assumption directly): `GaussianNB` still ranks the true class highest in most cases, because its probability ESTIMATES are distorted by the correlation but the RELATIVE ORDER of classes often survives that distortion — a genuinely different failure mode than KNN, which would instead need every feature properly scaled first or the distance calculation itself becomes meaningless regardless of any independence assumption.
+Take 20 features, several of them correlated with each other — directly violating Naive Bayes' independence assumption. `GaussianNB` still ranks the true class highest in most cases. Its probability estimates get distorted by the correlation, but the relative order of classes often survives that distortion anyway.
+
+That's a genuinely different failure mode than KNN. KNN needs every feature properly scaled first, or the distance calculation itself becomes meaningless — no independence assumption involved at all.
 
 ## Cluster 7 — Combining Multiple Models
 
-### 1. Every model above is trained separately — how do you combine several DIFFERENT model types into one stronger ensemble?
+### 1. Every model above is trained separately. How do you combine several different model types into one stronger ensemble?
 ```python
 from sklearn.ensemble import StackingClassifier
 from sklearn.linear_model import LogisticRegression
@@ -307,9 +393,11 @@ stack = StackingClassifier(
 )
 stack.fit(X_train, y_train)
 ```
-The `final_estimator` (a "meta-model") learns HOW MUCH to trust each base model's predictions, potentially per-region-of-feature-space, rather than averaging them blindly — it can learn, for instance, that the SVM is more reliable on one subset of cases and the Random Forest on another. `cv=5` matters specifically here: base models predict via cross-validation internally so the meta-model trains on genuinely OUT-OF-FOLD predictions, not predictions the base models have already memorized — training on in-sample base predictions would badly overstate the stack's real performance.
+The `final_estimator` — a "meta-model" — learns how much to trust each base model's predictions, potentially per region of feature space, instead of averaging them blindly. It can learn, for instance, that the SVM is more reliable on one subset of cases and the Random Forest on another.
 
-### 2. Stacking trains a whole extra model just to combine predictions — is there a cheaper way to combine models?
+`cv=5` matters specifically here. The base models predict via cross-validation internally, so the meta-model trains on genuinely out-of-fold predictions — not predictions the base models have already memorized. Training on in-sample base predictions would badly overstate the stack's real performance.
+
+### 2. Stacking trains a whole extra model just to combine predictions. Is there a cheaper way?
 ```python
 from sklearn.ensemble import VotingClassifier
 voter = VotingClassifier(
@@ -318,24 +406,34 @@ voter = VotingClassifier(
 )
 voter.fit(X_train, y_train)
 ```
-Hard voting only sees each model's final class prediction (throwing away confidence information); soft voting averages the actual predicted probabilities, so a model that's 90% confident correctly influences the outcome more than one that's 51% confident — as long as the underlying models produce well-calibrated probabilities, soft voting typically edges out hard voting, at a fraction of stacking's complexity and training cost.
+Hard voting only sees each model's final class prediction, throwing away its confidence. Soft voting averages the actual predicted probabilities instead, so a model that's 90% confident correctly influences the outcome more than one that's only 51% confident.
+
+As long as the underlying models produce well-calibrated probabilities, soft voting typically edges out hard voting — at a fraction of stacking's complexity and training cost.
 
 ### Summary example
-Combining a Random Forest and an SVM: `VotingClassifier(voting="soft")` is a one-line, no-extra-training way to average their probability outputs — a reasonable default. `StackingClassifier` instead trains a `LogisticRegression` meta-model on each base model's out-of-fold predictions, which can outperform soft voting specifically when the two base models are reliable in genuinely DIFFERENT regions of the feature space, letting the meta-model learn that pattern rather than averaging blindly everywhere.
+Combining a Random Forest and an SVM, two ways.
+
+`VotingClassifier(voting="soft")` is a one-line, no-extra-training way to average their probability outputs. That's a reasonable default.
+
+`StackingClassifier` instead trains a `LogisticRegression` meta-model on each base model's out-of-fold predictions. It can outperform soft voting specifically when the two base models are reliable in genuinely different regions of the feature space — the meta-model learns that pattern instead of averaging blindly everywhere.
 
 ## Cluster 8 — The Cheapest Sanity Check of All
 
-### 1. Before reaching for anything above — trees, SVMs, ensembles — how do you quickly check if a SIMPLE model is already good enough?
+### 1. Before reaching for anything above — trees, SVMs, ensembles — how do you quickly check if a simple model is already good enough?
 ```python
 baseline_linear = LogisticRegression().fit(X_train, y_train)
 baseline_tree = RandomForestClassifier(random_state=42).fit(X_train, y_train)
 print("linear:", baseline_linear.score(X_test, y_test))
 print("tree ensemble:", baseline_tree.score(X_test, y_test))
 ```
-If a plain linear model already gets close to a tuned tree ensemble's performance, that's valuable information — it suggests the true relationships in the data are mostly linear/additive, favoring the simpler, faster, more interpretable model for production, rather than defaulting to "the fancier model must be better" without checking. This is the model-family version of `sklearn-practice.md`'s `DummyClassifier` baseline — cheap, fast, and run FIRST, before investing in anything more complex.
+Just fit both and compare. If a plain linear model already gets close to a tuned tree ensemble's performance, that's valuable information — it suggests the true relationships in the data are mostly linear and additive, favoring the simpler, faster, more interpretable model for production, instead of defaulting to "the fancier model must be better" without checking.
+
+This is the model-family version of `sklearn-practice.md`'s `DummyClassifier` baseline. Cheap, fast, and run first — before investing in anything more complex.
 
 ### Summary example
-A Random Forest takes 40 minutes to tune and scores 91% test accuracy; a plain `LogisticRegression`, fit in under a second with no tuning, scores 89% on the same data. That 2-point gap may not be worth the forest's added complexity, slower inference, and reduced interpretability in production — running both cheaply up front is what makes that tradeoff visible before committing to the more complex option by default.
+A Random Forest takes 40 minutes to tune and scores 91% test accuracy. A plain `LogisticRegression`, fit in under a second with no tuning, scores 89% on the same data.
+
+That 2-point gap may not be worth the forest's added complexity, slower inference, and reduced interpretability in production. Running both cheaply up front is what makes that tradeoff visible, before committing to the more complex option by default.
 
 ---
 
@@ -560,7 +658,7 @@ document.addEventListener("mousemove",e=>{
 
 ## Video-Sourced Practice MCQs
 
-A second practice set for Classical ML Models Practice, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube interview-prep video for this subject, then written up as original multiple-choice questions here (the source video mostly asked these as open-ended questions -- the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video). Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
+A second practice set for Classical ML Models Practice, built the same way as this hub's NCA-GENL community bank. The topics were checked against a real YouTube interview-prep video for this subject, then written up here as original multiple-choice questions. The source video mostly asked these as open-ended questions — the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video. Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
 
 <script type="application/json" class="topic-quiz-data" data-title="Classical ML Models Practice">
 [

@@ -1,15 +1,19 @@
-# Deep Learning Practice — Built as a Chain, Not a List
+# Deep Learning Practice
 
-Primarily **PyTorch** (`import torch, torch.nn as nn`) — every snippet here was actually run and verified in this session, which is why the framework choice isn't arbitrary: this environment's TensorFlow install is broken (a real NumPy2/ml_dtypes conflict), so the one Keras equivalent noted at the end is syntax-correct standard API but unverified here. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+This doc uses PyTorch (`import torch, torch.nn as nn`) for nearly everything. Every snippet here was actually run and checked in this session, so you know it works as written.
 
-**Six words this doc leans on constantly — defined once, in plain English** (the arithmetic behind them is worked by hand, with real numbers, in the Neural Net Numericals topic; the geometry in `ds-fundamentals`):
+There's one exception. This environment's TensorFlow install is broken — a real conflict between NumPy 2 and `ml_dtypes`. So the one Keras example near the end is syntax-correct, standard API, but it was never actually run here.
 
-- **Tensor** — PyTorch's array type: a grid of numbers with a shape, like `[4, 10]` (4 rows, 10 columns). Everything — inputs, weights, outputs — is a tensor.
-- **Layer & activation** — a layer is one learned linear formula (`nn.Linear(10, 32)` maps 10 numbers to 32); an *activation* like ReLU (zero out negatives) is the nonlinear squish between layers. Without activations, any stack of layers collapses mathematically into a single linear formula — the nonlinearity is what makes depth worth anything.
-- **Loss** — the single number scoring how wrong the model's current predictions are. Training is nothing but repeatedly nudging weights to make this number smaller.
-- **Gradient / backpropagation** — the gradient is "which direction, and how strongly, would changing each weight reduce the loss"; backpropagation is the algorithm that computes it for every weight by walking the chain rule backward from the loss.
-- **Batch & epoch** — a batch is the handful of examples processed together in one update step (the `4` in a `[4, 10]` input); an epoch is one full pass through the whole training set.
-- **Learning rate (`lr`)** — how big each weight-nudge is. Too large overshoots and diverges; too small crawls.
+Each cluster builds on the one before it. Every cluster ends with a worked summary example that ties the pieces together.
+
+**Six words this doc uses constantly.** Defined once here, in plain English. (The arithmetic behind them, worked by hand with real numbers, lives in the Neural Net Numericals topic. The geometry lives in `ds-fundamentals`.)
+
+- **Tensor** — PyTorch's array type. A grid of numbers with a shape, like `[4, 10]` (4 rows, 10 columns). Inputs, weights, outputs — everything in PyTorch is a tensor.
+- **Layer & activation** — a layer is one learned formula. `nn.Linear(10, 32)` takes 10 numbers in and produces 32 numbers out. An activation, like ReLU, sits between layers and adds a nonlinear "squish" — ReLU just zeroes out any negative number. Without activations, stacking layers doesn't actually help: the whole stack collapses mathematically into one single linear formula. The nonlinearity is what makes depth worth anything.
+- **Loss** — one number that scores how wrong the model's current predictions are. Training is just repeatedly nudging the weights to make this number smaller.
+- **Gradient / backpropagation** — the gradient tells you, for each weight, which direction to move it and how strongly, to reduce the loss. Backpropagation is the algorithm that computes the gradient for every weight, by walking the chain rule backward from the loss.
+- **Batch & epoch** — a batch is the handful of examples processed together in one update step. It's the `4` in a `[4, 10]` input. An epoch is one full pass through the entire training set.
+- **Learning rate (`lr`)** — how big each weight-nudge is. Too large, and training overshoots and diverges. Too small, and training crawls.
 
 ---
 
@@ -38,9 +42,9 @@ x = torch.randn(4, 10)     # batch of 4, 10 features each
 out = model(x)
 print(out.shape)           # torch.Size([4, 2])
 ```
-`super().__init__()` is not optional: `nn.Module`'s constructor sets up the internal bookkeeping (parameter registration, submodule tracking) that lets `.parameters()`, `.to(device)`, and `.state_dict()` all work correctly — skip it and layers you assign won't be tracked as trainable parameters at all, a silent, confusing bug.
+`super().__init__()` is not optional. `nn.Module`'s constructor sets up internal bookkeeping — parameter registration, submodule tracking — and that bookkeeping is what lets `.parameters()`, `.to(device)`, and `.state_dict()` all work correctly. Skip it, and every layer you assign won't be tracked as trainable at all. It's a silent, confusing bug: no error, just a model that never learns.
 
-### 2. Given a defined model, how do you write the training loop, and why does the order of these 5 lines matter?
+### 2. How do you write the training loop, and why does the order of these 5 lines matter?
 ```python
 import torch.optim as optim
 
@@ -55,9 +59,9 @@ for epoch in range(5):
         loss.backward()             # 4. backprop -- computes gradients
         optimizer.step()            # 5. apply the update using those gradients
 ```
-PyTorch accumulates (ADDS to) gradients by default rather than overwriting them — deliberate, since it's what makes gradient accumulation across micro-batches possible — but it means forgetting `zero_grad()` silently sums gradients across iterations, corrupting every update after the first. That's why it must come first, every single iteration.
+PyTorch adds new gradients to whatever's already there, instead of overwriting them. That's deliberate — it's what makes gradient accumulation across micro-batches possible. But it also means: forget `zero_grad()`, and gradients from the last iteration silently sum with the new ones, corrupting every update after the first. That's why it has to come first, every single iteration.
 
-### 3. That loop used a hand-rolled stand-in for real data — how do you build a proper `Dataset`/`DataLoader` instead?
+### 3. That loop used a hand-rolled stand-in for real data. How do you build a proper `Dataset`/`DataLoader` instead?
 ```python
 from torch.utils.data import Dataset, DataLoader
 
@@ -76,10 +80,10 @@ loader = DataLoader(ds, batch_size=16, shuffle=True)
 for xb, yb in loader:
     pass   # xb: [16, 10], yb: [16]
 ```
-`shuffle=True` matters specifically for TRAINING: without it, the model sees data in the same fixed order every epoch, which can let it learn spurious patterns tied to that ordering (especially if the data is sorted by label or time). Keep `shuffle=False` for validation/test loaders instead, so results stay reproducible and comparable run to run.
+`shuffle=True` matters specifically for training. Without it, the model sees data in the same fixed order every single epoch. If the data happens to be sorted by label or by time, the model can learn spurious patterns tied to that ordering, instead of the real signal. Keep `shuffle=False` for validation and test loaders — that way results stay reproducible and comparable, run to run.
 
 ### Summary example
-A full minimal training step: `TabularDataset` wraps raw NumPy arrays, `DataLoader(ds, batch_size=16, shuffle=True)` yields shuffled batches, and each batch runs through the exact 5-line sequence from question 2 — `zero_grad()` → forward → loss → `backward()` → `step()` — with the training loop's `shuffle=True` specifically preventing the model from learning any accidental pattern in how the original data happened to be ordered.
+A full minimal training step, start to finish. `TabularDataset` wraps raw NumPy arrays. `DataLoader(ds, batch_size=16, shuffle=True)` yields shuffled batches. Each batch runs through the exact 5-line sequence from question 2: `zero_grad()` → forward → loss → `backward()` → `step()`. The training loop's `shuffle=True` specifically stops the model from learning any accidental pattern in how the original data happened to be ordered.
 
 ---
 
@@ -87,16 +91,24 @@ A full minimal training step: `TabularDataset` wraps raw NumPy arrays, `DataLoad
 
 ## Cluster 2 — Convolutional Networks
 
-### 1. Before building a CNN, how do you compute a `Conv2d` layer's OUTPUT SHAPE, without guessing?
+### 1. How do you compute a `Conv2d` layer's output shape, without guessing?
 ```python
 conv = nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)
 x = torch.randn(1, 3, 32, 32)     # [batch, channels, height, width]
 out = conv(x)
 print(out.shape)   # torch.Size([1, 16, 32, 32]) -- same H,W because padding=1 with kernel=3, stride=1
 ```
-What a convolution actually does, in one sentence: it slides a small window (the **kernel** — here 3×3) across the image, computing a weighted sum at each position, and each of the 16 `out_channels` is a separate learned window producing its own "feature map" — one might light up on vertical edges, another on a texture, all learned rather than hand-designed. `stride` is how far the window jumps each step; `padding` adds a border of zeros so the window can center on edge pixels. The output-shape formula worth memorizing, not guessing: `output_size = floor((input_size + 2*padding - kernel_size) / stride) + 1`. With `padding = (kernel_size-1)/2` and `stride=1` (as above), output size exactly equals input size — this "same padding" pattern is worth recognizing on sight.
+Here's what a convolution actually does, in one sentence: it slides a small window — the **kernel**, 3×3 here — across the image, and at each position it computes a weighted sum. Each of the 16 `out_channels` is its own separate learned window, producing its own "feature map." One might light up on vertical edges. Another might light up on a texture. Nothing here is hand-designed — all 16 windows are learned.
 
-### 2. Given predictable shapes per layer, how do you stack several into a full CNN?
+`stride` is how far the window jumps at each step. `padding` adds a border of zeros around the image, so the window can center itself on edge pixels too.
+
+The output-shape formula is worth memorizing, not guessing:
+```
+output_size = floor((input_size + 2*padding - kernel_size) / stride) + 1
+```
+With `padding = (kernel_size-1)/2` and `stride=1`, as in the example above, the output size comes out exactly equal to the input size. This "same padding" pattern is worth recognizing on sight.
+
+### 2. How do you stack several conv layers into a full CNN?
 ```python
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes=10):
@@ -116,16 +128,16 @@ model = SimpleCNN()
 out = model(torch.randn(2, 3, 64, 64))    # works for 64x64 input...
 out2 = model(torch.randn(2, 3, 128, 128))  # ...AND 128x128, without changing the Linear layer
 ```
-`AdaptiveAvgPool2d(1)` instead of `Flatten()` + a hardcoded `Linear` size: a plain `Flatten()` bakes in a specific spatial size (e.g., `32*8*8`), which breaks the moment input resolution changes — `AdaptiveAvgPool2d(1)` always collapses to a fixed 1×1-per-channel output regardless of input size, making the classifier head genuinely resolution-independent.
+Why `AdaptiveAvgPool2d(1)` instead of `Flatten()` followed by a hardcoded `Linear` size? A plain `Flatten()` bakes in one specific spatial size — something like `32*8*8` — and that breaks the moment your input resolution changes. `AdaptiveAvgPool2d(1)` always collapses down to a fixed 1×1-per-channel output, no matter what spatial size comes in. That makes the classifier head genuinely resolution-independent.
 
 ### Summary example
-The same `SimpleCNN` instance runs on both a 64×64 and a 128×128 input with no code change and no error — the `Conv2d`/`BatchNorm2d`/`ReLU`/`MaxPool2d` stack (question 2) processes whatever spatial size arrives using the predictable shape math (question 1), and `AdaptiveAvgPool2d(1)` collapses whatever the resulting spatial size is down to a fixed 1×1-per-channel vector before the `Linear` head — the one piece of the network that DOES require a fixed input size, protected from ever seeing a variable one.
+The same `SimpleCNN` instance runs on both a 64×64 and a 128×128 input, no code change, no error. Here's how: the `Conv2d`/`BatchNorm2d`/`ReLU`/`MaxPool2d` stack from question 2 processes whatever spatial size arrives, using the predictable shape math from question 1. Then `AdaptiveAvgPool2d(1)` collapses whatever spatial size comes out of that stack down to a fixed 1×1-per-channel vector, before it ever reaches the `Linear` head. The `Linear` head is the one piece of this network that does require a fixed input size — and it's fully protected from ever seeing a variable one.
 
 ---
 
 ## Cluster 3 — Train vs. Eval Mode: BatchNorm and Dropout
 
-### 1. Why does running inference on a single sample sometimes break, specifically involving BatchNorm?
+### 1. Why does running inference on a single sample sometimes break, specifically with BatchNorm?
 ```python
 model.train()   # BatchNorm uses CURRENT BATCH statistics during training
 # ... training loop ...
@@ -133,9 +145,13 @@ model.eval()    # BatchNorm switches to using its stored RUNNING statistics at i
 with torch.no_grad():
     preds = model(torch.randn(1, 3, 64, 64))   # a batch of 1 -- would break BatchNorm's per-batch stats in train mode
 ```
-First, what BatchNorm is for: it re-centers and rescales each layer's outputs (using the batch's mean and variance) so the numbers flowing between layers stay in a stable range — which stabilizes and noticeably speeds up training. The catch: in train mode, BatchNorm normalizes using the CURRENT batch's mean/variance — with a batch size of 1 (a single real-time prediction), that "variance" is degenerate/meaningless. `model.eval()` switches BatchNorm to use accumulated RUNNING statistics from training instead, which is what makes single-sample inference work correctly at all.
+First, what BatchNorm is actually for. It re-centers and rescales each layer's outputs, using that batch's mean and variance, so the numbers flowing between layers stay in a stable range. That stabilizes training, and speeds it up noticeably.
 
-### 2. Given that `.eval()` changes BatchNorm's behavior, does it affect anything else — like Dropout?
+Here's the catch. In train mode, BatchNorm normalizes using the *current batch's* mean and variance. Now picture a batch size of 1 — a single real-time prediction. A "variance" computed from one number is meaningless.
+
+That's exactly what `model.eval()` fixes. It switches BatchNorm to use the running statistics it accumulated during training, instead of the current batch's. That's what makes single-sample inference actually work.
+
+### 2. Does `.eval()` also change Dropout's behavior?
 ```python
 class MLPWithDropout(nn.Module):
     def __init__(self):
@@ -148,10 +164,10 @@ class MLPWithDropout(nn.Module):
         x = self.dropout(x)
         return self.fc2(x)
 ```
-Yes — the same switch. Randomly zeroing units is a regularization technique forcing the network not to rely too heavily on any single unit; at inference you want the FULL, deterministic network making the prediction, not a randomly-degraded version of it. `model.eval()` automatically disables dropout too (scaling activations appropriately instead) — one method call, two different layer types both correctly switching behavior.
+Yes — the same switch handles it. Dropout randomly zeroes out units during training, on purpose. It's a regularization trick that stops the network from leaning too hard on any single unit. But at inference time, you want the full, deterministic network making the prediction — not a randomly-degraded version of it. `model.eval()` disables dropout too, automatically, scaling the remaining activations to compensate. One method call, two different layer types, both correctly switching behavior.
 
 ### Summary example
-Forgetting `model.eval()` before a single-image inference call is a real, common bug with two simultaneous symptoms from one root cause: BatchNorm silently computes nonsense statistics from a batch of size 1, AND Dropout is still randomly zeroing units that should all be active — both fixed by the exact same one-line call, which is exactly why `model.eval()` (paired with `torch.no_grad()`) is the standard, non-optional first line of any inference function.
+Forgetting `model.eval()` before a single-image inference call is a real, common bug, and it has two symptoms from one root cause. BatchNorm silently computes nonsense statistics from a batch of size 1. At the same time, Dropout is still randomly zeroing units that should all be active. Both problems get fixed by the exact same one-line call. That's why `model.eval()`, paired with `torch.no_grad()`, is the standard first line of any inference function — not optional, not a nice-to-have.
 
 ---
 
@@ -159,7 +175,7 @@ Forgetting `model.eval()` before a single-image inference call is a real, common
 
 ## Cluster 4 — Recurrent Networks: RNN → LSTM → GRU
 
-### 1. How do you build a basic RNN, and what IS the "hidden state" it produces?
+### 1. How do you build a basic RNN, and what actually is the "hidden state" it produces?
 ```python
 rnn = nn.RNN(input_size=8, hidden_size=16, batch_first=True)
 x = torch.randn(4, 5, 8)     # [batch=4, seq_len=5, input_size=8]
@@ -167,12 +183,18 @@ output, hidden = rnn(x)
 print(output.shape)   # [4, 5, 16] -- the hidden state at EVERY time step
 print(hidden.shape)    # [1, 4, 16] -- just the FINAL hidden state (1 = num_layers*num_directions)
 ```
-The **hidden state** is the RNN's running summary of everything it has read so far — a 16-number vector (the `hidden_size`) that gets updated after each element of the sequence, serving simultaneously as the network's memory and its per-step output. `output` hands you that summary as it stood at *every* step; `hidden` is just the final one. On the API itself: `batch_first=True` is worth always setting explicitly — PyTorch's RNN family defaults to `(seq_len, batch, features)` ordering, the OPPOSITE of almost every other PyTorch API's `(batch, ...)` convention, and setting it avoids a very common shape-mismatch bug when RNN output feeds into a layer expecting batch-first tensors.
+The **hidden state** is the RNN's running summary of everything it has read so far. It's a 16-number vector — the `hidden_size` — that gets updated after each element of the sequence. It does double duty: it's both the network's memory and its per-step output.
 
-### 2. Why do plain RNNs specifically struggle with LONG sequences?
-Conceptually: at each step, the hidden state gets multiplied by a weight matrix and squashed by `tanh`. Repeated over many time steps, this is EXACTLY the vanishing-gradient chain-rule problem from `math-foundations-refresher.md`'s calculus section — an RNN unrolled over T time steps is architecturally identical to a T-layer deep network for backprop purposes, so the same `0.25^T`-style vanishing-gradient math applies, just with T = sequence length instead of T = network depth.
+`output` hands you that summary as it stood at *every single step*. `hidden` is just the last one.
 
-### 3. Given that vanishing gradients are the problem, how does LSTM fix it — what do its TWO states actually represent?
+One thing worth setting explicitly on the API: `batch_first=True`. PyTorch's RNN family defaults to `(seq_len, batch, features)` ordering — the opposite of almost every other PyTorch API's `(batch, ...)` convention. Setting `batch_first=True` avoids a very common shape-mismatch bug, the kind that shows up when RNN output feeds into a layer that expects batch-first tensors.
+
+### 2. Why do plain RNNs specifically struggle with long sequences?
+At each step, the hidden state gets multiplied by a weight matrix, then squashed by `tanh`. Repeat that over many time steps, and you get exactly the vanishing-gradient problem from `math-foundations-refresher.md`'s calculus section.
+
+An RNN unrolled over `T` time steps is architecturally identical to a `T`-layer deep network, as far as backprop is concerned. So the same `0.25^T`-style vanishing-gradient math applies — just with `T` = sequence length, instead of `T` = network depth.
+
+### 3. How does LSTM fix that — and what do its two states actually represent?
 ```python
 lstm = nn.LSTM(input_size=8, hidden_size=16, batch_first=True)
 x = torch.randn(4, 5, 8)
@@ -181,7 +203,11 @@ print(output.shape)   # [4, 5, 16] -- hidden state at every step
 print(h_n.shape)        # [1, 4, 16] -- final hidden state ("what to output now")
 print(c_n.shape)        # [1, 4, 16] -- final cell state ("what to remember long-term")
 ```
-The **cell state** (`c_n`) is designed to flow across time steps with only minor, gated modifications — structurally similar to a residual connection's "untouched path," but across TIME instead of across LAYERS — while the **hidden state** (`h_n`) is what actually gets used for output at each step. Three learned gates (forget, input, output) control what gets written to/read from the cell state, letting gradients survive far more time steps than question 2's plain RNN.
+The **cell state** (`c_n`) is built to flow across time steps with only minor, gated modifications. Structurally, that's similar to a residual connection's untouched path — except this one runs across *time*, instead of across *layers*.
+
+The **hidden state** (`h_n`) is what actually gets used for output at each step.
+
+Three learned gates — forget, input, output — control what gets written to the cell state, and what gets read from it. That gating is what lets gradients survive far more time steps than question 2's plain RNN can manage.
 
 **Visual + memory hook — the cell state as a conveyor belt running along the top, gates as three valves:**
 ```
@@ -197,23 +223,25 @@ c(t-1) ──────[×]──────────[+]──────
               gate ──▶ h(t)   ← this step's actual output,
                                  a FILTERED read of the belt
 ```
-**Remember it as a factory conveyor belt with three valves:** the forget gate scrubs old info off the belt, the input gate drops new material on, the output gate decides how much of the belt to reveal as this step's answer — the belt itself never gets squashed through an activation function on the main path, exactly why it survives far more time steps than a plain RNN's hidden state.
+Remember it this way: a factory conveyor belt with three valves. The forget gate scrubs old info off the belt. The input gate drops new material on. The output gate decides how much of the belt to reveal as this step's answer. The belt itself never gets squashed through an activation function on its main path — and that's exactly why it survives far more time steps than a plain RNN's hidden state.
 
-### 4. LSTM has 3 gates and 2 states. Is there a SIMPLER gated architecture that trades some of that away for speed?
+### 4. LSTM has 3 gates and 2 states. Is there a simpler gated architecture that trades some of that away for speed?
 ```python
 gru = nn.GRU(input_size=8, hidden_size=16, batch_first=True)
 output, h_n = gru(x)    # only ONE state (no separate cell state) -- simpler than LSTM
 ```
-**GRU** merges LSTM's forget/input gates into a single "update gate" and has no separate cell state — fewer parameters, faster to train, and in practice often performs comparably to LSTM on many tasks. LSTM is still the safer default for longer sequences or when compute isn't the constraint; GRU is a reasonable first thing to try when training speed or model size matters more.
+**GRU** merges LSTM's forget and input gates into one "update gate," and drops the separate cell state entirely. That means fewer parameters, and faster training. In practice, it often performs comparably to LSTM on many tasks.
+
+LSTM is still the safer default for longer sequences, or whenever compute isn't the constraint. GRU is a reasonable first thing to try when training speed or model size matters more.
 
 ### Summary example
-A 500-token sequence fed to a plain RNN (question 1) suffers vanishing gradients by the time backprop reaches token 1 (question 2's `0.25^500`-style math). The same sequence through an LSTM (question 3) survives because the cell state's conveyor belt carries information across those 500 steps with only gated, minor modifications instead of a fresh squashing multiplication at every single step. A GRU (question 4) gets most of that same benefit with a simpler, faster-to-train architecture — the right first choice when it's not yet clear the extra LSTM machinery is needed.
+A 500-token sequence fed to a plain RNN, from question 1, suffers vanishing gradients by the time backprop reaches token 1 — question 2's `0.25^500`-style math, playing out for real. The same sequence through an LSTM, from question 3, survives. Why: the cell state's conveyor belt carries information across those 500 steps with only gated, minor modifications, instead of a fresh squashing multiplication at every single step. A GRU, from question 4, gets most of that same benefit, with a simpler and faster-to-train architecture. It's a reasonable first choice, before you know for sure the extra LSTM machinery is needed.
 
 ---
 
 ## Cluster 5 — Sequence Classification and Variable-Length Batches
 
-### 1. How do you build a full sequence classifier (e.g., text sentiment) combining an embedding with an LSTM?
+### 1. How do you build a full sequence classifier — say, text sentiment — combining an embedding with an LSTM?
 ```python
 class LSTMClassifier(nn.Module):
     def __init__(self, vocab_size, embed_dim, hidden_dim, num_classes):
@@ -230,9 +258,11 @@ model = LSTMClassifier(vocab_size=1000, embed_dim=32, hidden_dim=64, num_classes
 tokens = torch.randint(1, 1000, (4, 20))    # batch of 4 sequences, length 20
 print(model(tokens).shape)                   # [4, 2]
 ```
-An **Embedding layer** is a learned lookup table: each token ID (a word's integer index in the vocabulary) maps to a vector of `embed_dim` numbers, and during training the network adjusts those vectors so that tokens used similarly end up with similar vectors — it's how integer word IDs become something a network can do math on. Given that, `padding_idx=0` on the Embedding layer matters: token ID 0 (the padding token used to make variable-length sequences a uniform batch shape) has its embedding gradient always zeroed — otherwise the model wastes capacity learning a "meaning" for a token that's purely a structural placeholder, and that learned padding embedding can leak noise into the sequence representation.
+An **Embedding layer** is a learned lookup table. Each token ID — a word's integer index in the vocabulary — maps to a vector of `embed_dim` numbers. During training, the network adjusts those vectors so that tokens used in similar ways end up with similar vectors. That's the whole trick behind turning integer word IDs into something a network can actually do math on.
 
-### 2. Given that batches need PADDING to be uniform-shaped, how do you stop the LSTM from wasting compute (and corrupting output) processing that padding as if it were real content?
+Given that, `padding_idx=0` on the Embedding layer matters. Token ID 0 is the padding token, used to make variable-length sequences a uniform batch shape. `padding_idx=0` keeps its embedding gradient at zero, always. Without it, the model wastes capacity learning a "meaning" for a token that's purely a structural placeholder — and that learned padding embedding can leak noise into the sequence representation.
+
+### 2. Batches need padding to be uniform-shaped. How do you stop the LSTM from wasting compute — and corrupting output — on that padding?
 ```python
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
@@ -246,10 +276,12 @@ packed = pack_padded_sequence(emb, lengths, batch_first=True, enforce_sorted=Fal
 packed_out, (h_n, c_n) = lstm(packed)
 output, _ = pad_packed_sequence(packed_out, batch_first=True)
 ```
-Without `pack_padded_sequence`, the LSTM processes the PADDING tokens too, as if they were real sequence content — wasting compute and, more importantly, corrupting the final hidden state with signal from meaningless padding steps. Packing tells the RNN exactly where each real sequence ends, so it stops updating that sequence's hidden state at the right point. `enforce_sorted=False` means you don't have to manually sort the batch by length first.
+Without `pack_padded_sequence`, the LSTM processes the padding tokens too, as if they were real sequence content. That wastes compute — and worse, it corrupts the final hidden state with signal from meaningless padding steps.
+
+Packing tells the RNN exactly where each real sequence ends, so it stops updating that sequence's hidden state at the right point. `enforce_sorted=False` just means you don't have to manually sort the batch by length first.
 
 ### Summary example
-A batch of 4 reviews, padded to length 20 but really 20/15/20/8 tokens long: without packing, the 8-token review's hidden state gets contaminated by 12 steps of pure padding-embedding noise before classification. `pack_padded_sequence` with the real `lengths` tensor tells the LSTM to stop updating that sequence's state at step 8 exactly, so `h_n` for that review reflects only its real 8 tokens — a materially different (and correct) final hidden state feeding into the classifier head.
+A batch of 4 reviews, padded to length 20, but really 20, 15, 20, and 8 tokens long. Without packing, the 8-token review's hidden state gets contaminated by 12 steps of pure padding-embedding noise before it ever reaches classification. `pack_padded_sequence`, given the real `lengths` tensor, tells the LSTM to stop updating that sequence's state at step 8 exactly. So `h_n` for that review reflects only its real 8 tokens — a materially different, and correct, final hidden state feeding into the classifier head.
 
 ---
 
@@ -270,17 +302,21 @@ criterion_binary = nn.BCEWithLogitsLoss()
 logits_binary = torch.randn(4, 1)
 targets_binary = torch.randint(0, 2, (4, 1)).float()   # must be float, not long, for BCE
 ```
-**Logits** are the raw, unbounded scores a model's last layer produces *before* softmax/sigmoid turns them into probabilities — any real number, positive or negative, where bigger just means "more confident in this class." "Expects raw logits, not probabilities" is worth memorizing precisely: these loss functions internally combine the activation (softmax/sigmoid) and the loss computation in one numerically-stable operation, specifically to avoid the precision problems of computing something like `log(softmax(x))` as two separate steps — the same log-sum-exp reasoning from `math-foundations-refresher.md`. Passing already-activated values in double-applies the normalization and silently trains a mis-scaled model that still runs without error.
+**Logits** are the raw, unbounded scores a model's last layer produces, before softmax or sigmoid turns them into probabilities. They can be any real number, positive or negative — bigger just means "more confident in this class."
 
-### 2. Given a computed loss, how do you protect against EXPLODING gradients specifically (the opposite failure from Cluster 4's vanishing problem)?
+"Expects raw logits, not probabilities" is worth memorizing precisely. These loss functions internally combine the activation step (softmax or sigmoid) and the loss computation into one numerically-stable operation. That's specifically to avoid the precision problems of computing something like `log(softmax(x))` as two separate steps — the same log-sum-exp reasoning from `math-foundations-refresher.md`. Pass in already-activated values instead, and you double-apply the normalization. The model still runs, without error. It just trains mis-scaled, silently.
+
+### 2. How do you protect against exploding gradients — the opposite failure from Cluster 4's vanishing problem?
 ```python
 loss.backward()
 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 optimizer.step()
 ```
-This goes exactly between `backward()` and `step()`: gradients must already be computed before they can be clipped, and clipping must happen before the optimizer actually uses them. `max_norm=1.0` rescales the WHOLE gradient vector if its norm exceeds 1.0, preserving direction while capping magnitude — cheap insurance, especially for RNN/LSTM training (Cluster 4) where exploding gradients are a known real risk.
+This goes exactly between `backward()` and `step()`. Gradients have to be computed before they can be clipped, and clipping has to happen before the optimizer actually uses them.
 
-### 3. Beyond protecting against exploding gradients, how do you make the learning rate itself adapt over training instead of staying fixed?
+`max_norm=1.0` rescales the whole gradient vector if its norm exceeds 1.0, preserving its direction while capping its magnitude. It's cheap insurance — especially for RNN/LSTM training from Cluster 4, where exploding gradients are a known real risk.
+
+### 3. Beyond clipping, how do you make the learning rate itself adapt over training, instead of staying fixed?
 ```python
 optimizer = optim.AdamW(model.parameters(), lr=1e-3)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
@@ -288,10 +324,10 @@ for epoch in range(50):
     # ... train one epoch ...
     scheduler.step()    # called once per EPOCH (not per batch) for this scheduler
 ```
-A larger LR early in training moves quickly through the initial, coarse part of the loss landscape; a smaller LR later allows fine-grained convergence near a good minimum without overshooting it — `CosineAnnealingLR` smoothly decays the LR following a cosine curve over `T_max` epochs, a common, effective default schedule shape.
+Early in training, a larger learning rate moves you quickly through the coarse part of the loss landscape. Later, a smaller learning rate lets you converge carefully near a good minimum, without overshooting it. `CosineAnnealingLR` smoothly decays the learning rate along a cosine curve over `T_max` epochs — a common, effective default shape for that schedule.
 
 ### Summary example
-Training an LSTM (Cluster 4) on long sequences: `CrossEntropyLoss` on raw logits computes the loss correctly and numerically stably; `clip_grad_norm_` sits between `backward()` and `step()` specifically because LSTMs remain exploding-gradient-prone even with gated cell states; `CosineAnnealingLR` gradually reduces the learning rate so early-training's large, fast steps give way to late-training's careful fine-tuning — three independent safeguards, each solving a different specific failure mode, commonly all used together on the same training run.
+Training an LSTM, from Cluster 4, on long sequences pulls all three techniques together. `CrossEntropyLoss` on raw logits computes the loss correctly and numerically stably. `clip_grad_norm_` sits between `backward()` and `step()`, specifically because LSTMs stay exploding-gradient-prone even with gated cell states. `CosineAnnealingLR` gradually reduces the learning rate, so early training's large, fast steps give way to late training's careful fine-tuning. Three independent safeguards, each solving a different specific failure mode — and commonly all used together, on the same training run.
 
 ---
 
@@ -305,20 +341,19 @@ model2 = MLP(in_features=10, hidden=32, out_features=2)   # must recreate the SA
 model2.load_state_dict(torch.load("model.pt"))
 model2.eval()
 ```
-Save `state_dict()` (just the learned weights), not `torch.save(model, ...)` (the whole object) — saving the whole object pickles the exact class definition/code alongside the weights, which breaks if you refactor the model class even slightly later, or try to load it in a different codebase. Saving just the weights and re-instantiating the architecture in code is the more robust, portable, officially-recommended pattern.
+Save `state_dict()` — just the learned weights — not `torch.save(model, ...)`, which saves the whole object. Saving the whole object pickles the exact class definition and code alongside the weights. That breaks the moment you refactor the model class even slightly, or try to load it in a different codebase. Saving just the weights, and re-instantiating the architecture from code, is the more robust, portable, officially-recommended pattern.
 
-### 2. Given a saved model, how do you move it (and data) onto a GPU when available, without breaking on machines that don't have one?
+### 2. How do you move a model — and its data — onto a GPU when one's available, without breaking on a machine that doesn't have one?
 ```python
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
 xb = xb.to(device)
 yb = yb.to(device)
 ```
-Hardcoding `"cuda"` breaks the exact moment the code runs on a machine without a GPU (a laptop, a different server, a CI pipeline) — checking `torch.cuda.is_available()` first is the standard, portable way to write device-agnostic code that "just works" in both environments without a code change.
+Hardcoding `"cuda"` breaks the instant the code runs on a machine without a GPU — a laptop, a different server, a CI pipeline. Checking `torch.cuda.is_available()` first is the standard, portable way to write device-agnostic code. It just works, in both environments, with no code change.
 
 ### 3. For transfer learning specifically, how do you freeze a pretrained backbone and train only a new head?
-
-**Transfer learning** means reusing a network already trained on a big dataset and retraining only its last part on your small one — the early layers' learned features (edges, textures, shapes) transfer across tasks, so your small dataset only has to teach the final classification step. The **backbone** is that reused feature-extracting bulk; the **head** is the small new output layer you actually train.
+**Transfer learning** means reusing a network already trained on a big dataset, and retraining only its last part on your own, smaller one. The early layers' learned features — edges, textures, shapes — transfer across tasks. So your small dataset only has to teach the final classification step. The **backbone** is that reused, feature-extracting bulk. The **head** is the small new output layer you actually train.
 ```python
 model = SimpleCNN(num_classes=10)
 for param in model.features.parameters():
@@ -326,9 +361,9 @@ for param in model.features.parameters():
 
 optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-3)
 ```
-Passing ALL parameters to the optimizer (including frozen ones) doesn't break anything functionally — frozen params have no gradient so they'd never actually move — but `filter(lambda p: p.requires_grad, ...)` still avoids the optimizer tracking momentum/variance state for parameters that will never update, and makes the intent explicit in the code.
+Passing every parameter to the optimizer, including the frozen ones, wouldn't actually break anything — frozen params have no gradient, so they'd never move anyway. But `filter(lambda p: p.requires_grad, ...)` still avoids one thing: the optimizer tracking momentum and variance state for parameters that will never update. It also makes the intent explicit right there in the code.
 
-### 4. Given a training loop that could overfit past its best point, how do you implement early stopping manually?
+### 4. How do you implement early stopping manually, so training doesn't run past a model's best point?
 ```python
 best_val_loss = float("inf")
 patience, patience_counter = 5, 0
@@ -346,10 +381,10 @@ for epoch in range(100):
             print(f"early stopping at epoch {epoch}")
             break
 ```
-Save the checkpoint INSIDE the "improved" branch, not once at the end of training: by the time patience runs out, the model has already been overfitting for `patience` epochs past its best point. Saving only when validation loss actually improves guarantees you keep the genuinely best-performing checkpoint (using `state_dict()`, question 1's saving pattern), not whatever the weights happened to be when the loop finally exited.
+Save the checkpoint inside the "improved" branch, not once at the end of training. Here's why: by the time patience runs out, the model has already been overfitting for `patience` epochs past its actual best point. Saving only when validation loss actually improves guarantees you keep the genuinely best-performing checkpoint — using `state_dict()`, question 1's saving pattern — instead of whatever the weights happened to be when the loop finally exited.
 
 ### Summary example
-Fine-tuning a pretrained `SimpleCNN` on a new, smaller dataset: freeze `model.features` (question 3), train only the new head on `device` (question 2), running early stopping (question 4) that checkpoints via `state_dict()` (question 1) every time validation loss improves — four independent techniques from four different questions, routinely combined in exactly this combination for a realistic transfer-learning task.
+Fine-tuning a pretrained `SimpleCNN` on a new, smaller dataset, step by step: freeze `model.features` (question 3), train only the new head on `device` (question 2), and run early stopping (question 4), which checkpoints via `state_dict()` (question 1) every time validation loss improves. Four independent techniques, from four different questions — routinely combined in exactly this way for a realistic transfer-learning task.
 
 ### Keras equivalent for the CNN above (standard API, unverified in this session's broken-TF environment)
 ```python
@@ -366,47 +401,47 @@ model = keras.Sequential([
 ])
 model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 ```
-`GlobalAveragePooling2D` here is the direct Keras analogue of Cluster 2's `AdaptiveAvgPool2d(1)` — same purpose, collapsing any spatial size to one value per channel so the `Dense` head doesn't hardcode an input-resolution-dependent size.
+`GlobalAveragePooling2D` here is the direct Keras analogue of Cluster 2's `AdaptiveAvgPool2d(1)`. Same purpose: collapse any spatial size down to one value per channel, so the `Dense` head doesn't hardcode a size that depends on input resolution.
 
 ---
 
 ## Practice Q&A (Self-Test)
 
 **Q1. In the `MLP` example, what would go wrong if you forgot `super().__init__()` in the constructor?**
-A: `nn.Module`'s constructor sets up parameter registration and submodule tracking. Without it, layers you assign in `__init__` won't be tracked as trainable parameters at all, so `.parameters()`, `.to(device)`, and `.state_dict()` silently fail to include them — a confusing bug with no error message.
+A: `nn.Module`'s constructor sets up parameter registration and submodule tracking. Skip it, and layers you assign in `__init__` won't be tracked as trainable parameters at all. `.parameters()`, `.to(device)`, and `.state_dict()` all silently fail to include them — a confusing bug, with no error message.
 
 **Q2. Why must `optimizer.zero_grad()` be called before `loss.backward()` on every iteration of the training loop, and what breaks if you forget it?**
-A: PyTorch accumulates (adds to) gradients by default rather than overwriting them, which is what enables gradient accumulation across micro-batches. Forgetting `zero_grad()` means gradients from the previous iteration silently sum with the new ones, corrupting every update after the first.
+A: PyTorch adds new gradients to whatever's already there, by default, rather than overwriting them. That's what enables gradient accumulation across micro-batches. Forget `zero_grad()`, and gradients from the previous iteration silently sum with the new ones — corrupting every update after the first.
 
 **Q3. Why is `shuffle=True` used for the training `DataLoader` but `shuffle=False` for validation/test loaders?**
-A: Without shuffling, the model sees data in the same fixed order every epoch, which can let it learn spurious patterns tied to that ordering (especially if data is sorted by label or time). Training benefits from shuffling for that reason, while validation/test loaders keep `shuffle=False` so results are reproducible and comparable run to run.
+A: Without shuffling, the model sees data in the same fixed order every epoch. That can let it learn spurious patterns tied to that ordering, especially if the data is sorted by label or time. Training benefits from shuffling for that reason. Validation and test loaders keep `shuffle=False` instead, so results stay reproducible and comparable, run to run.
 
 **Q4. Given `nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3, stride=1, padding=1)` applied to a `[1,3,32,32]` input, what is the output shape, and what formula gets you there without guessing?**
-A: `output_size = floor((input_size + 2*padding - kernel_size) / stride) + 1` = `floor((32+2-3)/1)+1 = 32`, so the output is `[1, 16, 32, 32]`. This is the "same padding" pattern: `padding = (kernel_size-1)/2` with `stride=1` keeps H and W unchanged.
+A: `output_size = floor((input_size + 2*padding - kernel_size) / stride) + 1` = `floor((32+2-3)/1)+1 = 32`. So the output is `[1, 16, 32, 32]`. This is the "same padding" pattern: `padding = (kernel_size-1)/2` with `stride=1` keeps H and W unchanged.
 
 **Q5. In `SimpleCNN`, why does the model use `AdaptiveAvgPool2d(1)` instead of `Flatten()` followed by a hardcoded `Linear` input size?**
-A: `Flatten()` bakes in a specific spatial size (e.g. `32*8*8`), which breaks the moment input resolution changes. `AdaptiveAvgPool2d(1)` always collapses to a fixed 1x1-per-channel output regardless of input size, making the classifier head resolution-independent — the model works on both 64x64 and 128x128 inputs without modification.
+A: `Flatten()` bakes in one specific spatial size, like `32*8*8`. That breaks the moment input resolution changes. `AdaptiveAvgPool2d(1)` always collapses to a fixed 1x1-per-channel output, no matter what size comes in — which makes the classifier head resolution-independent. That's why the model works on both 64x64 and 128x128 inputs, with no modification.
 
 **Q6. Why does skipping `model.eval()` before running inference on a single sample (batch size 1) cause a real, common bug specifically involving BatchNorm?**
-A: In train mode, BatchNorm normalizes using the current batch's mean/variance, and with a batch of 1 that "variance" is degenerate/meaningless. `model.eval()` switches BatchNorm (and Dropout) to use accumulated running statistics from training instead, which is what makes single-sample inference work correctly.
+A: In train mode, BatchNorm normalizes using the current batch's mean and variance. With a batch of 1, that "variance" is meaningless. `model.eval()` switches BatchNorm — and Dropout — to use accumulated running statistics from training instead. That's what makes single-sample inference actually work.
 
 **Q7. What is the difference between an LSTM's hidden state (`h_n`) and cell state (`c_n`), and why does LSTM have two states where a plain RNN has only one?**
-A: The cell state is designed to flow across time steps with only minor, gated modifications — structurally like a residual connection's untouched path, but across time instead of layers — while the hidden state is what's actually used for output at each step. Three learned gates (forget, input, output) control what's written to/read from the cell state, letting gradients survive many more time steps than a plain RNN's repeated tanh multiplications allow.
+A: The cell state flows across time steps with only minor, gated modifications — structurally like a residual connection's untouched path, but across time instead of layers. The hidden state is what's actually used for output at each step. Three learned gates — forget, input, output — control what's written to and read from the cell state, letting gradients survive many more time steps than a plain RNN's repeated tanh multiplications allow.
 
 **Q8. In `LSTMClassifier`, why is `padding_idx=0` passed to `nn.Embedding`, and what happens if you omit it?**
-A: `padding_idx=0` zeroes the gradient for the padding token's embedding, since token ID 0 is purely a structural placeholder used to make variable-length sequences a uniform batch shape. Without it, the model wastes capacity learning a "meaning" for padding, and that learned embedding can leak noise into the sequence representation.
+A: `padding_idx=0` zeroes the gradient for the padding token's embedding, since token ID 0 is purely a structural placeholder, used to make variable-length sequences a uniform batch shape. Without it, the model wastes capacity learning a "meaning" for padding, and that learned embedding can leak noise into the sequence representation.
 
-**Q9. Why do `CrossEntropyLoss` and `BCEWithLogitsLoss` expect raw logits rather than already-softmaxed/sigmoided probabilities, and what's the practical risk of getting this wrong?**
-A: These loss functions internally combine the activation and the loss computation in one numerically-stable operation, specifically to avoid the precision problems of computing something like `log(softmax(x))` as two separate steps. Passing already-activated values in double-applies the normalization and silently trains a mis-scaled model that still runs without throwing an error.
+**Q9. Why do `CrossEntropyLoss` and `BCEWithLogitsLoss` expect raw logits rather than already-softmaxed or sigmoided probabilities, and what's the practical risk of getting this wrong?**
+A: These loss functions combine the activation step and the loss computation internally, in one numerically-stable operation. That specifically avoids the precision problems of computing something like `log(softmax(x))` as two separate steps. Pass in already-activated values instead, and you double-apply the normalization — the model still runs, no error, but it trains mis-scaled, silently.
 
 **Q10. In the manual early-stopping loop, why is the checkpoint saved inside the `if val_loss < best_val_loss` branch rather than once at the end of training?**
-A: By the time patience runs out, the model has already been overfitting for `patience` epochs past its best point. Saving only when validation loss actually improves guarantees the checkpoint kept on disk is the genuinely best-performing one, not whatever the weights happened to be when the loop finally exited.
+A: By the time patience runs out, the model has already been overfitting for `patience` epochs past its best point. Saving only when validation loss actually improves guarantees the checkpoint kept on disk is the genuinely best-performing one — not whatever the weights happened to be when the loop finally exited.
 
 ---
 
 ## Video-Sourced Practice MCQs
 
-A second practice set for Deep Learning Practice, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube interview-prep video for this subject, then written up as original multiple-choice questions here (the source video mostly asked these as open-ended questions -- the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video). Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
+A second practice set. These questions were checked against a real YouTube interview-prep video for this subject, then written up here as original multiple-choice questions — the source video mostly asked them as open-ended questions, so the wrong-answer options and their explanations below are original, written to match this hub's "explain every option" convention, not copied from the video. Click an answer, check it, and use "ask about this question" for anything that needs more explanation.
 
 <script type="application/json" class="topic-quiz-data" data-title="Deep Learning Practice">
 [

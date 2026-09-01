@@ -1,46 +1,77 @@
 # Production ML Practice — Serving, Monitoring, and Drift
 
-`mlops-practice.md` gets a model versioned and registered. This doc is what happens after: how it actually serves real traffic, how you'd notice if it started quietly getting worse, and what to do about it — in plain language.
+`mlops-practice.md` covers getting a model versioned and registered. This doc picks up after that: how the model actually serves real traffic, how you'd notice if it started quietly getting worse, and what to do about it.
 
 ## Cluster 1 — Choosing How a Model Serves Traffic
 
-### 1. Before anything else, how do you decide whether a model even NEEDS to answer instantly?
-- **Batch inference** — run the model on a large chunk of data on a schedule (nightly, hourly) and store the predictions for later use. Right for anything that doesn't need an answer *this second* — tomorrow's demand forecast, this week's churn-risk scores, monthly credit-risk re-scoring.
-- **Real-time (online) inference** — the model runs on-demand, per request, and the caller waits for the response (a fraud check at checkout, a chatbot reply). Needs the model loaded and ready (or a fast-starting serverless setup), and every millisecond of latency is directly felt by the user.
+### Does a model actually need to answer instantly?
 
-Picking batch when real-time isn't actually needed is one of the cheapest wins in production ML — batch is simpler to build, cheaper to run, and easier to debug (you can inspect the whole batch output before anyone sees it).
+That's the first question, before anything else. Two options.
 
-### 2. Given real-time serving is the right call (question 1), what does the actual request path look like, and where does the model itself fit in?
+**Batch inference** runs the model on a large chunk of data on a schedule — nightly, hourly, whatever fits. The predictions get stored for later use. This is the right call for anything that doesn't need an answer this second: tomorrow's demand forecast, this week's churn-risk scores, a monthly credit-risk re-score.
+
+**Real-time (online) inference** runs the model on demand, one request at a time. The caller waits for the response — a fraud check at checkout, a chatbot reply. This needs the model loaded and ready, or a fast-starting serverless setup. Every millisecond of latency here is felt directly by the user.
+
+Picking batch when real-time isn't actually needed is one of the cheapest wins in production ML. Batch is simpler to build, cheaper to run, and easier to debug — you can inspect the whole batch output before anyone sees it.
+
+### What does the real-time request path actually look like?
+
+Say real-time serving is the right call. Here's what a request goes through:
 ```
 request -> load balancer -> API layer (auth, validation, rate limiting)
         -> feature lookup (fetch any features not in the request itself)
         -> model inference (the actual forward pass)
         -> response
 ```
-The "model inference" box is usually the smallest part of the actual code — most of the engineering is around it: validating the input didn't arrive malformed, fetching any additional features the model needs (a user's historical average, say) fast enough to stay within latency budget, and logging the request/prediction pair for later monitoring (Cluster 2). Tools like **Triton Inference Server** or **vLLM** (for LLMs specifically) handle the inference box itself, with batching and GPU scheduling built in — see `core-technical-depth.md` and `bnsf-technical-visual.html` for how that batching actually works under the hood.
+
+The "model inference" box is usually the smallest part of the actual code. Most of the engineering effort goes into everything around it:
+- Validating the input didn't arrive malformed.
+- Fetching any extra features the model needs — a user's historical average, say — fast enough to stay within the latency budget.
+- Logging the request/prediction pair, so it can feed monitoring later.
+
+Tools like **Triton Inference Server** or **vLLM** (for LLMs specifically) handle the inference box itself, with batching and GPU scheduling built in. See `core-technical-depth.md` and `bnsf-technical-visual.html` for how that batching actually works under the hood.
 
 ### Summary example
-A checkout fraud check needs real-time serving (question 1) since the decision blocks the user's transaction; the request flows through the full stack (question 2) — auth, feature lookup for the user's historical spending average, then inference — with the model's own forward pass being the smallest part of that path, and every request/prediction pair logged on the way out specifically to feed the monitoring discussed next.
+
+A checkout fraud check needs real-time serving. The decision blocks the user's transaction, so batch isn't an option.
+
+The request flows through the full stack: auth, then a feature lookup for the user's historical spending average, then inference. The model's own forward pass is the smallest part of that whole path.
+
+Every request/prediction pair gets logged on the way out. That log is what feeds the monitoring covered next.
 
 ---
 
 ## Cluster 2 — Drift, Detection, and Safe Rollout
 
-### 1. Given a model is now serving live traffic (Cluster 1), why would its accuracy degrade even if NOBODY touched the code or the model file?
-A model is a snapshot of patterns in the data it was trained on. The real world keeps moving; the model doesn't, unless retrained. Two distinct kinds:
-- **Data drift (covariate shift)** — the *input* distribution changes (customer demographics shift, a sensor gets recalibrated, a new product category appears) even if the true input→output relationship hasn't changed.
-- **Concept drift** — the actual relationship between inputs and the target changes (fraud tactics evolve to look different than the patterns the model learned; a pandemic changes what "normal" purchasing behavior looks like).
+### Why would accuracy degrade if nobody touched the code or the model?
 
-Both cause the same symptom — accuracy quietly drops — but the fix differs: data drift might just need more representative retraining data; concept drift means the *old labels themselves* no longer reflect the new reality, so more data alone doesn't fix it — the target relationship has to be relearned.
+A model is a snapshot of patterns in the data it was trained on. The real world keeps moving. The model doesn't — not unless it's retrained.
 
-### 2. Given both kinds of drift produce the SAME symptom (quietly dropping accuracy), how do you actually detect either one before a stakeholder notices?
-- **Monitor the input distribution directly** — track feature statistics over time (mean, std, or a distribution-distance measure like population stability index / PSI or KL-divergence — both boil "how different does incoming data look from the training data" down to one alertable number), and alert when incoming traffic looks meaningfully different from the training distribution — this catches data drift specifically.
-- **Monitor prediction distribution** — if a model that used to flag 2% of transactions as fraud suddenly flags 15%, something changed upstream (in the data or the world), whether or not you know the ground truth yet.
-- **Monitor against ground truth once it's available** — for fraud, the confirmed-fraud label often arrives weeks later; when it does, compute real accuracy/precision/recall on that lagged data and compare to training-time performance — this is what actually confirms concept drift, not just a symptom of it.
-- **Shadow deployment** — run a new candidate model alongside the current production model on live traffic, log both predictions, but only serve the current model's output to users. Compare offline before ever letting the new model actually make decisions.
+There are two distinct ways this shows up:
 
-### 3. Given drift is detected and a new candidate model needs to replace the old one, why not just switch 100% of traffic over immediately?
-**Canary deployment** — route a small slice of real traffic (say 5%) to the new model version while the rest keeps going to the current one, watch key metrics on that slice, and only ramp up the percentage if it holds up. This limits the blast radius of a bad model version to a small fraction of real traffic instead of 100% of it, and gives you a live comparison instead of a leap of faith.
+**Data drift (covariate shift)** — the *input* distribution changes. Customer demographics shift. A sensor gets recalibrated. A new product category appears. The true input-to-output relationship hasn't actually changed, just the inputs the model is now seeing.
+
+**Concept drift** — the actual relationship between inputs and the target changes. Fraud tactics evolve to look different from the patterns the model learned. A pandemic changes what "normal" purchasing behavior even looks like.
+
+Both cause the same symptom: accuracy quietly drops. But the fix is different. Data drift might just need more representative retraining data. Concept drift is worse — the old labels themselves no longer reflect the new reality, so more data alone doesn't fix it. The target relationship itself has to be relearned.
+
+### How do you detect drift before a stakeholder notices?
+
+Both kinds of drift look identical from the outside — accuracy just quietly drops. Here's how you catch either one before someone else does.
+
+**Monitor the input distribution directly.** Track feature statistics over time — mean, standard deviation, or a distribution-distance measure like population stability index (PSI) or KL-divergence. Both of these boil down "how different does incoming data look from the training data" into one number you can alert on. This catches data drift specifically.
+
+**Monitor the prediction distribution.** If a model that used to flag 2% of transactions as fraud suddenly flags 15%, something changed — in the data, or in the world — whether or not you know the ground truth yet.
+
+**Monitor against ground truth once it's available.** For fraud, the confirmed-fraud label often arrives weeks later. When it does, compute real accuracy, precision, and recall on that lagged data, and compare it to training-time performance. This is what actually confirms concept drift — not just a symptom of it.
+
+**Shadow deployment.** Run a new candidate model alongside the current production model on live traffic. Log both sets of predictions, but only ever serve the current model's output to users. This lets you compare the two offline, before the new model ever makes a real decision.
+
+### Drift is detected and a new model is ready. Why not switch 100% of traffic to it right away?
+
+**Canary deployment** answers this. Route a small slice of real traffic — say 5% — to the new model version, while everything else keeps going to the current one. Watch the key metrics on that slice. Only ramp up the percentage if it holds up.
+
+This limits the blast radius of a bad model version to a small fraction of real traffic, instead of all of it. And it gives you a live comparison, instead of a leap of faith.
 
 **Visual + memory hook — the traffic split ramping over time, watched at every step:**
 ```
@@ -52,42 +83,74 @@ Day 4     ░░░░░░░░░░░░░░░░░░░░░░░�
                     ▲ at EVERY step: if v2's metrics look worse, ramp stops or reverses —
                       this is a dial, not a switch
 ```
-**Remember it as a dial you turn gradually, not a switch you flip once** — the whole point is that "100% v1 → 100% v2" never happens in one step; it happens in a series of small, individually-reversible steps, each one gated on the previous step's metrics actually holding up. A "canary" (the bird, in a coal mine) dies first and small — that's the entire metaphor: 5% of traffic is the small, contained exposure that tells you something's wrong before it's exposed to everyone.
+Remember it as a dial you turn gradually, not a switch you flip once. "Full v1 to full v2" never happens in one step. It happens as a series of small, individually-reversible steps, and every step is gated on the previous step's metrics actually holding up.
 
-### 4. Given monitoring (question 2) and canary rollouts (question 3) are both in place, what specific failures still slip through BOTH, silently?
-- **Silent feature pipeline breakage** — an upstream data source changes a column's format or starts sending nulls; the model doesn't error, it just quietly gets fed garbage and produces worse predictions with no crash to notice.
-- **Training/serving skew** — the feature computed at training time (say, "average order value over the last 30 days," computed in a batch job) is computed slightly differently at serving time (computed live, different rounding or a different time window) — model performs great offline, worse in production, because it's technically seeing different features than it was trained on.
-- **Feedback loops** — a recommendation model's own past recommendations shape what users click, which becomes the next round's training data, reinforcing whatever the model already favored (and drowning out anything it initially under-recommended) — a slow, self-reinforcing drift the model can't see from its own metrics.
-- **Latency creep** — a model that was fast in testing slows down as real traffic volume/batch sizes grow, eventually breaching a latency SLA (service-level agreement — the response-time ceiling you've promised callers) that nobody was watching until users complained.
+A canary — the bird, in a coal mine — dies first, and small. That's the whole metaphor: 5% of traffic is the small, contained exposure that tells you something's wrong before it's exposed to everyone.
 
-### 5. Given any of question 4's failures (or question 1's drift) eventually forces a decision to revert, what actually has to be true BEFORE that moment for rollback to be fast?
-Rolling back should mean pointing the registry/serving config at the previous registered model version and redeploying — a fast, well-rehearsed action, not an emergency retraining job under pressure. This is exactly why the model registry from `mlops-practice.md` matters operationally, not just organizationally: rollback speed is bounded by whether "the previous version" is a clearly labeled, ready-to-serve artifact or something someone has to go dig up.
+### Monitoring and canary rollouts are both in place. What still slips through, silently?
+
+Four failure modes, and none of them trip an obvious alarm.
+
+**Silent feature pipeline breakage.** An upstream data source changes a column's format, or starts sending nulls. The model doesn't error out — it just quietly gets fed garbage, and produces worse predictions with no crash to notice.
+
+**Training/serving skew.** A feature computed at training time — say, "average order value over the last 30 days," computed in a batch job — gets computed slightly differently at serving time: live, with different rounding, or a different time window. The model performs great offline and worse in production, because it's technically seeing different features than it was trained on.
+
+**Feedback loops.** A recommendation model's own past recommendations shape what users click. Those clicks become next round's training data, reinforcing whatever the model already favored, and drowning out anything it initially under-recommended. This is a slow, self-reinforcing drift the model can't see from its own metrics.
+
+**Latency creep.** A model that was fast in testing slows down as real traffic volume or batch sizes grow. Eventually it breaches a latency SLA — a service-level agreement, the response-time ceiling you've promised callers — that nobody was watching until users complained.
+
+### Eventually something forces a rollback. What has to be true beforehand for that to be fast?
+
+Rolling back should mean one thing: point the registry or serving config at the previous registered model version, and redeploy. A fast, well-rehearsed action — not an emergency retraining job under pressure.
+
+This is exactly why the model registry from `mlops-practice.md` matters operationally, not just organizationally. Rollback speed is bounded by one thing: whether "the previous version" is a clearly labeled, ready-to-serve artifact, or something someone has to go dig up.
 
 ### Summary example
-A fraud model's prediction rate silently climbs from 2% to 15% flagged (question 2's prediction-distribution monitor catches this) — traced back to concept drift as fraud tactics evolved (question 1). The fix is retrained and rolled out as a 5%-then-ramping canary (question 3), while the same monitoring that caught the original drift also watches for training/serving skew in the new version (question 4) — and if the canary's metrics look worse at any step, rollback (question 5) is just pointing the registry back at the still-running previous version, not an emergency retrain under pressure.
+
+A fraud model's prediction rate silently climbs from 2% flagged to 15% flagged. The prediction-distribution monitor catches this first.
+
+Tracing it back: fraud tactics evolved, so this is concept drift, not data drift.
+
+The fix is a retrained model, rolled out as a canary — 5%, then ramping up over several days. The same monitoring that caught the original drift also watches the new version for training/serving skew.
+
+If the canary's metrics look worse at any step, rollback is simple: point the registry back at the still-running previous version. No emergency retrain under pressure.
 
 ---
 
 ## Cluster 3 — Securing and Serving the API Layer
 
-Cluster 1's request path had one box labelled `API layer (auth, validation, rate limiting)` and then moved straight past it to feature lookup. This cluster opens that box. It matters for AI-engineer roles specifically because the API layer around a model is usually *yours* to ship — there's rarely a separate backend team who wraps your model for you. It's also directly claimable ground: NaviDoc (`my-projects-portfolio.md`) already serves through FastAPI, and its access-control module — which filters retrieval candidates by the requesting user's permissions *during* the similarity search — is exactly the "who is asking, and what are they allowed to see" question this cluster is about, applied one layer deeper than the endpoint.
+Cluster 1's request path had one box labeled `API layer (auth, validation, rate limiting)`, then moved straight past it to feature lookup. This cluster opens that box.
 
-### 1. Given Cluster 1's request path puts auth inside the API layer, why does an inference endpoint need auth at all — isn't "don't expose the port publicly" enough?
-"Don't expose the port" is a network boundary, not an identity boundary: it answers *can this packet reach me* but never *who is asking and what are they allowed to do*. Three concrete reasons an inference endpoint in particular needs real auth:
-- **Cost control.** Unlike a CRUD endpoint, a single inference request can consume real GPU seconds. An unauthenticated endpoint means anyone who finds the URL can run expensive inference **on your bill** — this is a direct financial exposure, not a hypothetical one, and it scales with how good/expensive your model is.
-- **Abuse and rate-limit evasion.** Rate limits have to be keyed to *somebody*. With no identity, the only key available is source IP, which is trivially rotated (cloud VMs, proxies) — so without auth, rate limiting is barely enforceable at all. Auth is what makes a per-caller quota meaningful.
-- **Compliance.** The moment the endpoint touches real user or business data — clinical notes, transactions, PII — auditable per-caller identity stops being good practice and becomes a *requirement* (HIPAA, SOC 2, GDPR all assume you can say who accessed what, when). "The port was firewalled" is not an access log.
+It matters for AI-engineer roles specifically, because the API layer around a model is usually yours to ship. There's rarely a separate backend team wrapping your model for you.
 
-The through-line: the network layer decides *reachability*, the API layer decides *identity and permission*, and only the second one can answer "who ran up this GPU bill" or "who read that record."
+It's also directly claimable ground: NaviDoc (`my-projects-portfolio.md`) already serves through FastAPI, and its access-control module — which filters retrieval candidates by the requesting user's permissions during the similarity search — is exactly the "who is asking, and what are they allowed to see" question this cluster is about, applied one layer deeper than the endpoint.
 
-### 2. Given the API layer needs to establish caller identity (question 1), what are the actual options — and what really distinguishes an API key from a JWT from OAuth2?
-This trio is a very common interview trip-up, mostly because OAuth2 isn't the same *kind* of thing as the other two.
+### Isn't "don't expose the port publicly" enough? Why does an inference endpoint need real auth?
 
-**API key** — a long random string the caller sends on every request (`X-API-Key: sk_live_a3f...`). The server looks it up in a table to find out who it belongs to.
-- *Good for:* service-to-service and internal calls, quick partner integrations, anything where the caller is a machine, not a person.
-- *Costs:* it's opaque — the key itself carries **no** information (no user id, no expiry, no permissions), so **every single request costs a database lookup**. It has no built-in expiry, so a leaked key is valid until someone notices and revokes it. And revocation is coarse: one key usually means all-or-nothing access, so "let this caller keep reading but stop it writing" means minting and redistributing new keys.
+No. "Don't expose the port" is a network boundary, not an identity boundary. It answers *can this packet reach me*, but never *who is asking, and what are they allowed to do*.
 
-**JWT (JSON Web Token)** — a *signed, self-contained* token. Three base64url-encoded segments joined by dots: `header.payload.signature`.
+Three concrete reasons an inference endpoint specifically needs real auth:
+
+**Cost control.** Unlike a CRUD endpoint, a single inference request can burn real GPU seconds. An unauthenticated endpoint means anyone who finds the URL can run expensive inference on your bill. That's a direct financial exposure, not a hypothetical one — and it scales with how good, and how expensive, your model is.
+
+**Abuse and rate-limit evasion.** Rate limits have to be keyed to somebody. With no identity, the only key available is the source IP, and that's trivially rotated — cloud VMs, proxies. Without auth, rate limiting is barely enforceable at all. Auth is what makes a per-caller quota meaningful in the first place.
+
+**Compliance.** The moment the endpoint touches real user or business data — clinical notes, transactions, PII — auditable per-caller identity stops being good practice. It becomes a requirement. HIPAA, SOC 2, and GDPR all assume you can say who accessed what, and when. "The port was firewalled" is not an access log.
+
+The through-line: the network layer decides *reachability*. The API layer decides *identity and permission*. Only the second one can answer "who ran up this GPU bill," or "who read that record."
+
+### API key, JWT, or OAuth2 — what actually distinguishes them?
+
+This trio trips people up in interviews constantly, mostly because OAuth2 isn't even the same *kind* of thing as the other two.
+
+**API key.** A long random string the caller sends on every request: `X-API-Key: sk_live_a3f...`. The server looks it up in a table to find out who it belongs to.
+
+Good for: service-to-service calls, internal traffic, quick partner integrations — anywhere the caller is a machine, not a person.
+
+The costs: an API key is opaque. It carries no information on its own — no user id, no expiry, no permissions — so every single request costs a database lookup. It has no built-in expiry, so a leaked key stays valid until someone notices and revokes it. And revocation is coarse: one key usually means all-or-nothing access, so "let this caller keep reading but stop it from writing" means minting and redistributing an entirely new key.
+
+**JWT (JSON Web Token).** A signed, self-contained token. Three base64url-encoded segments joined by dots: `header.payload.signature`.
+
 ```
 eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImV4cCI6MTczNTY4OTYwMCwic2NvcGUiOiJpbmZlcmVuY2U6cmVhZCJ9.mzAknCbx0eYoQjDW9xMBoPVoeFSzLFaePeCk_dWJ5UU
 └──────────── header ────────────┘ └───────────────────────── payload ─────────────────────────┘ └───────────── signature ─────────────┘
@@ -95,16 +158,25 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyXzEyMyIsImV4cCI6MTczNTY4OTY
         "typ":"JWT"}                     "exp": 1735689600,                                          header + "." + payload,
                                          "scope": "inference:read"}                                  using the server's secret
 ```
-That payload is a real, decodable one (base64url is *encoding*, not encryption — anyone holding the token can read the claims; the signature protects **integrity**, not secrecy, so never put anything confidential in a payload). Its three claims:
-- `sub` (**subject**) — who the token is about. `user_123` is the caller's identity; this is what your logs, quotas, and billing key off.
-- `exp` (**expiry**) — a Unix timestamp after which the token must be rejected. This one is `2025-01-01T00:00:00Z`, so it is already expired — a token that leaks after its `exp` is worthless, which is exactly why short-lived tokens beat static keys.
-- `scope` — what this caller is permitted to do (`inference:read`). Permissions travel *inside* the token.
 
-The reason JWTs dominate stateless API auth at scale: the server can verify the token wasn't tampered with by **recomputing the signature with its own secret (or verifying with its public key) — no database lookup at all**. Any edit to the payload (bumping `exp`, adding `scope: admin`) invalidates the signature, and the attacker can't forge a new one without the key. So identity, expiry, and permissions all arrive with the request already verified. The tradeoff is the mirror image of the API key's: a JWT is hard to revoke *early*, because nothing is consulted at request time to ask "is this still valid?" — which is why access tokens are kept short-lived (minutes) and paired with a longer-lived refresh token that *does* hit a revocable store.
+That payload is a real, decodable one. Base64url is *encoding*, not encryption — anyone holding the token can read the claims. The signature protects *integrity*, not secrecy. Never put anything confidential in a payload.
 
-**OAuth2** — **not a token format at all.** It's a *delegation/authorization framework*: a protocol for how a user grants a **third-party application** limited access to their resources **without handing over their password**. "Log in with Google" is the everyday example — you authorize an app to read your Google profile; the app never sees your Google password, gets only the scopes you approved, and you can revoke it later from your Google account without changing that password.
-- The distinction people get wrong: **OAuth2 is the flow; a JWT is often what that flow hands back** as the actual access token. They're not alternatives — they operate at different layers. "We use OAuth2" describes *how the token was obtained*; "we use JWTs" describes *what the token is*.
-- Corollary worth saying out loud in an interview: OAuth2 is about **authorization** (delegated access), not authentication (proving who you are). The layer that adds identity on top of it is **OIDC (OpenID Connect)**, which is what actually makes "log in with Google" a *login* — and OIDC's ID token is, specifically, a JWT.
+Three claims worth knowing by name:
+- `sub` (**subject**) — who the token is about. `user_123` is the caller's identity. This is what your logs, quotas, and billing key off.
+- `exp` (**expiry**) — a Unix timestamp after which the token must be rejected. This one is `2025-01-01T00:00:00Z`, so it's already expired. A token that leaks after its `exp` is worthless — which is exactly why short-lived tokens beat static keys.
+- `scope` — what this caller is permitted to do. `inference:read` here. Permissions travel inside the token itself.
+
+Here's why JWTs dominate stateless API auth at scale: the server can verify the token wasn't tampered with by recomputing the signature with its own secret (or verifying with its public key). No database lookup at all. Edit the payload — bump `exp`, add `scope: admin` — and the signature no longer matches. The attacker can't forge a new one without the key. So identity, expiry, and permissions all arrive with the request already verified.
+
+The tradeoff is the mirror image of the API key's: a JWT is hard to revoke *early*, because nothing gets consulted at request time to ask "is this still valid?" That's why access tokens are kept short-lived — minutes — and paired with a longer-lived refresh token that *does* hit a revocable store.
+
+**OAuth2.** Not a token format at all. It's a *delegation/authorization framework* — a protocol for how a user grants a third-party application limited access to their resources, without handing over their password.
+
+"Log in with Google" is the everyday example. You authorize an app to read your Google profile. The app never sees your Google password, gets only the scopes you approved, and you can revoke it later from your Google account without changing that password.
+
+The distinction people get wrong: OAuth2 is the flow. A JWT is often what that flow hands back, as the actual access token. They're not alternatives. They operate at different layers. "We use OAuth2" describes *how the token was obtained*. "We use JWTs" describes *what the token is*.
+
+One more thing worth saying out loud in an interview: OAuth2 is about *authorization* — delegated access — not authentication, proving who you are. The layer that adds identity on top is **OIDC (OpenID Connect)**. That's what actually makes "log in with Google" a real *login*, and OIDC's ID token is, specifically, a JWT.
 
 **Visual + memory hook — same request, three different things in the header:**
 ```
@@ -112,18 +184,20 @@ API key   →  X-API-Key: sk_live_a3f...     opaque; server must LOOK IT UP     
 JWT       →  Authorization: Bearer eyJ...  self-describing; server VERIFIES it   "a signed passport"
 OAuth2    →  (not a header — it's how you GOT the Bearer token above)            "the visa process"
 ```
-**A coat-check ticket means nothing without the cloakroom's ledger; a passport is readable and tamper-evident on its own; OAuth2 isn't a document at all, it's the process that issued one.**
+A coat-check ticket means nothing without the cloakroom's ledger. A passport is readable and tamper-evident on its own. OAuth2 isn't a document at all — it's the process that issued one.
 
-### 3. Given a JWT is the choice, what actually happens at request time inside Cluster 1's API-layer box?
-Four steps, in this order, before any GPU work is touched:
+### With a JWT chosen, what actually happens at request time?
+
+Four steps happen, in this order, before any GPU work is touched:
+
 1. Pull the token out of the `Authorization: Bearer <token>` header.
-2. **Verify the signature** with the server's secret (HS256) or public key (RS256) — this is what proves the payload wasn't edited.
-3. **Check `exp`** hasn't passed → expired tokens are rejected even if the signature is perfect.
-4. **Check `scope`** actually permits *this* operation → a valid token for `inference:read` must not be able to trigger a fine-tune.
+2. **Verify the signature** with the server's secret (HS256) or public key (RS256). This is what proves the payload wasn't edited.
+3. **Check `exp`** hasn't passed. An expired token gets rejected even if the signature is perfect.
+4. **Check `scope`** actually permits *this* operation. A valid token for `inference:read` must not be able to trigger a fine-tune.
 
-Steps 2 and 3 are "who are you" (**401 Unauthorized** on failure); step 4 is "you are known but not allowed to do this" (**403 Forbidden**). Returning 401 where you meant 403 is a small tell that gets noticed in review.
+Steps 2 and 3 answer "who are you" — a failure there is a **401 Unauthorized**. Step 4 answers "you're known, but not allowed to do this" — that's a **403 Forbidden**. Returning 401 where you meant 403 is a small tell that gets noticed in review.
 
-In FastAPI, this is a `Depends()` dependency, which means auth is declared per-route rather than remembered per-handler — forgetting it is a visible omission in the signature rather than an invisible one in the body:
+In FastAPI, this is a `Depends()` dependency. That means auth gets declared per-route instead of remembered per-handler — forgetting it is a visible omission in the function signature, not an invisible one buried in the body.
 
 ```python
 import jwt  # PyJWT
@@ -169,23 +243,30 @@ def run_inference(claims: dict = Depends(require_scope("inference:read"))):
     caller = claims["sub"]            # identity for logging, quotas, billing
     return {"caller": caller, "prediction": 0.87}
 ```
-Traced through, that endpoint returns `200` for a valid unexpired `inference:read` token, `401 token expired` once `exp` passes, `401 invalid token` for a tampered/garbage/wrongly-signed token or a missing header, and `403 insufficient scope` for a perfectly valid token whose scope is (say) `jobs:write`.
 
-Two details that are easy to get wrong and worth knowing why they're there:
-- **`algorithms=[...]` is not optional.** Omitting the allow-list is the classic JWT vulnerability: an attacker re-signs the token declaring `alg: none` (or downgrades RS256→HS256 and signs with the public key as if it were the shared secret) and the library obligingly "verifies" it. Pinning the algorithm server-side closes it.
-- **`exp` is checked by the library, not by you.** `jwt.decode()` validates `exp` automatically and raises `ExpiredSignatureError`; hand-rolling `if claims["exp"] < time.time()` is both redundant and easy to get wrong (missing claim, clock skew).
+Trace a request through that endpoint, and here's what comes back: `200` for a valid, unexpired `inference:read` token. `401 token expired` once `exp` passes. `401 invalid token` for a tampered, malformed, or wrongly-signed token, or a missing header. `403 insufficient scope` for a perfectly valid token whose scope is, say, `jobs:write` instead.
 
-### 4. Given a valid token now gets through (question 3), why does the "rate limiting" part of Cluster 1's box still matter — isn't authenticated traffic trusted traffic?
-No — authentication answers *who*, never *how much*. A perfectly valid token can still be attached to a client that is:
-- **compromised** — the token was stolen and is being replayed by someone else, and it stays valid until `exp` (see question 2's revocation tradeoff);
-- **buggy** — a retry loop with no backoff hammering your endpoint 500×/second in complete good faith, which in practice is the more common outage;
-- **abusive within its rights** — a legitimate customer on a cheap tier discovering your GPU endpoint is the fastest way to run their own batch job.
+Two details are easy to get wrong, and worth knowing why they're there:
+
+**`algorithms=[...]` is not optional.** Leave out the allow-list, and you've built the classic JWT vulnerability: an attacker re-signs the token declaring `alg: none` — or downgrades RS256 to HS256 and signs with the public key as if it were the shared secret — and the library obligingly "verifies" it. Pinning the algorithm server-side closes that off.
+
+**`exp` is checked by the library, not by you.** `jwt.decode()` validates `exp` automatically and raises `ExpiredSignatureError`. Hand-rolling `if claims["exp"] < time.time()` is both redundant and easy to get wrong — a missing claim, clock skew, that kind of thing.
+
+### A valid token gets through. Why does rate limiting still matter?
+
+Authentication answers *who*, never *how much*. A perfectly valid token can still be attached to a client that is:
+
+- **Compromised.** The token was stolen and is being replayed by someone else. It stays valid until `exp`, per the revocation tradeoff above.
+- **Buggy.** A retry loop with no backoff, hammering your endpoint 500 times a second in complete good faith. In practice, this is the more common cause of an outage.
+- **Abusive within its rights.** A legitimate customer on a cheap tier discovers your GPU endpoint is the fastest way to run their own batch job.
 
 Two mechanisms worth being able to contrast:
-- **Token bucket** — each caller has a bucket that refills at a steady rate (say 10 tokens/sec, capacity 100); a request spends one token, and an empty bucket means rejection. Because the bucket can sit full, it **allows bursts** up to capacity while capping the long-run average. Cheap: one counter and one timestamp per caller.
-- **Sliding window** — count the requests actually made in the trailing N seconds and reject past the limit. **Stricter and smoother** (no burst allowance), but more expensive: it needs per-request timestamps, not just a counter.
 
-Token bucket is usually the right default for inference APIs: real clients are bursty, and the burst allowance absorbs that without punishing them, while the refill rate still bounds sustained GPU cost.
+**Token bucket.** Each caller has a bucket that refills at a steady rate — say 10 tokens per second, capacity 100. A request spends one token. An empty bucket means rejection. Because the bucket can sit full, it *allows bursts* up to capacity while still capping the long-run average. It's cheap: one counter and one timestamp per caller.
+
+**Sliding window.** Count the requests actually made in the trailing N seconds, and reject past the limit. This is stricter and smoother — no burst allowance — but more expensive, since it needs per-request timestamps, not just a counter.
+
+Token bucket is usually the right default for inference APIs. Real clients are bursty, and the burst allowance absorbs that without punishing them, while the refill rate still bounds sustained GPU cost.
 
 **Visual + memory hook — where each check sits, and what it costs to reach it:**
 ```
@@ -196,14 +277,21 @@ request
   ├─▶ validate + feature lookup           ~milliseconds, hits a store
   └─▶ MODEL INFERENCE                     ~GPU seconds, $$$            ← MOST EXPENSIVE, so LAST
 ```
-**Order the gate by what it costs to get past it — reject at the cheapest layer that can say no.** A volumetric flood should be dropped by a counter increment, not after you've done crypto, hit the feature store, and warmed a GPU. The practical wrinkle: the *tightest* per-user quota needs the identity that only auth provides, so real systems do both — a coarse pre-auth limit keyed on IP or raw API key to survive floods, and a fine per-`sub` quota after the token is verified.
+Order the gate by what it costs to get past it — reject at the cheapest layer that can say no. A volumetric flood should be dropped by a counter increment, not after you've already done crypto, hit the feature store, and warmed a GPU.
 
-### 5. Given everything above assumes a synchronous request/response (Cluster 1's path ends in `-> response`), what happens when the operation genuinely takes minutes or hours?
-Holding an HTTP connection open for a 40-minute fine-tuning job is not an option: load balancers and proxies time out (typically 30–120s), a dropped connection loses the result entirely, and a held connection pins server resources doing nothing. Polling (`GET /jobs/123` every 5s) works but is wasteful and laggy — most polls return "still running."
+The practical wrinkle: the *tightest* per-user quota needs the identity that only auth provides. So real systems do both — a coarse pre-auth limit keyed on IP or raw API key, to survive floods, and a fine per-`sub` quota after the token is verified.
 
-**Webhooks** are the standard answer: **the caller registers a callback URL up front, and your service POSTs the result to that URL when the job finishes.** The synchronous call returns immediately with a job id (`202 Accepted`), the connection closes, and the result is *pushed* later. It inverts who calls whom — your service becomes the client, the caller becomes the server.
+### What happens when the operation genuinely takes minutes or hours, not milliseconds?
 
-That inversion creates the security problem specific to webhooks: **the receiver has an endpoint that anyone on the internet can POST to.** Nothing about a raw POST proves it came from you rather than from someone who guessed the URL and forged a `{"status": "succeeded", "credits_refunded": 5000}` body. The fix is **HMAC signature verification**: at registration both sides hold a shared secret; the sender hashes the exact request body with that secret and puts the result in a header; the receiver recomputes the same hash over the body it received and compares. Matching signatures prove both *authenticity* (only a holder of the secret could produce it) and *integrity* (any byte changed in transit produces a different hash).
+Everything above assumes a synchronous request/response. That breaks down once a job actually takes a long time.
+
+Holding an HTTP connection open for a 40-minute fine-tuning job isn't an option. Load balancers and proxies time out — typically 30 to 120 seconds. A dropped connection loses the result entirely. And a held connection pins server resources doing nothing the whole time. Polling (`GET /jobs/123` every 5 seconds) technically works, but it's wasteful and laggy — most polls just return "still running."
+
+**Webhooks** are the standard answer. The caller registers a callback URL up front. Your service POSTs the result to that URL when the job finishes. The synchronous call returns immediately with a job id (`202 Accepted`), the connection closes, and the result gets *pushed* later. It inverts who calls whom — your service becomes the client, and the caller becomes the server.
+
+That inversion creates a security problem specific to webhooks: the receiver now has an endpoint that anyone on the internet can POST to. Nothing about a raw POST proves it came from you, rather than from someone who guessed the URL and forged a `{"status": "succeeded", "credits_refunded": 5000}` body.
+
+The fix is **HMAC signature verification**. At registration, both sides hold a shared secret. The sender hashes the exact request body with that secret and puts the result in a header. The receiver recomputes the same hash over the body it received, and compares. Matching signatures prove two things: *authenticity* (only a holder of the secret could have produced it) and *integrity* (any byte changed in transit produces a different hash).
 
 ```python
 import hashlib
@@ -228,90 +316,135 @@ def verify(raw_body: bytes, header_sig: str, secret: bytes = WEBHOOK_SECRET) -> 
     expected = sign(raw_body, secret)
     return hmac.compare_digest(expected, header_sig)   # constant-time compare
 ```
-Three things that make or break this in practice:
-- **`hmac.compare_digest`, not `==`.** A normal string comparison short-circuits at the first differing byte, so its *timing* leaks how many leading bytes were right — enough, over many attempts, to reconstruct a valid signature byte by byte. `compare_digest` takes the same time regardless.
-- **Sign and verify the raw bytes, not a re-serialized dict.** `json.dumps(json.loads(body))` can reorder keys or change whitespace, which changes the hash and breaks verification for a payload that was never actually tampered with. On the receiving FastAPI side that means `await request.body()`, not the parsed Pydantic model.
-- **Include a timestamp in what you sign, and reject old ones.** A bare signature is still perfectly replayable — an attacker who captures one valid signed delivery can POST that same body+signature forever. Signing `f"{timestamp}.{body}"` and rejecting deliveries older than a few minutes closes the replay window. (Same category of problem as `exp` on a JWT, one layer down.)
 
-Also: the receiver must reply fast (`200` immediately, do the work after) or your sender will time out and retry, and it must be **idempotent** — webhook delivery is at-least-once, so the same `job_id` will occasionally arrive twice, and the receiver has to treat the duplicate as a no-op rather than double-charging someone.
+Three things make or break this in practice:
+
+**Use `hmac.compare_digest`, not `==`.** A normal string comparison short-circuits at the first differing byte, so its *timing* leaks how many leading bytes were right. Given enough attempts, that's enough to reconstruct a valid signature byte by byte. `compare_digest` takes the same time regardless of where the mismatch is.
+
+**Sign and verify the raw bytes, not a re-serialized dict.** `json.dumps(json.loads(body))` can reorder keys or change whitespace, which changes the hash — and breaks verification for a payload that was never actually tampered with. On the receiving FastAPI side, that means reading `await request.body()`, not the parsed Pydantic model.
+
+**Include a timestamp in what you sign, and reject old ones.** A bare signature is still perfectly replayable. An attacker who captures one valid signed delivery can POST that same body and signature forever. Signing `f"{timestamp}.{body}"` and rejecting deliveries older than a few minutes closes the replay window. It's the same category of problem as `exp` on a JWT, just one layer down.
+
+Two more things matter here, even without code. The receiver must reply fast — `200` immediately, do the real work after — or your sender will time out and retry. And the receiver has to be **idempotent**: webhook delivery is at-least-once, so the same `job_id` will occasionally arrive twice, and the receiver has to treat the duplicate as a no-op instead of double-charging someone.
 
 ### Summary example
-An AI engineer ships a fine-tuning-as-a-service endpoint. Auth is non-negotiable because each job burns real GPU hours on the company's bill and the training data is customer-owned (question 1). Internal services calling it get a static API key; customer-facing traffic gets short-lived JWTs, obtained through an OAuth2 flow so a customer's own dashboard can trigger jobs without ever handling the customer's password (question 2). Each request arrives as `Authorization: Bearer eyJ...`; the FastAPI `Depends()` dependency verifies the signature, rejects anything past `exp` with a 401, and rejects a caller holding only `inference:read` from hitting `POST /v1/fine-tune` with a 403 (question 3) — but rate limiting runs *before* that crypto, keyed on API key or IP, so a retry storm from one buggy client is dropped by a counter rather than by a warmed GPU, with a tighter per-`sub` token-bucket quota applied once identity is known (question 4). Because the job takes 40 minutes, the call returns `202 Accepted` with a `job_id` instead of blocking, and when training completes the service POSTs the result to the customer's registered callback URL with an HMAC-SHA256 signature over the raw body plus a timestamp — which the customer verifies with `hmac.compare_digest` before trusting a single field of it (question 5). Every one of those requests is logged against its `sub`, which is what makes the GPU bill attributable and the access log auditable.
 
-### Common pitfalls
-- **If a JWT-authenticated endpoint accepts a token that was obviously edited, it's because the `algorithms=` allow-list was omitted from `jwt.decode()`** — without it the library will honour the token's own `alg` header, including `alg: none`, and "verify" a completely unsigned payload; pinning `algorithms=["HS256"]` (or `["RS256"]`) server-side is the fix, and it's a one-line fix for a total auth bypass.
-- **If revoking a compromised JWT "doesn't take effect," it's because nothing is consulted at request time — that statelessness is the whole point of the design** — the fix isn't to add a lookup to every request (that discards the reason you chose JWTs), it's short `exp` lifetimes (minutes) plus a revocable refresh token, so the blast radius of a stolen access token is bounded by the clock instead of by a database.
-- **If rate limiting sits after auth and a flood still takes the service down, it's because every junk request is still paying for signature verification and a feature lookup before being told no** — put a coarse limit keyed on IP or raw API key *in front of* auth, and keep the fine per-`sub` quota behind it; the cheap check has to be the first one.
-- **If webhook signature verification fails on payloads that were never tampered with, it's because the receiver re-serialized the JSON before hashing it** — key order and whitespace change the bytes and therefore the digest; hash the raw request body exactly as received (`await request.body()` in FastAPI), not `json.dumps(parsed)`.
-- **If an attacker can replay a captured webhook delivery indefinitely, it's because only the body was signed, with no timestamp** — sign `timestamp + body` and reject deliveries older than a few minutes; a valid signature alone only proves the payload is *authentic*, never that it's *current*.
-- **If a caller reports being charged twice for one completed job, it's because the webhook receiver assumed exactly-once delivery** — webhook senders retry on timeout or non-2xx, so delivery is at-least-once by design; the receiver has to dedupe on `job_id` (or an idempotency key) and return `200` fast, doing the real work asynchronously.
-- **If someone says "we use OAuth2 instead of JWTs," it's a category error worth gently correcting** — OAuth2 is the framework for *obtaining* a token via delegated authorization; a JWT is a *format* that token often takes. They compose; they don't compete. (And OAuth2 alone is authorization, not authentication — OIDC is the layer that adds identity.)
+An AI engineer ships a fine-tuning-as-a-service endpoint. Here's how the whole cluster comes together.
+
+1. Auth is non-negotiable. Each job burns real GPU hours on the company's bill, and the training data is customer-owned.
+2. Internal services calling it get a static API key. Customer-facing traffic gets short-lived JWTs, obtained through an OAuth2 flow — so a customer's own dashboard can trigger jobs without ever handling the customer's password.
+3. Each request arrives as `Authorization: Bearer eyJ...`. The FastAPI `Depends()` dependency verifies the signature, rejects anything past `exp` with a 401, and rejects a caller holding only `inference:read` from hitting `POST /v1/fine-tune` with a 403.
+4. Rate limiting runs *before* that crypto, keyed on API key or IP — so a retry storm from one buggy client gets dropped by a counter, not by a warmed GPU. A tighter per-`sub` token-bucket quota applies once identity is known.
+5. The job takes 40 minutes, so the call returns `202 Accepted` with a `job_id` instead of blocking.
+6. When training completes, the service POSTs the result to the customer's registered callback URL, with an HMAC-SHA256 signature over the raw body plus a timestamp. The customer verifies it with `hmac.compare_digest` before trusting a single field.
+
+Every one of those requests is logged against its `sub`. That's what makes the GPU bill attributable, and the access log auditable.
+
+### Where people trip up
+
+**A JWT-authenticated endpoint accepts a token that's obviously been edited.** This means the `algorithms=` allow-list was left out of `jwt.decode()`. Without it, the library honors whatever `alg` the token itself declares — including `alg: none` — and "verifies" a completely unsigned payload. Pin `algorithms=["HS256"]` (or `["RS256"]`) server-side. It's a one-line fix for what would otherwise be a total auth bypass.
+
+**Revoking a compromised JWT "doesn't take effect."** That's expected — statelessness is the whole point of the design, since nothing gets consulted at request time. Don't fix this by adding a lookup to every request; that throws away the reason you chose JWTs in the first place. Instead, use short `exp` lifetimes (minutes) plus a revocable refresh token. The blast radius of a stolen access token is then bounded by the clock, not by a database.
+
+**Rate limiting sits after auth, and a flood still takes the service down.** Every junk request is still paying for signature verification and a feature lookup before being told no. Put a coarse limit keyed on IP or raw API key *in front of* auth, and keep the fine per-`sub` quota behind it. The cheap check has to be first.
+
+**Webhook signature verification fails on payloads that were never tampered with.** The receiver re-serialized the JSON before hashing it. Key order and whitespace change the bytes, and therefore the digest. Hash the raw request body exactly as received (`await request.body()` in FastAPI), never `json.dumps(parsed)`.
+
+**An attacker can replay a captured webhook delivery indefinitely.** Only the body was signed — no timestamp. Sign `timestamp + body`, and reject deliveries older than a few minutes. A valid signature alone only proves the payload is *authentic*. It never proves it's *current*.
+
+**A caller reports being charged twice for one completed job.** The webhook receiver assumed exactly-once delivery. Webhook senders retry on timeout or a non-2xx response, so delivery is at-least-once by design. The receiver has to dedupe on `job_id` (or an idempotency key), and return `200` fast while doing the real work asynchronously.
+
+**Someone says "we use OAuth2 instead of JWTs."** Worth gently correcting — that's a category error. OAuth2 is the framework for *obtaining* a token via delegated authorization. A JWT is a *format* that token often takes. They compose; they don't compete. And OAuth2 alone is authorization, not authentication — OIDC is the layer that adds identity.
+
+---
 
 ## Cluster 4 — When the LLM Call Itself Fails: Timeouts, Fallbacks, and Degrading Gracefully
 
-### Plain-English explanation
-Everything in Cluster 3 assumes your own service is the thing that can fail. Once your service's job is "call an LLM API and return the result," you've added a dependency you don't control — one with its own latency spikes, rate limits, and outages — and "the request failed" stops being an edge case and becomes a Tuesday. The failure modes are specific to LLM calls (long tail latency, token-based rate limits, a single provider going down) and the fixes are a different toolkit than a normal internal-service retry.
+Cluster 3 assumes your own service is the thing that can fail. Once your service's job is "call an LLM API and return the result," you've added a dependency you don't control — one with its own latency spikes, rate limits, and outages. "The request failed" stops being an edge case and becomes a Tuesday. The failure modes here are specific to LLM calls — long tail latency, token-based rate limits, a single provider going down — and the fixes are a different toolkit than a normal internal-service retry.
 
-### Built as a chain: from a hung request to a user who never notices
+### An LLM call sometimes takes 60+ seconds instead of the usual 2. What do you do?
 
-### 1. Your LLM call sometimes takes 60+ seconds instead of the usual 2. What do you do about that alone?
-Set an explicit client-side timeout well below your own service's deadline — if your API has to respond in 10s, the LLM call gets maybe 6-7s, not "whatever the SDK defaults to." Without this, one slow provider call ties up a request thread until *your* framework-level timeout fires, which is usually much later and much less informative than a clean, fast failure you control.
+Set an explicit client-side timeout, well below your own service's deadline. If your API has to respond in 10 seconds, the LLM call gets maybe 6 or 7 seconds — not whatever the SDK defaults to.
 
-### 2. A timeout or a 429 comes back. Do you just retry immediately?
-No — immediate retries into a rate-limited or overloaded endpoint make the problem worse, not better, and a burst of clients all retrying at once creates a synchronized "thundering herd" that can keep an already-struggling endpoint down. The fix is **exponential backoff with jitter**: wait `base * 2^attempt` plus a small random offset before each retry, so failed requests spread out over time instead of re-arriving in lockstep. Respect a `Retry-After` header if the provider sends one — it's telling you exactly how long to wait, not a suggestion.
+Without this, one slow provider call ties up a request thread until *your* framework-level timeout fires. That's usually much later, and much less informative, than a clean, fast failure you control yourself.
 
-### 3. Retries are exhausted and the primary provider is still down. What's the next line of defense?
-A **fallback model or provider** — configured in advance, not improvised at incident time. That can mean falling back from a large model to a smaller/faster one from the same provider (degraded quality, still answering), or to a second provider entirely if you've built against a provider-agnostic interface. The fallback doesn't have to be as good as the primary; it has to be good enough to avoid returning nothing.
+### A timeout or a 429 comes back. Do you just retry right away?
 
-### 4. Even the fallback fails, or you've decided not to build one. What does the user actually see?
-Never a raw stack trace or a spinning indicator that eventually times out silently. **Graceful degradation**: return a clear, honest message ("this feature is temporarily unavailable, please try again shortly"), fall back to a cached previous answer if one exists and is still reasonable, or degrade to a non-LLM path if one exists (e.g., keyword search instead of a semantic answer). The product keeps functioning in a reduced form instead of appearing broken.
+No. Immediate retries into a rate-limited or overloaded endpoint make the problem worse, not better. A burst of clients all retrying at once creates a synchronized "thundering herd" that can keep an already-struggling endpoint down.
+
+The fix is **exponential backoff with jitter**: wait `base * 2^attempt`, plus a small random offset, before each retry. Failed requests spread out over time instead of re-arriving in lockstep. Respect a `Retry-After` header if the provider sends one — it's telling you exactly how long to wait, not making a suggestion.
+
+### Retries are exhausted and the primary provider is still down. What's next?
+
+A **fallback model or provider**, configured in advance — not improvised at incident time. That can mean falling back from a large model to a smaller, faster one from the same provider (degraded quality, but still answering), or to a second provider entirely, if you've built against a provider-agnostic interface.
+
+The fallback doesn't have to be as good as the primary. It has to be good enough to avoid returning nothing.
+
+### Even the fallback fails. What does the user actually see?
+
+Never a raw stack trace, and never a spinning indicator that eventually times out silently.
+
+**Graceful degradation** means: return a clear, honest message ("this feature is temporarily unavailable, please try again shortly"), fall back to a cached previous answer if one exists and is still reasonable, or drop to a non-LLM path if one exists — keyword search instead of a semantic answer, say. The product keeps functioning in a reduced form, instead of appearing broken.
 
 ### Summary example
-An AI engineer's chat feature calls Claude with a 8-second client timeout inside a service that has a 12-second SLA. On a timeout or 429, it retries twice with exponential backoff and jitter (roughly 0.5s, then 2s, respecting any `Retry-After`). If both retries fail, it falls back to a smaller, faster model configured for exactly this situation — answering with lower latency and slightly lower quality rather than not answering. If that also fails (full provider outage), the endpoint returns a plain-language "temporarily unavailable" response instead of hanging until the client gives up, and logs the failure with enough context (provider, model, attempt count, latency) to page on-call if the rate crosses a threshold. The user either gets a good answer, an acceptable answer, or a clear "not right now" — never a spinner that dies silently.
 
-### Common pitfalls
-- **If retries make an outage worse instead of better, it's because they fired immediately and in lockstep** — every client hitting the same failing endpoint at the same instant recreates the load spike that caused the failure; exponential backoff with jitter spreads retries out so they don't all land together.
-- **If a "resilient" service still hangs for 60+ seconds under a slow provider, it's because the client-side timeout was never set** — the SDK's default (or no timeout at all) leaves you waiting on someone else's infrastructure instead of failing fast on your own terms.
-- **If a fallback model was "configured" but never actually got traffic during the one outage that mattered, it's because it was never tested** — a fallback path that only runs during a real incident is a fallback path you're testing for the first time in production; exercise it deliberately (chaos testing, a feature flag that forces the fallback) before you need it for real.
-- **If users see a raw error or an infinite spinner during a provider outage, it's a degradation design gap, not a bug in any one line of code** — decide in advance what "acceptable but not perfect" looks like (cached answer, smaller model, plain-language unavailability message) rather than letting the failure mode be whatever falls out of unhandled exceptions.
+An AI engineer's chat feature calls Claude with an 8-second client timeout, inside a service that has a 12-second SLA.
+
+1. On a timeout or a 429, it retries twice with exponential backoff and jitter — roughly 0.5 seconds, then 2 seconds, respecting any `Retry-After` header.
+2. If both retries fail, it falls back to a smaller, faster model configured for exactly this situation. That answers with lower latency and slightly lower quality, rather than not answering at all.
+3. If that also fails — a full provider outage — the endpoint returns a plain-language "temporarily unavailable" response instead of hanging until the client gives up. It logs the failure with enough context — provider, model, attempt count, latency — to page on-call if the rate crosses a threshold.
+
+The user either gets a good answer, an acceptable answer, or a clear "not right now." Never a spinner that dies silently.
+
+### Where people trip up
+
+**Retries make an outage worse, not better.** They fired immediately and in lockstep. Every client hitting the same failing endpoint at the same instant recreates the load spike that caused the failure in the first place. Exponential backoff with jitter spreads retries out so they don't all land together.
+
+**A "resilient" service still hangs for 60+ seconds under a slow provider.** The client-side timeout was never set. The SDK's default — or no timeout at all — leaves you waiting on someone else's infrastructure, instead of failing fast on your own terms.
+
+**A fallback model was "configured" but never actually got traffic during the one outage that mattered.** It was never tested. A fallback path that only runs during a real incident is a fallback path you're testing for the first time in production. Exercise it deliberately — chaos testing, a feature flag that forces the fallback — before you actually need it.
+
+**Users see a raw error or an infinite spinner during a provider outage.** This is a degradation design gap, not a bug in any one line of code. Decide in advance what "acceptable but not perfect" looks like — a cached answer, a smaller model, a plain-language unavailability message — rather than letting the failure mode be whatever falls out of unhandled exceptions.
+
+---
 
 ## Practice Q&A (Self-Test)
 
-### A fraud-detection model needs an answer in under 200ms at checkout. Batch or real-time serving?
-Real-time — the decision has to happen synchronously within the user's checkout flow; a nightly batch job couldn't possibly influence a decision that needs to happen in the current request.
+**Q1. A fraud-detection model needs an answer in under 200ms at checkout. Batch or real-time serving?**
+A: Real-time. The decision has to happen synchronously, inside the user's checkout flow. A nightly batch job couldn't possibly influence a decision that needs to happen in the current request.
 
-### Model accuracy drops even though nothing about the model or its code changed. What are the two categories of explanation, and how do you tell them apart operationally?
-Data drift (the input distribution shifted) vs. concept drift (the input→output relationship itself changed). Distinguish them by comparing: if predictions on fresh inputs still match ground truth well when tested against the *old* relationship assumptions, but the inputs themselves look statistically different from training, that's data drift; if even a retrain on similarly-distributed recent inputs still underperforms because the true labels have shifted, that's concept drift.
+**Q2. Model accuracy drops even though nothing about the model or its code changed. What are the two categories of explanation, and how do you tell them apart operationally?**
+A: Data drift — the input distribution shifted — versus concept drift — the input-to-output relationship itself changed. Here's how to tell them apart: if predictions on fresh inputs still match ground truth well under the old relationship, but the inputs themselves look statistically different from training, that's data drift. If even a retrain on similarly-distributed recent inputs still underperforms, because the true labels have shifted, that's concept drift.
 
-### Offline evaluation on held-out data looked great, but the model performs noticeably worse in production. Feature values themselves look reasonable. What's a likely cause specific to production systems (not covered by normal train/test evaluation)?
-Training/serving skew — the same named feature is computed differently at training time (e.g. a batch job with a clean 30-day window) versus serving time (a live computation with a subtly different window or rounding), so the model is technically fed different feature values than it was trained on, even though nothing looks obviously wrong.
+**Q3. Offline evaluation on held-out data looked great, but the model performs noticeably worse in production. Feature values themselves look reasonable. What's a likely cause?**
+A: Training/serving skew. The same named feature gets computed differently at training time — a batch job with a clean 30-day window, say — versus serving time, a live computation with a slightly different window or rounding. The model is technically fed different feature values than it was trained on, even though nothing looks obviously wrong.
 
-### Why deploy a new model version as a canary instead of switching 100% of traffic to it immediately?
-A canary limits how much real traffic is exposed to an unproven model version, so if it's actually worse, the damage is contained to a small slice while you still have a live, real-traffic comparison against the current version — rather than finding out it's bad only after every user is already affected.
+**Q4. Why deploy a new model version as a canary instead of switching 100% of traffic to it immediately?**
+A: A canary limits how much real traffic is exposed to an unproven model version. If it's actually worse, the damage stays contained to a small slice, and you still get a live, real-traffic comparison against the current version — instead of finding out it's bad only after every user is already affected.
 
-### Why does model-registry discipline (from `mlops-practice.md`) matter specifically for rollback speed?
-Rollback is only fast if "the previous production model" is an unambiguous, already-packaged, ready-to-serve artifact you can point traffic back to immediately. Without a registry tracking exact versions and their deployment history, "roll back" turns into first figuring out which file was actually running before — exactly the wrong time to be doing archaeology.
+**Q5. Why does model-registry discipline (from `mlops-practice.md`) matter specifically for rollback speed?**
+A: Rollback is only fast if "the previous production model" is an unambiguous, already-packaged, ready-to-serve artifact you can point traffic back to immediately. Without a registry tracking exact versions and their deployment history, "roll back" turns into first figuring out which file was actually running before — exactly the wrong time to be doing archaeology.
 
-### The inference endpoint is already behind a firewall and not on the public internet. Why still put auth on it?
-A firewall decides *reachability*; auth decides *identity and permission*, and only the second one survives contact with the three real risks: someone (internal or via a compromised host) running expensive GPU inference on your bill with no way to attribute the cost; rate limits being unenforceable because there's no per-caller key to count against; and, for anything touching user or business data, a compliance requirement to produce a per-caller access log. "The port was firewalled" is not an access log.
+**Q6. The inference endpoint is already behind a firewall and not on the public internet. Why still put auth on it?**
+A: A firewall decides reachability. Auth decides identity and permission, and only the second one survives contact with the real risks: someone — internal, or via a compromised host — running expensive GPU inference on your bill with no way to attribute the cost; rate limits being unenforceable because there's no per-caller key to count against; and, for anything touching user or business data, a compliance requirement to produce a per-caller access log. "The port was firewalled" is not an access log.
 
-### What is a JWT actually made of, and why does its structure make it popular for stateless API auth?
-Three base64url segments joined by dots — `header.payload.signature`. The payload carries claims like `{"sub": "user_123", "exp": 1735689600, "scope": "inference:read"}`: who the caller is, when the token stops being valid, and what it's allowed to do. The signature is computed over header+payload with the server's key, so the server can confirm nothing was tampered with **by recomputing it — no database lookup per request**, which is exactly why it scales. Note base64url is encoding, not encryption: anyone holding the token can read the claims, so nothing confidential goes in the payload.
+**Q7. What is a JWT actually made of, and why does its structure make it popular for stateless API auth?**
+A: Three base64url segments joined by dots — `header.payload.signature`. The payload carries claims like `{"sub": "user_123", "exp": 1735689600, "scope": "inference:read"}`: who the caller is, when the token stops being valid, and what it's allowed to do. The signature is computed over header plus payload with the server's key, so the server can confirm nothing was tampered with just by recomputing it — no database lookup per request, which is exactly why it scales. One note: base64url is encoding, not encryption. Anyone holding the token can read the claims, so nothing confidential goes in the payload.
 
-### Is OAuth2 an alternative to JWTs? (Common trip-up.)
-No — they're different layers, not competing options. OAuth2 is a **delegation/authorization framework**: a protocol by which a user grants a third-party app limited, revocable access to their resources without sharing their password ("log in with Google"). A JWT is a **token format** — and it's very often what an OAuth2 flow hands back as the access token. "We use OAuth2" describes how the token was obtained; "we use JWTs" describes what the token is. Bonus distinction: OAuth2 by itself is authorization, not authentication; OIDC is the layer built on top that adds identity (and its ID token is a JWT).
+**Q8. Is OAuth2 an alternative to JWTs? (Common trip-up.)**
+A: No — they're different layers, not competing options. OAuth2 is a delegation/authorization framework: a protocol by which a user grants a third-party app limited, revocable access to their resources without sharing their password ("log in with Google"). A JWT is a token format, and it's very often what an OAuth2 flow hands back as the access token. "We use OAuth2" describes how the token was obtained. "We use JWTs" describes what the token is. One more distinction: OAuth2 by itself is authorization, not authentication. OIDC is the layer built on top that adds identity, and its ID token is a JWT.
 
-### A request arrives with a valid, correctly-signed, unexpired JWT — but for an operation the caller shouldn't be able to trigger. What does the API layer return, and why does the status code matter?
-`403 Forbidden`, from a `scope` claim check — not `401 Unauthorized`. 401 means "I don't know who you are" (bad or expired token); 403 means "I know exactly who you are, and you're not allowed to do this." Signature and `exp` failures are 401s; scope failures are 403s. Collapsing the two is a small tell that gets noticed in review, and it makes client-side error handling wrong (a 401 tells a client to go refresh its token, which won't help at all if the real problem was insufficient scope).
+**Q9. A request arrives with a valid, correctly-signed, unexpired JWT — but for an operation the caller shouldn't be able to trigger. What does the API layer return, and why does the status code matter?**
+A: `403 Forbidden`, from a `scope` claim check — not `401 Unauthorized`. 401 means "I don't know who you are" — a bad or expired token. 403 means "I know exactly who you are, and you're not allowed to do this." Signature and `exp` failures are 401s. Scope failures are 403s. Collapsing the two is a small tell that gets noticed in review, and it also breaks client-side error handling — a 401 tells a client to go refresh its token, which won't help at all if the real problem was insufficient scope.
 
-### One line in `jwt.decode()` is the difference between real verification and a total auth bypass. Which, and what's the attack?
-The `algorithms=["HS256"]` allow-list. Omit it and the library honours the algorithm declared *in the token itself* — so an attacker sets `alg: none` and submits an unsigned payload that gets happily "verified," or downgrades RS256 to HS256 and signs with your public key as though it were a shared secret. Pinning the accepted algorithm server-side closes both.
+**Q10. One line in `jwt.decode()` is the difference between real verification and a total auth bypass. Which, and what's the attack?**
+A: The `algorithms=["HS256"]` allow-list. Omit it, and the library honors whatever algorithm is declared inside the token itself. An attacker sets `alg: none` and submits an unsigned payload that gets happily "verified" — or downgrades RS256 to HS256 and signs with your public key as though it were a shared secret. Pinning the accepted algorithm server-side closes both attacks.
 
-### Traffic is fully authenticated. Why is rate limiting still needed, and where in the request path should it sit?
-Auth answers *who*, never *how much*. A valid token can be attached to a stolen client, a buggy retry loop with no backoff, or a legitimate customer abusing a cheap tier — and a JWT stays valid until `exp` even after it's known to be compromised. Place it by cost: a coarse limit keyed on IP or raw API key goes *before* signature verification and inference, so volumetric abuse is rejected by a counter increment instead of after crypto, a feature lookup, and GPU time; a tighter per-`sub` quota then runs after auth, since that's the first point a real per-caller identity exists. Token bucket (refills at a fixed rate, allows bursts up to capacity, one counter per caller) is the usual default for bursty inference clients; sliding window is stricter and smoother but needs per-request timestamps.
+**Q11. Traffic is fully authenticated. Why is rate limiting still needed, and where in the request path should it sit?**
+A: Auth answers who, never how much. A valid token can be attached to a stolen client, a buggy retry loop with no backoff, or a legitimate customer abusing a cheap tier — and a JWT stays valid until `exp` even after it's known to be compromised. Place it by cost: a coarse limit keyed on IP or raw API key goes before signature verification and inference, so volumetric abuse gets rejected by a counter increment instead of after crypto, a feature lookup, and GPU time. A tighter per-`sub` quota then runs after auth, since that's the first point a real per-caller identity exists. Token bucket — refills at a fixed rate, allows bursts up to capacity, one counter per caller — is the usual default for bursty inference clients. Sliding window is stricter and smoother, but needs per-request timestamps.
 
-### A fine-tuning job takes 40 minutes. Why can't the caller just wait on the HTTP response, and what's the standard alternative?
-Load balancers and proxies time out well before that (typically 30–120s), a dropped connection loses the result outright, and a held connection pins resources doing nothing. The standard answer is a **webhook**: the caller registers a callback URL, the initial request returns `202 Accepted` with a `job_id` and closes, and the service POSTs the result to that URL on completion — pushed, not polled.
+**Q12. A fine-tuning job takes 40 minutes. Why can't the caller just wait on the HTTP response, and what's the standard alternative?**
+A: Load balancers and proxies time out well before that — typically 30 to 120 seconds. A dropped connection loses the result outright, and a held connection pins resources doing nothing. The standard answer is a webhook: the caller registers a callback URL, the initial request returns `202 Accepted` with a `job_id` and closes, and the service POSTs the result to that URL on completion — pushed, not polled.
 
-### What's the security concern unique to webhooks, and how is it solved?
-The receiver is now exposing an endpoint anyone on the internet can POST to, and a raw POST carries no proof it came from you rather than from someone who guessed the URL and forged a favorable payload. Solved with **HMAC signature verification**: sender and receiver share a secret at registration, the sender hashes the exact raw body (plus a timestamp) with it and sends the digest in a header, and the receiver recomputes and compares. Three details do the actual work: compare with `hmac.compare_digest`, not `==` (a short-circuiting comparison leaks, via timing, how many leading bytes were correct); hash the raw received bytes, never a re-serialized dict (key order and whitespace change the digest); and include a timestamp with a freshness window, or a captured valid delivery stays replayable forever.
+**Q13. What's the security concern unique to webhooks, and how is it solved?**
+A: The receiver is now exposing an endpoint anyone on the internet can POST to, and a raw POST carries no proof it came from you rather than from someone who guessed the URL and forged a favorable payload. It's solved with HMAC signature verification: sender and receiver share a secret at registration, the sender hashes the exact raw body — plus a timestamp — with it and sends the digest in a header, and the receiver recomputes and compares. Three details do the actual work: compare with `hmac.compare_digest`, not `==`, since a short-circuiting comparison leaks, via timing, how many leading bytes were correct; hash the raw received bytes, never a re-serialized dict, since key order and whitespace change the digest; and include a timestamp with a freshness window, or a captured valid delivery stays replayable forever.

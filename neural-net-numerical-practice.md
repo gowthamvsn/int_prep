@@ -1,12 +1,14 @@
 # Neural Net Numericals — Forward Pass, Backward Pass, Loss, Weight Updates, Shapes
 
-Every other doc on this hub explains these ideas in words and code. This one is different on purpose: it's arithmetic. Given actual numbers for weights, biases, and inputs, you compute the forward pass by hand, compute the loss, backpropagate the gradient by hand, and produce the updated weight — the exact kind of "walk me through the numbers" question that shows up in interviews and exams when someone wants to check you understand backprop as more than a `.backward()` call.
+Every other doc in this hub explains these ideas in words and code. This one is different. It's pure arithmetic.
 
-All numbers below were computed and verified with NumPy (not worked out by hand and hoped correct) — see the worked walkthrough for the full toy network, then the 20-question quiz for varied numerical drills across forward pass, loss, gradients, weight updates, epoch/iteration counting, and shape arithmetic.
+You'll get real numbers for weights, biases, and inputs. You compute the forward pass by hand. Then the loss. Then you backpropagate the gradient by hand, and produce the updated weight. This is exactly the kind of "walk me through the numbers" question interviewers ask, when they want to know you understand backprop as more than a `.backward()` call.
+
+Every number below was computed and checked with NumPy. None of it is hand-guessed. First comes a full worked toy network, step by step. Then a 20-question quiz that drills the same skills: forward pass, loss, gradients, weight updates, epoch/iteration counting, and shape arithmetic.
 
 ## The toy network used throughout
 
-A minimal 2-input → 2-hidden(sigmoid) → 1-output(sigmoid) network — small enough to trace every number by hand, big enough to actually need backprop (not just a single weight):
+A minimal 2-input → 2-hidden(sigmoid) → 1-output(sigmoid) network. Small enough to trace every number by hand, big enough to actually need backprop — not just a single weight:
 
 ```
 x  = [0.5, 0.8]                      # 2 inputs
@@ -21,20 +23,20 @@ lr = 0.1                             # learning rate for the SGD step
 
 ### Forward pass
 
-**Hidden layer.** Each hidden unit's pre-activation `z` is a dot product of its weight row with the input, plus its bias:
+**Hidden layer.** Each hidden unit computes a pre-activation `z` first. Take the dot product of its weight row and the input. Then add its bias:
 
 ```
 z1_1 = (0.1)(0.5) + (0.4)(0.8) + 0.1  = 0.05 + 0.32 + 0.1  = 0.47
 z1_2 = (0.3)(0.5) + (0.2)(0.8) + (-0.2) = 0.15 + 0.16 - 0.2 = 0.11
 ```
 
-Apply sigmoid, `σ(z) = 1/(1+e^-z)`, to get the activations:
+Now apply sigmoid, `σ(z) = 1/(1+e^-z)`, to turn each `z` into an activation:
 
 ```
 a1 = [σ(0.47), σ(0.11)] = [0.6154, 0.5275]
 ```
 
-**Output layer.** Same pattern — dot product of `W2` with the hidden activations, plus `b2`:
+**Output layer.** Same pattern as before. Dot product of `W2` with the hidden activations, then add `b2`:
 
 ```
 z2 = (0.5)(0.6154) + (-0.3)(0.5275) + 0.2 = 0.3077 - 0.1582 + 0.2 = 0.3494
@@ -43,7 +45,7 @@ a2 = σ(0.3494) = 0.5865        <- this is the network's prediction
 
 ### Loss
 
-Two common choices, both computed from the same `a2 = 0.5865`, `y = 1`:
+Two common loss choices. Both use the same `a2 = 0.5865` and `y = 1`:
 
 ```
 MSE loss = 0.5*(y - a2)^2 = 0.5*(0.4135)^2 = 0.0855
@@ -52,9 +54,9 @@ BCE loss = -[y*log(a2) + (1-y)*log(1-a2)] = -log(0.5865) = 0.5336   (second term
 
 ### Backward pass (using MSE, the classic hand-worked case)
 
-Backprop is nothing but the chain rule, applied one layer at a time, back-to-front.
+Backprop is just the chain rule. Apply it one layer at a time, working backward.
 
-**Output layer's error term** (how much the loss wants `z2` to change):
+**Output layer's error term.** This measures how much the loss wants `z2` to change:
 
 ```
 δ2 = dL/da2 * da2/dz2
@@ -64,14 +66,14 @@ Backprop is nothing but the chain rule, applied one layer at a time, back-to-fro
    = -0.1003
 ```
 
-**Gradients for the output weights** — each is just `δ2` times whichever hidden activation feeds that weight:
+**Gradients for the output weights.** Each one is just `δ2` times whichever hidden activation feeds that weight:
 
 ```
 dL/dW2 = δ2 * a1 = -0.1003 * [0.6154, 0.5275] = [-0.0617, -0.0529]
 dL/db2 = δ2 = -0.1003
 ```
 
-**Backprop into the hidden layer** — push `δ2` back through `W2`, then multiply by the hidden layer's own sigmoid derivative:
+**Backprop into the hidden layer.** Push `δ2` back through `W2`. Then multiply by the hidden layer's own sigmoid derivative:
 
 ```
 δ1 = (W2 * δ2) ⊙ a1*(1-a1)
@@ -80,7 +82,7 @@ dL/db2 = δ2 = -0.1003
    = [-0.0119, 0.0075]
 ```
 
-**Gradients for the input weights** — each `δ1` element times whichever input feeds it:
+**Gradients for the input weights.** Each `δ1` element times whichever input feeds it:
 
 ```
 dL/dW1 = outer(δ1, x) = [[-0.0119*0.5, -0.0119*0.8],
@@ -92,7 +94,7 @@ dL/db1 = δ1 = [-0.0119, 0.0075]
 
 ### Weight update (one SGD step, `lr = 0.1`)
 
-`w_new = w_old - lr * gradient` — every single weight and bias in the network follows this same rule:
+`w_new = w_old - lr * gradient`. Every weight and bias in the network follows this exact same rule:
 
 ```
 W2_new = [0.5, -0.3]      - 0.1*[-0.0617, -0.0529]  = [0.5062, -0.2947]
@@ -102,11 +104,11 @@ W1_new = [[0.1, 0.4],     - 0.1*[[-0.0059,-0.0095],  = [[0.1006, 0.4009],
 b1_new = [0.1, -0.2]      - 0.1*[-0.0119, 0.0075]    = [0.1012, -0.2008]
 ```
 
-Every gradient was negative for the weights that needed to grow and positive for the ones that needed to shrink — that sign is what "gradient descent" actually descends along.
+Look at the signs. Every gradient that was negative belongs to a weight that needed to grow. Every gradient that was positive belongs to a weight that needed to shrink. That sign is exactly what "gradient descent" descends along.
 
 ### Second worked example: softmax + categorical cross-entropy
 
-The sigmoid+MSE/BCE case above is for binary output. Multi-class output uses softmax + categorical cross-entropy instead, and the two combine into an unusually clean gradient:
+The sigmoid+MSE/BCE case above works for binary output — yes or no. For multi-class output, you use softmax plus categorical cross-entropy instead. Combine those two and you get an unusually clean gradient:
 
 ```
 logits = [2.0, 1.0, 0.1]      true class = index 0
@@ -116,7 +118,7 @@ CCE loss = -log(probs[true_class]) = -log(0.6590) = 0.4170
 dL/dlogits = probs - onehot(true_class) = [0.6590-1, 0.2424-0, 0.0986-0] = [-0.3410, 0.2424, 0.0986]
 ```
 
-That `probs - onehot` identity — no chain rule needed to be spelled out — is exactly why softmax and cross-entropy are almost always used as a pair rather than mixed with other losses.
+That `probs - onehot` result is clean. You don't even need to spell out the chain rule. This is exactly why softmax and cross-entropy almost always get used together, instead of mixed with other losses.
 
 ### ReLU and "dead neurons"
 
@@ -126,7 +128,7 @@ z = x·w + b = -3.0 + (-1.5) + 1.0 + (-0.1) + 0.3 = -3.3
 ReLU(z) = max(0, -3.3) = 0
 ```
 
-A negative pre-activation means ReLU outputs exactly `0` — and since ReLU's gradient is `0` everywhere `z<0`, this neuron passes **zero** gradient backward on this example, contributing nothing to any upstream weight update. That's the "dying ReLU" failure mode in one number.
+A negative pre-activation means ReLU outputs exactly `0`. ReLU's gradient is also `0` everywhere `z<0`. So this neuron passes **zero** gradient backward here. It contributes nothing to any upstream weight update. That's the "dying ReLU" failure mode, in one number.
 
 ### Epochs, iterations, and batch size
 
@@ -136,7 +138,7 @@ iterations per epoch = dataset_size / batch_size = 2000/40 = 50
 training for 15 epochs -> total weight-update steps = 50 * 15 = 750
 ```
 
-One **iteration** = one gradient step on one batch. One **epoch** = enough iterations to have seen every sample once. They're related by batch size, not interchangeable.
+One **iteration** is one gradient step on one batch. One **epoch** is enough iterations to see every sample once. Batch size links the two. They are not interchangeable.
 
 ### Shape arithmetic
 
@@ -155,13 +157,17 @@ Flattening a (channels=16, H=7, W=7) feature map before a Linear layer:
 
 ## Transformer forward & backward pass — hand-computed, toy scale
 
-Same idea as the network above, applied to the mechanism that actually runs GPT/Llama/Claude: attention. Toy scale so every number is checkable by hand — vocab `{the:0, cat:1, sat:2, on:3, mat:4}`, model width `d_model=4`, one attention head with `d_k=2`, FFN hidden size 2. A production model is this exact computation with `d_model=4096+`, 32+ heads, 32-100 stacked layers — bigger matrices, nothing conceptually new. All numbers verified with NumPy/PyTorch, not hand-guessed.
+Same idea as the network above. This time it's applied to the mechanism that actually runs GPT, Llama, and Claude: attention.
+
+Everything here stays toy-scale, so every number is checkable by hand. Vocab is `{the:0, cat:1, sat:2, on:3, mat:4}`. Model width is `d_model=4`. One attention head, `d_k=2`. FFN hidden size 2.
+
+A real production model runs this exact same computation. It just uses bigger numbers: `d_model=4096+`, 32+ heads, 32 to 100 stacked layers. Bigger matrices. Nothing conceptually new. Every number below was verified with NumPy/PyTorch, not hand-guessed.
 
 ### Forward pass: "the cat sat" → predict "on"
 
 **Step 0 — tokenize.** `"the cat sat"` → `[0, 1, 2]`
 
-**Step 1 — embed + positional.** Embedding matrix `E` (5 rows × 4 cols, learned) is a lookup table; a learned positional vector `p_i` is added so the model knows order:
+**Step 1 — embed + positional.** Embedding matrix `E` (5 rows, 4 columns, learned) works as a lookup table. A learned positional vector `p_i` gets added to each token, so the model knows the order:
 
 ```
 E[the]=[0.2, 0.0, 0.0, 0.0]   E[cat]=[0.0, 1.0, 0.8, 0.0]   E[sat]=[0.0, 0.0, 1.0, 1.0]
@@ -172,7 +178,7 @@ x2 = E[cat]+p2 = [0.0, 1.1, 0.8, 0.0]
 x3 = E[sat]+p3 = [0.1, 0.0, 1.0, 1.1]
 ```
 
-**Step 2 — project: every token gets a query, key, value.** Three learned 4×2 matrices multiply every `x` — an ordinary matmul, e.g. for `W_Q`:
+**Step 2 — project: every token gets a query, key, value.** Three learned 4×2 matrices multiply every `x`. It's an ordinary matmul. Here's `W_Q` as an example:
 
 ```
 W_Q = [[0,0],[0,1],[1,0],[0,0]]
@@ -184,7 +190,7 @@ cat:  [0.8, 1.1]   [1.1, 0.0]   [1.1, 0.8]
 sat:  [1.0, 0.0]   [0.0, 0.1]   [0.0, 2.1]
 ```
 
-**Step 3 — score: `Q·K^T`, causal mask, scale, softmax.** Every query dots every key. Because this is a decoder, every future position (above the diagonal) is set to `-inf` before softmax, so no token can peek ahead:
+**Step 3 — score: `Q·K^T`, causal mask, scale, softmax.** Every query dots every key. This is a decoder, so every future position (above the diagonal) gets set to `-inf` before softmax. That way no token can peek ahead:
 
 ```
             the    cat    sat
@@ -193,14 +199,14 @@ cat  ->  [ 0.22    0.88   -inf ]
 sat  ->  [ 0.00    1.10   0.00 ]
 ```
 
-Following the "sat" row (the token predicting the next word), scale by `sqrt(d_k) = sqrt(2)`, then softmax:
+Follow the "sat" row — that's the token predicting the next word. Scale by `sqrt(d_k) = sqrt(2)`, then apply softmax:
 
 ```
 scaled  = [0, 1.10/1.41, 0] = [0, 0.78, 0]
 softmax = [e^0, e^0.78, e^0] / sum = [1, 2.18, 1] / 4.18 = [0.24, 0.52, 0.24]
 ```
 
-From learned weights alone, the mechanism decided the verb should attend 52% to its subject "cat."
+From learned weights alone, the mechanism decided the verb should attend 52% to its subject, "cat."
 
 **Step 4 — mix: weighted average of values, then residual.**
 
@@ -209,7 +215,7 @@ z3 = 0.24*v_the + 0.52*v_cat + 0.24*v_sat
    = 0.24*[0.0,0.1] + 0.52*[1.1,0.8] + 0.24*[0.0,2.1] = [0.57, 0.94]
 ```
 
-`W_O` (2×4) maps back to model width -> `[0.57, 0.94, 0.0, 0.0]`; the residual connection adds the input back — the block *refines* the token instead of replacing it:
+`W_O` (2×4) maps this back to model width: `[0.57, 0.94, 0.0, 0.0]`. The residual connection then adds the input back. This means the block *refines* the token instead of replacing it:
 
 ```
 h3 = x3 + attn = [0.1, 0.0, 1.0, 1.1] + [0.57, 0.94, 0.0, 0.0] = [0.67, 0.94, 1.00, 1.10]
@@ -226,7 +232,7 @@ ffn = a . W2 = 2.04*[0.1, 0.2, 0.0, 0.3] = [0.20, 0.41, 0.00, 0.61]
 y3  = h3 + ffn = [0.87, 1.35, 1.00, 1.71]     (second residual)
 ```
 
-**Step 6 — predict: logits over the vocab, softmax.** LM head is a learned 4×5 matrix:
+**Step 6 — predict: logits over the vocab, softmax.** The LM head is a learned 4×5 matrix:
 
 ```
 logits = [ the: 0.2   cat: 0.8   sat: 1.0   on: 3.1   mat: 1.9 ]
@@ -234,26 +240,30 @@ e^logit = [ 1.22       2.23       2.72       22.2      6.69 ]   (sum 35.1)
 P       = [ 3.5%       6.4%       7.8%       63.3%     19.1% ]
 ```
 
-Greedy decoding picks "on." The entire model is: lookup -> project -> score -> mask -> softmax -> mix -> FFN -> logits -> softmax.
+Greedy decoding picks "on." The whole model, start to finish: lookup, project, score, mask, softmax, mix, FFN, logits, softmax.
 
-**Step 7 — close both loops.** If the training text continued "...on," loss at this position is `cross_entropy = -ln(0.633) ≈ 0.46`, and backprop pushes every matrix used (`E, W_Q/K/V/O, W1, W2, LM head`) to make 0.633 bigger next time. The masked score matrix means all three positions' predictions are computed in *one parallel pass* — one sentence yields three training signals at once, which is the parallelism that made transformers beat RNNs. For generation: `k`/`v` for "the/cat/sat" don't change on the next step — storing them instead of recomputing is exactly the **KV cache**.
+**Step 7 — close both loops.** Say the training text continued "...on." The loss at this position is `cross_entropy = -ln(0.633) ≈ 0.46`. Backprop then pushes every matrix used — `E, W_Q/K/V/O, W1, W2, LM head` — to make that 0.633 bigger next time.
 
-*(Honesty note: LayerNorm around each sublayer and multi-head attention were both skipped here — both change the numbers, neither changes the story.)*
+The masked score matrix means all three positions' predictions get computed in *one parallel pass*. One sentence gives you three training signals at once. That parallelism is why transformers beat RNNs.
+
+One more thing, for generation: the `k` and `v` vectors for "the," "cat," and "sat" don't change on the next step. Storing them instead of recomputing them is exactly what a **KV cache** does.
+
+*(Honesty note: this walkthrough skips LayerNorm around each sublayer, and skips multi-head attention. Both would change the numbers. Neither changes the story.)*
 
 ### Backward pass: the same sentence, every gradient, until "on" gets more likely
 
-`§Second worked example` above showed the softmax+cross-entropy identity on a 3-class toy. Here it's the same identity, propagated through *every matrix* in the transformer above.
+The `§Second worked example` above showed the softmax-plus-cross-entropy identity on a 3-class toy. This is the same identity. Here it gets propagated through *every matrix* in the transformer above.
 
-**8a — the loss gradient.** When softmax feeds cross-entropy, `dL/dlogits = P - onehot(target)` — every product/log-rule term cancels:
+**8a — the loss gradient.** When softmax feeds cross-entropy, `dL/dlogits = P - onehot(target)`. Every product and log-rule term cancels out:
 
 ```
 P = [0.035, 0.064, 0.078, 0.633, 0.191]      onehot(on) = [0, 0, 0, 1, 0]
 dL/dlogits = [+0.035, +0.064, +0.078, -0.367, +0.191]
 ```
 
-Every *wrong* word gets a positive gradient (pushed down); the *correct* word "on" gets the only negative entry (pushed up). Sanity check: the five numbers sum to ≈0, since `sum(P) = sum(onehot) = 1`.
+Every *wrong* word gets a positive gradient, which pushes it down. The *correct* word, "on," gets the only negative entry, which pushes it up. Sanity check: the five numbers sum to about 0, since `sum(P) = sum(onehot) = 1`.
 
-**8b — the LM head: a weight gradient is an outer product.** For any linear layer `z = y.W`, `dL/dW[:,j] = y * (dL/dlogits)_j`. Using the minimal-norm `W_out` consistent with the logits above (`W_out[:,on] = [0.415, 0.644, 0.477, 0.815]`):
+**8b — the LM head: a weight gradient is an outer product.** For any linear layer `z = y.W`, the rule is `dL/dW[:,j] = y * (dL/dlogits)_j`. Use the minimal-norm `W_out` consistent with the logits above: `W_out[:,on] = [0.415, 0.644, 0.477, 0.815]`.
 
 ```
 dL/dW_out[:,on] = y3 * (-0.367) = [0.87,1.35,1.00,1.71] * (-0.367) = [-0.319, -0.494, -0.367, -0.626]
@@ -261,18 +271,18 @@ dL/dW_out[:,on] = y3 * (-0.367) = [0.87,1.35,1.00,1.71] * (-0.367) = [-0.319, -0
 SGD update, lr=0.1:  dW_out[:,on] = -0.1 * above = [+0.032, +0.049, +0.037, +0.063]
 ```
 
-Recomputing the forward pass with only the LM head updated: new logits `[0.177, 0.759, 0.950, 3.338, 1.776]` -> **P(on) = 70.4%**, up from 63.3%; loss falls **0.46 -> 0.35**. One gradient step, one layer, measurably more confident in the right answer — not a metaphor, the actual arithmetic of training.
+Now recompute the forward pass with only the LM head updated. New logits: `[0.177, 0.759, 0.950, 3.338, 1.776]`. That gives **P(on) = 70.4%**, up from 63.3%. Loss falls from **0.46 to 0.35**. One gradient step, one layer, and the model is measurably more confident in the right answer. This isn't a metaphor. It's the actual arithmetic of training.
 
-**8c — through the residual and FFN: the gradient highway, and a dead neuron.** The `+` in `y3 = h3 + FFN(h3)` sends the incoming gradient down *both* branches unchanged. `dL/dy3 ≈ [-0.086, -0.133, -0.098, -0.168]` passes straight to `h3` via the residual, and separately backward through the FFN. Recall `a = ReLU([2.04, -0.33]) = [2.04, 0]`; ReLU's derivative is 1 where the input was positive, exactly 0 where negative:
+**8c — through the residual and FFN: the gradient highway, and a dead neuron.** The `+` in `y3 = h3 + FFN(h3)` sends the incoming gradient down *both* branches, unchanged. `dL/dy3 ≈ [-0.086, -0.133, -0.098, -0.168]` passes straight to `h3` through the residual. It also flows separately backward through the FFN. Recall `a = ReLU([2.04, -0.33]) = [2.04, 0]`. ReLU's derivative is 1 where the input was positive, and exactly 0 where it was negative:
 
 ```
 dL/da1 = (W2 row1).dL/dy3 = -0.085   x  ReLU'(2.04)=1   -> passes through unchanged
 dL/da2 = (anything)                 x  ReLU'(-0.33)=0   -> exactly zero, no matter what W2's row 2 contains
 ```
 
-The second hidden neuron was clamped to 0 going forward, so no gradient reaches it or the `W1` column that produced it — a neuron that didn't fire doesn't learn on this step. This is "dead ReLU" in one real number, not an abstraction.
+The second hidden neuron was clamped to 0 on the way forward. So no gradient reaches it, and none reaches the `W1` column that produced it either. A neuron that didn't fire doesn't learn on this step. That's "dead ReLU," in one real number — not an abstraction.
 
-**8d — into attention: the softmax jacobian.** Only the first two entries of `dL/dh3` continue into attention (`W_O` only wrote into `h3`'s first two slots): `dL/dz3 = [-0.086, -0.218]`. Since `z3 = 0.24*v_the + 0.52*v_cat + 0.24*v_sat`, two gradients fall out — one per attention weight, one per value — and the weight-gradients pass through softmax's own jacobian, `dL/ds_i = weight_i * (dL/dweight_i - sum_j weight_j * dL/dweight_j)`, before reaching the raw scores:
+**8d — into attention: the softmax jacobian.** Only the first two entries of `dL/dh3` continue into attention, since `W_O` only wrote into `h3`'s first two slots: `dL/dz3 = [-0.086, -0.218]`. Recall `z3 = 0.24*v_the + 0.52*v_cat + 0.24*v_sat`. Two kinds of gradient fall out of this: one per attention weight, one per value. The weight-gradients then pass through softmax's own jacobian before they reach the raw scores: `dL/ds_i = weight_i * (dL/dweight_i - sum_j weight_j * dL/dweight_j)`.
 
 ```
 sum_j weight_j * dL/dweight_j = 0.24(-0.022)+0.52(-0.268)+0.24(-0.458) = -0.254
@@ -281,13 +291,15 @@ dL/ds_cat = 0.52*(-0.268-(-0.254)) = -0.007
 dL/ds_sat = 0.24*(-0.458-(-0.254)) = -0.049      (sum ~ 0.000 -- always true, a free correctness check)
 ```
 
-Positive gradient on "the" means gradient descent will *lower* that attention score; negative gradients on "cat" and "sat" mean both get *reinforced* — "sat" (attending to itself) even more than "cat" here, because `v_sat=[0,2.1]` happens to carry a strong signal in exactly the direction the LM head rewards. Real gradients don't always match tidy intuition — this is what backprop actually decided.
+A positive gradient on "the" means gradient descent will *lower* that attention score. Negative gradients on "cat" and "sat" mean both get *reinforced*. "Sat" — attending to itself — gets reinforced even more than "cat" here, because `v_sat=[0,2.1]` happens to carry a strong signal in exactly the direction the LM head rewards. Real gradients don't always match tidy intuition. This is what backprop actually decided.
 
-**8e — into Q, K, V, and the embedding table.** Same recipe (local derivative × learning rate) propagated one level further: `W_V` gets its biggest update in the rows matching `x_cat` (where the reinforced attention mass now points), `W_K` updates most in the rows matching `x_sat` (since "sat" now attends more to itself), `W_Q` updates only in the rows belonging to `x3="sat"` (the only token whose query this is). Every delta is small (`lr=0.1` on one sentence) — real pretraining takes a tiny, noisy step like this from every sentence in a batch, repeated millions of times, and their average sculpts `W_Q` into "ask subject-shaped questions" and `W_V` into "carry the content worth copying" — patterns nobody hand-designed.
+**8e — into Q, K, V, and the embedding table.** Same recipe — local derivative times learning rate — propagates one level further. `W_V` gets its biggest update in the rows matching `x_cat`, since that's where the reinforced attention mass now points. `W_K` updates most in the rows matching `x_sat`, since "sat" now attends more to itself. `W_Q` updates only in the rows belonging to `x3="sat"`, the only token whose query this is.
+
+Every delta here is small — `lr=0.1` on just one sentence. Real pretraining takes a tiny, noisy step like this from every sentence in a batch, repeated millions of times. Their average is what sculpts `W_Q` into "ask subject-shaped questions" and `W_V` into "carry the content worth copying." Nobody hand-designed those patterns. Training found them.
 
 ### The optimizer step: plain SGD vs. Adam, on the identical gradient
 
-On the single weight `W_out[1,on]` (gradient `g = -0.319`, from 8b), Adam defaults `beta1=0.9, beta2=0.999`:
+Take the single weight `W_out[1,on]`, gradient `g = -0.319` from 8b. Adam's defaults are `beta1=0.9, beta2=0.999`:
 
 ```
 SGD:  dw = -lr*g = -0.1*(-0.319) = +0.032
@@ -298,11 +310,13 @@ Adam, step 1 (m0=v0=0):
   dw = -lr * m_hat/(sqrt(v_hat)+eps) = -0.1 * g/|g| = -0.1*(-1) = +0.100
 ```
 
-At step 1, Adam's update always collapses to exactly `+/-lr` — it only knows the gradient's *sign* so far, since `m_hat/sqrt(v_hat) = g/|g|` whenever the running averages are freshly seeded. Here that's a step **3x larger** than plain SGD — but a parameter with a tiny gradient would get the identical `+/-0.1` step, which is exactly why Adam needs bias-correction and typically a learning-rate **warmup**: its confident, uniform early steps can overshoot before `v` has accumulated enough history to tell large gradients from small ones.
+At step 1, Adam's update always collapses to exactly `+/-lr`. It only knows the gradient's *sign* so far, because `m_hat/sqrt(v_hat) = g/|g|` whenever the running averages are freshly seeded. Here that's a step **3x larger** than plain SGD.
+
+But a parameter with a tiny gradient would get the exact same `+/-0.1` step. That's exactly why Adam needs bias-correction, and typically a learning-rate **warmup** too: its confident, uniform early steps can overshoot, before `v` has built up enough history to tell large gradients from small ones.
 
 ### From random init to a converged next-token predictor
 
-Same toy architecture, but every matrix starts as random noise instead of the hand-picked values above. Trained on causal-LM next-token prediction over "the cat sat on" (given "the" predict "cat"; given "the cat" predict "sat"; given "the cat sat" predict "on" — all three in one masked parallel pass). Real, seeded, verified training run:
+Same toy architecture. But this time, every matrix starts as random noise instead of the hand-picked values above. It's trained on causal-LM next-token prediction over "the cat sat on": given "the," predict "cat"; given "the cat," predict "sat"; given "the cat sat," predict "on" — all three done in one masked parallel pass. Here's a real, seeded, verified training run:
 
 ```
 step   loss    P(cat|the)   P(sat|the cat)   P(on|the cat sat)
@@ -313,11 +327,15 @@ step   loss    P(cat|the)   P(sat|the cat)   P(on|the cat sat)
 100    0.003   99.7%        99.5%            99.9%
 ```
 
-At step 0, every prediction sits near 20% — the first thing to verify about any from-scratch model is that random weights produce a roughly uniform distribution; if they don't, initialization is broken before training even starts. By step 30 the model has essentially memorized its one training sentence — expected at this scale, and exactly why real pretraining needs trillions of tokens across millions of diverse documents rather than one repeated sentence (a model that only ever sees "the cat sat on" learns to output "on" after that exact prefix no matter what — memorization, not language understanding). The mechanism — forward, loss, backward, gradient step, repeat — is identical at every scale; only the data's size and diversity change.
+At step 0, every prediction sits near 20%. That's expected — with 5 possible words, a random model should guess close to uniformly. Checking for that is the first thing to verify about any from-scratch model: if random weights don't produce a roughly uniform distribution, initialization is broken before training even starts.
+
+By step 30, the model has essentially memorized its one training sentence. That's expected at this tiny scale. It's also exactly why real pretraining needs trillions of tokens across millions of diverse documents, instead of one repeated sentence. A model that only ever sees "the cat sat on" learns to output "on" after that exact prefix, no matter what — that's memorization, not language understanding.
+
+The mechanism itself — forward, loss, backward, gradient step, repeat — is identical at every scale. Only the data's size and diversity change.
 
 ### Where the parameters actually live — GPT-2 small, real dimensions
 
-Same forward/backward mechanism, counted at a real model's scale. GPT-2 small: `d_model=768`, `h=12` heads, so each head works in `d_k = 768/12 = 64` dims.
+Same forward/backward mechanism. This time, counted at a real model's scale. GPT-2 small uses `d_model=768` and `h=12` heads, so each head works in `d_k = 768/12 = 64` dimensions.
 
 ```
 Attention W_Q,W_K,W_V,W_O:  4 * (768*768)         ~ 2.4M params / block
@@ -327,13 +345,19 @@ Token embeddings:  50,257 vocab * 768               ~ 38.6M
 TOTAL                                               ~ 124M  <- exactly GPT-2 small
 ```
 
-Two facts worth internalizing: **roughly two-thirds of a transformer's parameters live in the feed-forward layers, not attention** (why Mixture-of-Experts swaps in multiple FFNs, not multiple attentions) — and self-attention costs `O(n^2 * d)` in sequence length `n` (every token scores every other token), which is why long context windows are expensive, why KV-cache size grows the way it does, and why FlashAttention/sparse/linear-attention variants exist. Residuals and LayerNorm aren't optional extras either: `x + Sublayer(x)` gives every gradient an untouched identity path back through 30-100 stacked layers (the same vanishing-gradient fix as the sigmoid-network case earlier in this doc, just built into the architecture), and LayerNorm normalizes each *token's* own feature vector — unlike BatchNorm, which needs batch statistics that are meaningless across variable-length padded sequences.
+Two facts worth remembering here.
+
+First: **roughly two-thirds of a transformer's parameters live in the feed-forward layers, not attention.** That's why Mixture-of-Experts swaps in multiple FFNs, not multiple attentions.
+
+Second: self-attention costs `O(n^2 * d)` in sequence length `n`, since every token scores every other token. That's why long context windows are expensive, why KV-cache size grows the way it does, and why FlashAttention and sparse/linear-attention variants exist.
+
+Residuals and LayerNorm aren't optional extras either. `x + Sublayer(x)` gives every gradient an untouched identity path back through 30 to 100 stacked layers — the same vanishing-gradient fix as the sigmoid-network case earlier in this doc, just built into the architecture. LayerNorm normalizes each *token's* own feature vector. BatchNorm can't do this job here, since it needs batch statistics that are meaningless across variable-length padded sequences.
 
 ---
 
 ## Numerical Practice Quiz (20 questions)
 
-Every question below reuses the exact numbers computed above — nothing here was eyeballed, each was checked with NumPy before being written into an option.
+Every question below reuses the exact numbers computed above. Nothing here was eyeballed — each one was checked with NumPy before being written into an option.
 
 <script type="application/json" class="topic-quiz-data" data-title="Neural Net Numericals (Forward/Backward Pass, Loss, Weight Updates, Shapes)">
 [

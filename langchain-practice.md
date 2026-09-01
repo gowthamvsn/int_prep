@@ -1,6 +1,12 @@
 # LangChain Practice — Built as a Chain, Not a List
 
-Every snippet here was actually executed in an isolated venv (`D:\nvidia\.venv-langchain`) against the same Azure OpenAI deployment (`gpt-4.1-mini`) this project already uses in `server.py` — not just written and assumed correct. Installed versions: `langchain==1.3.14`, `langchain-core==1.4.9`, `langchain-openai==1.3.5`, `langgraph==1.2.9`. **Note the gap:** this machine's *global* Python env has `langchain==0.3.7` (older) — LangChain's 0.3→1.x jump changed real behavior (see the memory cluster below), so code copied from a 0.3.x tutorial can silently do the wrong thing on 1.x, and vice versa. Always check `pip show langchain` before trusting a snippet from memory or an old blog post. Each cluster builds on the one before it — code, then why it matters, then a self-check to confirm it actually stuck.
+Every snippet here actually ran, in an isolated venv (`D:\nvidia\.venv-langchain`). It called the same Azure OpenAI deployment (`gpt-4.1-mini`) this project already uses in `server.py`. Nothing here is just written and assumed to work.
+
+Installed versions: `langchain==1.3.14`, `langchain-core==1.4.9`, `langchain-openai==1.3.5`, `langgraph==1.2.9`.
+
+**Watch this gap:** this machine's *global* Python env still has the older `langchain==0.3.7`. LangChain changed real behavior going from 0.3 to 1.x (see the memory cluster below). Code copied from a 0.3.x tutorial can quietly do the wrong thing on 1.x — and code written for 1.x can break on 0.3.x. Before trusting a snippet from memory or an old blog post, run `pip show langchain` and check which version you actually have.
+
+Each cluster builds on the one before it. First the code, then why it matters, then a self-check to confirm it stuck.
 
 ---
 
@@ -13,7 +19,7 @@ Every snippet here was actually executed in an isolated venv (`D:\nvidia\.venv-l
 > - Streaming isn't a separate code path — it's the same chain, just called with `.stream()` instead of `.invoke()`.
 
 ### The minimal call
-There's no template or chain needed for the simplest possible case — just hand a string to `.invoke()` and get an `AIMessage` back:
+The simplest case needs no template and no chain. Hand a string to `.invoke()`. Get an `AIMessage` back:
 
 ```python
 import os
@@ -32,10 +38,12 @@ llm = AzureChatOpenAI(
 response = llm.invoke("Name one advantage of LoRA over full fine-tuning, in one sentence.")
 print(response.content)          # AIMessage.content -- the string; response itself carries usage metadata too
 ```
-Notice it's **`AzureChatOpenAI`**, not `ChatOpenAI`. `langchain_openai` ships two separate classes because Azure's auth/routing (endpoint + deployment name, not just a model string) is genuinely different from OpenAI's own API — using the wrong one is the single most common "why won't this connect" issue for anyone coming from OpenAI's docs. There's a second gotcha worth flagging because it cost real debugging time here: `AzureChatOpenAI` raises `openai.OpenAIError: Missing credentials` if it can't find `AZURE_OPENAI_API_KEY` in the environment — it has no idea this project's `.env` uses the differently-named `AZURE_OPENAI_KEY`, so the fix is passing `api_key=`/`azure_endpoint=` explicitly rather than renaming the project's env vars to match LangChain's expectations.
+Notice the class name: `AzureChatOpenAI`, not `ChatOpenAI`. `langchain_openai` ships both, as two separate classes. The reason: Azure needs an endpoint and a deployment name to route a request, not just a model string. That's genuinely different from how OpenAI's own API works. Using the wrong class is the most common "why won't this connect" problem for anyone coming from OpenAI's docs.
+
+There's a second gotcha, and it cost real debugging time here. `AzureChatOpenAI` looks for `AZURE_OPENAI_API_KEY` in the environment by default. This project's `.env` names that variable `AZURE_OPENAI_KEY` instead. So `AzureChatOpenAI` can't find it, and raises `openai.OpenAIError: Missing credentials`. The fix is to pass `api_key=` and `azure_endpoint=` explicitly, rather than renaming the project's env vars to match LangChain's expectations.
 
 ### Composing with LCEL's pipe
-Once a bare `.invoke()` call works, the next move is attaching a reusable prompt template — and this is where LCEL's `|` operator shows up:
+Once a bare `.invoke()` call works, the next step is attaching a reusable prompt template. This is where LCEL's `|` operator shows up:
 
 ```python
 from langchain_core.prompts import ChatPromptTemplate
@@ -48,9 +56,11 @@ chain = prompt | llm          # the `|` pipe is LCEL: compose Runnables like Uni
 result = chain.invoke({"question": "What does the temperature parameter control?"})
 print(result.content)
 ```
-The `|` works because every LCEL component — `prompt`, `llm`, output parsers, retrievers — implements the same **`Runnable`** interface (`.invoke`/`.batch`/`.stream`/`.ainvoke`). `|` just composes them into a pipeline. That uniformity is *why* streaming, batching, and async all fall out for free on any chain you build this way, instead of needing separate code paths for each.
+The `|` works because every LCEL component speaks the same language. `prompt`, `llm`, output parsers, retrievers — all of them implement the same **`Runnable`** interface: `.invoke`, `.batch`, `.stream`, `.ainvoke`. `|` just wires them together into a pipeline.
 
-Read `|` exactly like a Unix shell pipe here — it's the same idea, not just similar-looking syntax:
+That's also why streaming, batching, and async all come for free on any chain built this way. You don't need a separate code path for each one. One shared interface pays off three times.
+
+Read `|` exactly like a Unix shell pipe. It's the same idea — not just similar-looking syntax:
 
 ```
 {"question": "..."}  ──▶  [ prompt ]  ──▶  [ llm ]  ──▶  [ output parser ]  ──▶  result
@@ -59,7 +69,9 @@ Read `|` exactly like a Unix shell pipe here — it's the same idea, not just si
 Unix, for comparison:
   cat file.txt  ──▶  [ grep "x" ]  ──▶  [ sort ]  ──▶  [ uniq ]  ──▶  output
 ```
-Think `ls | grep | sort`, just for LLM components instead of shell commands. Every box takes one typed input and produces one typed output, and `|` only works because every box (`Runnable`) speaks the identical `.invoke()` interface — the same way every Unix pipe stage reads stdin and writes stdout regardless of what the program actually does inside. That's also the answer to "why do streaming/batching/async all just work on any chain" — you're not getting three separate features, you're getting one property (a uniform interface) paying off three ways at once, exactly like a Unix pipeline automatically supporting `| head` or backgrounding with `&` without each command needing to implement that itself.
+Think of it as `ls | grep | sort`, just with LLM components instead of shell commands. Every box takes one typed input and produces one typed output. `|` works because every box — every `Runnable` — speaks the identical `.invoke()` interface. That's the same reason every Unix pipe stage can read stdin and write stdout, no matter what the program does inside.
+
+This also answers "why do streaming, batching, and async all just work on any chain." You're not getting three separate features. You're getting one property — a shared interface — paying off three ways at once. It's the same reason a Unix pipeline supports `| head` or backgrounding with `&` without every command needing to build that in itself.
 
 ### Getting structured output back
 A chain built this way still hands back free text by default. When the answer needs to be machine-parseable instead:
@@ -75,16 +87,20 @@ structured_llm = llm.with_structured_output(ExamAnswer)
 out = structured_llm.invoke("What does top_p sampling control?")
 print(out.answer, out.confidence)          # out is an ExamAnswer instance, not a string -- no manual JSON parsing
 ```
-`with_structured_output` beats asking for JSON in the prompt and parsing it yourself because it uses the provider's native tool-calling/JSON-mode under the hood — the model gets constrained at generation time rather than hoping it obeys a text instruction. The older `PydanticOutputParser` (prompt-based, parse-and-hope) still exists and still fails occasionally on malformed JSON; the tool-calling route practically doesn't.
+Why is this better than asking for JSON in the prompt and parsing it yourself? `with_structured_output` uses the provider's native tool-calling or JSON mode under the hood. The model gets constrained at generation time. It's not hoping the model obeys a text instruction.
+
+The older approach, `PydanticOutputParser`, works differently: it asks for JSON in the prompt, then parses whatever comes back. That still exists, and it still fails sometimes on malformed JSON. The tool-calling route practically doesn't.
 
 ### Streaming for free
-Because any chain built from `|` speaks the same `Runnable` interface, swapping `.invoke()` for streaming costs zero rewriting:
+Any chain built from `|` speaks the same `Runnable` interface. That means swapping `.invoke()` for streaming costs zero rewriting:
 
 ```python
 for chunk in chain.stream({"question": "List 3 GenAI eval metrics, briefly."}):
     print(chunk.content, end="", flush=True)     # each chunk is a partial AIMessageChunk
 ```
-That matters for a UI like this project's `doc_template.html` panel: `.stream()` and `.invoke()` are the *same* chain — you don't rewrite anything to add streaming, you just call a different Runnable method, exactly what the interface's uniformity above predicted. This project's own `/api/ask` currently uses a plain blocking `requests.post` to Azure, not this — swapping in `.stream()` here would be the natural way to make the "Thinking…" panel fill in token-by-token instead of waiting for the whole answer.
+That matters for a UI like this project's `doc_template.html` panel. `.stream()` and `.invoke()` are the *same* chain. You don't rewrite anything to add streaming — you just call a different method on the same `Runnable`.
+
+This project's own `/api/ask` currently uses a plain blocking `requests.post` to Azure instead. Swapping in `.stream()` here would be the natural way to make the "Thinking…" panel fill in token by token, instead of waiting for the whole answer at once.
 
 <details>
 <summary><strong>Self-check — answer before revealing</strong></summary>
@@ -116,7 +132,7 @@ That matters for a UI like this project's `doc_template.html` panel: `.stream()`
 > - Stack them as `.with_retry().with_fallbacks([...])` — retry first (cheap, handles the common case), fallback second (the safety net for a real outage).
 
 ### Running independent calls in parallel
-When two chain calls don't depend on each other's output, there's no reason to wait for one before starting the next:
+When two chain calls don't depend on each other's output, there's no reason to run them one after another:
 
 ```python
 from langchain_core.runnables import RunnableParallel
@@ -126,10 +142,12 @@ parallel = RunnableParallel(answer=chain, summary=summary_prompt | llm)
 out = parallel.invoke({"question": "What is RLHF?"})
 print(out["answer"].content, "|", out["summary"].content)   # both branches ran concurrently, not sequentially
 ```
-This beats two separate `.invoke()` calls because **`RunnableParallel`** fires both branches concurrently (via threads for sync `.invoke`, real async for `.ainvoke`) and returns a single dict keyed by branch name — for two independent LLM calls, that roughly halves wall-clock latency versus awaiting them one after another.
+**`RunnableParallel`** fires both branches at the same time. Sync `.invoke()` runs them on threads; async `.ainvoke()` runs them with real async. The result comes back as a single dict, keyed by branch name.
+
+For two independent LLM calls, this roughly halves the wall-clock time compared to awaiting them one after another.
 
 ### Surviving failures: retry vs. fallback
-Once a chain runs reliably when the API is healthy, the next question is what happens when it isn't — and a transient blip (rate limit, timeout) needs a different fix than a real outage:
+Once a chain runs reliably when the API is healthy, the next question is what happens when it isn't. A short blip — a rate limit, a timeout — needs a different fix than a real outage does:
 
 ```python
 fallback_llm = AzureChatOpenAI(
@@ -141,7 +159,9 @@ fallback_llm = AzureChatOpenAI(
 robust_llm = llm.with_retry(stop_after_attempt=3).with_fallbacks([fallback_llm])
 print(robust_llm.invoke("Say OK").content)
 ```
-The order matters here: `with_retry` handles *transient* failures by retrying the *same* model with backoff; `with_fallbacks` handles the case where retries are exhausted or the model itself is down, by trying a *different* Runnable entirely. Skip `with_retry` and go straight to fallback, and you waste a perfectly working model's capacity on a blip; skip fallback, and you're left with no answer at all when a deployment has a genuine outage.
+The order matters. `with_retry` handles transient failures — it retries the *same* model, with backoff. `with_fallbacks` handles the case where retries are exhausted, or the model is actually down — it tries a *different* Runnable entirely.
+
+Skip `with_retry` and jump straight to fallback, and you waste a perfectly working model's capacity on a blip. Skip fallback, and you're left with no answer at all when a deployment has a real outage.
 
 <details>
 <summary><strong>Self-check — answer before revealing</strong></summary>
@@ -191,10 +211,12 @@ llm_with_tools = llm.bind_tools([exam_day_countdown])
 resp = llm_with_tools.invoke("How many days until 2026-07-13?")
 print(resp.tool_calls)     # [{'name': 'exam_day_countdown', 'args': {'target_date': '2026-07-13'}, 'id': '...'}]
 ```
-That docstring isn't optional flavor text — `@tool` turns it into the tool's *description* in the schema sent to the model, and the model decides whether/how to call the tool based on that text alone. A vague or missing docstring is the #1 reason a model silently never calls a tool it technically has access to, or calls it with the wrong argument types.
+That docstring isn't optional flavor text. `@tool` turns it into the tool's *description* in the schema sent to the model. The model decides whether and how to call the tool based on that text alone.
+
+A vague or missing docstring is the number one reason a model silently never calls a tool it technically has access to — or calls it with the wrong argument types.
 
 ### The model requests, your code executes
-Here's the part that trips people up: binding a tool doesn't make LangChain run it for you. The model only ever produces a *request* — the actual execution is on you:
+Here's the part that trips people up. Binding a tool doesn't make LangChain run it for you. The model only ever produces a *request*. Running it is on you:
 
 ```python
 from langchain_core.messages import HumanMessage
@@ -208,7 +230,9 @@ for call in ai_msg.tool_calls:
 final = llm_with_tools.invoke(messages)                        # model sees the tool's result, answers in prose
 print(final.content)
 ```
-`bind_tools` only gets you the model's *request* to call a tool — LangChain does not execute your function for you. This manual loop (request, execute, feed result back, repeat) is worth seeing once because every agent framework, including LangGraph's `create_react_agent` (`langgraph-practice.md`), is this exact loop wrapped in a driver. Understanding it by hand is what makes agent bugs debuggable instead of magic.
+`bind_tools` only gets you the model's *request* to call a tool. LangChain does not execute your function for you.
+
+This manual loop — request, execute, feed the result back, repeat — is worth seeing once by hand. Every agent framework does this same loop underneath. LangGraph's `create_react_agent` (see `langgraph-practice.md`) is this exact loop, wrapped in a driver. Once you've traced it by hand, agent bugs stop looking like magic and start looking debuggable.
 
 The full round trip, drawn out:
 
@@ -285,10 +309,14 @@ retriever = store.as_retriever(search_kwargs={"k": 3})
 hits = retriever.invoke("how do you reshape an array without copying")
 print(len(hits), hits[0].page_content[:80])
 ```
-`chunk_overlap` matters just as much as `chunk_size`. A hard cut at exactly `chunk_size` characters can slice a sentence (or a code block) in half between two chunks, so the answer to a question ends up split across chunks with neither one scoring highly enough to retrieve. `chunk_overlap` duplicates a slice of text at each boundary specifically so a concept that straddles a cut still appears whole in at least one chunk. (`DeterministicFakeEmbedding` here stands in for a real embedding model purely so this snippet runs with zero cost/API dependency — swap in `AzureOpenAIEmbeddings(azure_deployment=...)` for real semantic search; this project's `.env` currently only has a chat deployment configured, not an embeddings one.)
+`chunk_overlap` matters just as much as `chunk_size`. A hard cut at exactly `chunk_size` characters can slice a sentence — or a code block — right in half, between two chunks. Then the answer to a question ends up split across both chunks, and neither one scores high enough alone to get retrieved.
+
+`chunk_overlap` fixes this by duplicating a slice of text at each boundary. That way, a concept that straddles a cut still appears whole in at least one chunk.
+
+(`DeterministicFakeEmbedding` here is a stand-in for a real embedding model. It exists so this snippet runs with zero cost and no API dependency. For real semantic search, swap in `AzureOpenAIEmbeddings(azure_deployment=...)`. This project's `.env` currently only has a chat deployment configured, not an embeddings one.)
 
 ### Wiring it into a full grounded-answer chain
-A retriever on its own just returns chunks. Getting from there to a grounded answer means stuffing those chunks into a prompt alongside the original question:
+A retriever on its own just returns chunks. Getting to a grounded answer means putting those chunks into a prompt, alongside the original question:
 
 ```python
 from langchain_core.runnables import RunnablePassthrough
@@ -309,7 +337,9 @@ rag_chain = (
 )
 print(rag_chain.invoke("how do you reshape an array without copying data?"))
 ```
-The `RunnablePassthrough()` is doing real work here: the dict on the left is itself a `Runnable` (a `RunnableParallel` shorthand, from Cluster 2) — it needs to produce *both* `context` (via the retriever) *and* `question` (the original string, untouched) for the prompt template. `RunnablePassthrough` is the identity function as a Runnable: "whatever came into this chain, put it here unchanged." Forgetting it is why a first attempt at this pattern often throws a `KeyError` on `question` — the dict only had `context` in it.
+`RunnablePassthrough()` is doing real work here. The dict on the left is itself a `Runnable` — a `RunnableParallel` shorthand, from Cluster 2. It needs to produce two things for the prompt template: `context` (from the retriever) and `question` (the original string, untouched).
+
+`RunnablePassthrough` is the identity function, written as a Runnable. It means "whatever came into this chain, put it here unchanged." Forget it, and a first attempt at this pattern usually throws a `KeyError` on `question` — because the dict only ever had `context` in it.
 
 Traced as a data-flow diagram, the whole RAG chain looks like this:
 
@@ -330,7 +360,7 @@ Traced as a data-flow diagram, the whole RAG chain looks like this:
                                                                          ▼
                                                                   grounded answer
 ```
-Same string goes down two paths at once — one gets transformed (retrieved and formatted into context), one passes through untouched (the question itself) — and both land in the prompt template together before hitting the model.
+The same string goes down two paths at once. One path transforms it — retrieves and formats it into context. The other passes it through untouched — the question itself. Both land in the prompt template together, before the model ever sees them.
 
 <details>
 <summary><strong>Self-check — answer before revealing</strong></summary>
@@ -362,7 +392,7 @@ Same string goes down two paths at once — one gets transformed (retrieved and 
 > - `set_verbose(True)` is a dead end on LCEL chains — it silently prints nothing. `ConsoleCallbackHandler` passed through `config={"callbacks": [...]}` is what actually shows every intermediate Runnable's input/output.
 
 ### Remembering across turns
-Keeping a conversation running across separate `.invoke()` calls means giving the chain somewhere to store history and a key to look it up by:
+Keeping a conversation alive across separate `.invoke()` calls means giving the chain somewhere to store history, and a key to look it up by:
 
 ```python
 from langchain_core.chat_history import InMemoryChatMessageHistory
@@ -388,12 +418,14 @@ chain_with_history.invoke({"question": "My name is Gowtham."}, config=cfg)
 r = chain_with_history.invoke({"question": "What's my name?"}, config=cfg)
 print(r.content)      # answers "Gowtham" -- second call sees the first turn via get_history
 ```
-Note where `session_id` lives: in `config`, not the input dict. Separating "what the user is asking" (input) from "which conversation this belongs to" (config) is what lets the *same* chain object safely serve many concurrent users/sessions without them bleeding into each other.
+Notice where `session_id` lives: in `config`, not in the input dict. The input is "what the user is asking." The config is "which conversation this belongs to." Keeping those separate is what lets one chain object safely serve many concurrent users at once, without their sessions bleeding into each other.
 
-Worth flagging loudly, because it's easy to miss: running this exact snippet on `langchain-core==1.4.9` prints `LangChainDeprecationWarning: RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead.` It still works, but LangChain 1.x has explicitly moved the "recommended" way to do memory out of `langchain` entirely and into LangGraph's checkpointer (`MemorySaver`/`SqliteSaver` + `thread_id` — see `langgraph-practice.md`). This is the single biggest structural change between the 0.3.x this machine's global env has and the 1.x this venv has: memory/persistence is no longer LangChain's job.
+Worth flagging loudly, because it's easy to miss. Running this exact snippet on `langchain-core==1.4.9` prints a warning: `LangChainDeprecationWarning: RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead.`
+
+It still works. But LangChain 1.x moved the recommended way to do memory out of `langchain` entirely. It now lives in LangGraph's checkpointer — `MemorySaver` or `SqliteSaver`, plus a `thread_id` (see `langgraph-practice.md`). This is the single biggest structural change between the 0.3.x this machine's global env has and the 1.x this venv has: memory and persistence are no longer LangChain's job.
 
 ### Seeing what a chain actually did
-Once a chain has memory across turns, the next problem is debugging it — figuring out which intermediate step produced a bad answer:
+Once a chain has memory across turns, the next problem is debugging it: figuring out which intermediate step produced a bad answer.
 
 ```python
 from langchain_core.tracers import ConsoleCallbackHandler
@@ -403,9 +435,13 @@ chain.invoke(
     config={"callbacks": [ConsoleCallbackHandler()]},
 )   # prints every intermediate Runnable's input/output to stdout, colored by step
 ```
-Verified the hard way: `set_verbose(True)` — the commonly-cited approach — produced **no output at all** against a plain `prompt | llm` LCEL chain in this venv. It's a holdover from the legacy `Chain` class hierarchy and doesn't hook into LCEL's `Runnable` execution. `ConsoleCallbackHandler` passed via `config={"callbacks": [...]}` is what actually works for LCEL — and notice it's passed through the *same* `config=` dict that `session_id` lives in above, since both are per-invocation metadata, not part of the actual input. This is the free, zero-setup version of full LangSmith tracing (`os.environ["LANGCHAIN_TRACING_V2"]="true"` + `LANGCHAIN_API_KEY`, for a persistent shareable trace UI instead of stdout). If a debugging snippet found online uses `set_verbose`/`langchain.debug=True` and produces nothing, this is why.
+Verified the hard way: `set_verbose(True)` — the commonly-cited approach — produced no output at all against a plain `prompt | llm` LCEL chain in this venv. It's a holdover from the legacy `Chain` class hierarchy, and it doesn't hook into LCEL's `Runnable` execution at all.
 
-Both mechanisms share the same channel — `config` carries per-call metadata that never touches the actual input dict:
+What actually works for LCEL is `ConsoleCallbackHandler`, passed via `config={"callbacks": [...]}`. Notice it goes through the same `config=` dict that `session_id` lives in above — both are per-invocation metadata, not part of the actual input.
+
+This is the free, zero-setup version of full LangSmith tracing. (Full tracing needs `os.environ["LANGCHAIN_TRACING_V2"]="true"` plus a `LANGCHAIN_API_KEY`, and gives you a persistent, shareable trace UI instead of stdout.) If a debugging snippet found online uses `set_verbose` or `langchain.debug=True` and produces nothing, this is why.
+
+Both mechanisms share the same channel. `config` carries per-call metadata that never touches the actual input dict:
 
 ```
 chain.invoke(
@@ -469,35 +505,35 @@ chain.invoke(
 
 ## Practice Q&A (Self-Test)
 
-**Q1. Why does this project use `AzureChatOpenAI` instead of `ChatOpenAI`, and what specific error did the file document when the wrong environment variable name was used for credentials?**
-A: `AzureChatOpenAI` exists as a separate class because Azure's auth/routing (endpoint + deployment name, not just a model string) is genuinely different from OpenAI's own API. Verified in the file: `AzureChatOpenAI` raises `openai.OpenAIError: Missing credentials` if it can't find `AZURE_OPENAI_API_KEY` in the environment — it doesn't know about this project's differently-named `AZURE_OPENAI_KEY`, so credentials must be passed explicitly via `api_key=`/`azure_endpoint=`.
+**Q1. Why does this project use `AzureChatOpenAI` instead of `ChatOpenAI`? What error shows up if the wrong environment variable name is used for credentials?**
+A: Azure needs an endpoint and a deployment name to route a request, not just a model string. That's genuinely different from OpenAI's own API, so `langchain_openai` ships `AzureChatOpenAI` as its own class. It looks for `AZURE_OPENAI_API_KEY` by default. This project's `.env` names that variable `AZURE_OPENAI_KEY` instead, so `AzureChatOpenAI` raises `openai.OpenAIError: Missing credentials`. The fix is passing credentials explicitly, via `api_key=` and `azure_endpoint=`.
 
-**Q2. What makes the `|` (pipe) operator in LCEL work, and what capabilities "fall out for free" as a result?**
-A: Every LCEL component (`prompt`, `llm`, output parsers, retrievers) implements the same `Runnable` interface (`.invoke`/`.batch`/`.stream`/`.ainvoke`), so `|` just composes them into a pipeline. That uniformity is why streaming, batching, and async work on any chain built this way, without separate code paths for each.
+**Q2. What makes the `|` operator in LCEL work? What capabilities come for free as a result?**
+A: Every LCEL component — `prompt`, `llm`, output parsers, retrievers — implements the same `Runnable` interface: `.invoke`, `.batch`, `.stream`, `.ainvoke`. `|` just wires them into a pipeline. Because they all share that interface, streaming, batching, and async all work on any chain built this way. No separate code path is needed for each.
 
 **Q3. Why does `llm.with_structured_output(ExamAnswer)` work more reliably than asking for JSON in the prompt and parsing it yourself?**
-A: `with_structured_output` uses the provider's native tool-calling/JSON-mode under the hood, constraining the model at generation time rather than hoping it obeys a text instruction. The older `PydanticOutputParser` approach (prompt-based, parse-and-hope) still exists and still occasionally fails on malformed JSON.
+A: It uses the provider's native tool-calling or JSON mode under the hood. The model gets constrained at generation time, instead of just being asked to follow a text instruction. The older `PydanticOutputParser` approach asks for JSON in the prompt and parses whatever comes back. It still exists, and it still fails sometimes on malformed JSON.
 
-**Q4. According to the file, what is `RunnableWithMessageHistory`'s current status in LangChain 1.x, and what should new multi-turn code use instead?**
-A: Running `RunnableWithMessageHistory` on `langchain-core==1.4.9` prints `LangChainDeprecationWarning: RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead.` It still works, but new code should default to LangGraph's checkpointer (`MemorySaver`/`SqliteSaver` + `thread_id`) rather than layering this onto a plain LCEL chain.
+**Q4. What is `RunnableWithMessageHistory`'s status in LangChain 1.x? What should new multi-turn code use instead?**
+A: It's deprecated. Running it on `langchain-core==1.4.9` prints: `LangChainDeprecationWarning: RunnableWithMessageHistory is deprecated. Use LangGraph's built-in persistence instead.` It still works, but new code should default to LangGraph's checkpointer — `MemorySaver` or `SqliteSaver`, plus a `thread_id` — instead of layering this onto a plain LCEL chain.
 
-**Q5. Why did `set_verbose(True)` fail to show any output when debugging a plain `prompt | llm` LCEL chain, and what actually worked?**
-A: `set_verbose(True)` is a holdover from the legacy `Chain` class hierarchy and doesn't hook into LCEL's `Runnable` execution, so it produced no output at all. `ConsoleCallbackHandler` passed via `config={"callbacks": [...]}` is what actually works for LCEL, printing every intermediate Runnable's input/output.
+**Q5. Why did `set_verbose(True)` show no output when debugging a plain `prompt | llm` LCEL chain? What actually worked?**
+A: `set_verbose(True)` is a holdover from the legacy `Chain` class hierarchy. It doesn't hook into LCEL's `Runnable` execution at all, so it produces nothing. What works instead is `ConsoleCallbackHandler`, passed via `config={"callbacks": [...]}`. It prints every intermediate Runnable's input and output.
 
-**Q6. Why is `RunnablePassthrough()` needed in the RAG chain's input dict (`{"context": retriever | format_docs, "question": RunnablePassthrough()}`)?**
-A: The dict is itself a Runnable (a `RunnableParallel` shorthand) that must produce both `context` (via the retriever) and `question` (the original string, untouched) for the prompt template. `RunnablePassthrough` is the identity function as a Runnable; forgetting it is why a first attempt at this pattern often throws a `KeyError` on `question`.
+**Q6. Why is `RunnablePassthrough()` needed in the RAG chain's input dict — `{"context": retriever | format_docs, "question": RunnablePassthrough()}`?**
+A: That dict is itself a Runnable, a `RunnableParallel` shorthand. It has to produce both `context` (from the retriever) and `question` (the original string, unchanged) for the prompt template. `RunnablePassthrough` is the identity function written as a Runnable. Leave it out, and a first attempt at this pattern usually throws a `KeyError` on `question`.
 
-**Q7. Why does `bind_tools` alone not execute a tool call, and what loop does the manual tool-execution example in the file demonstrate?**
-A: `bind_tools` only gets you the model's request to call a tool — LangChain does not execute the function for you. The file's manual loop (invoke, append AI message, run the tool function for each `tool_calls` entry, append the tool result, invoke again) is the exact request → execute → feed-result-back → repeat pattern that every agent framework, including LangGraph's agent constructor, wraps in a driver.
+**Q7. Why doesn't `bind_tools` alone execute a tool call? What loop does the manual tool-execution example demonstrate?**
+A: `bind_tools` only gets you the model's request to call a tool. LangChain does not run the function for you. The manual loop above does it step by step: invoke, append the AI message, run the tool function for each entry in `tool_calls`, append the tool's result, invoke again. That's the same request → execute → feed-result-back → repeat pattern every agent framework uses, including LangGraph's agent constructor — just wrapped in a driver.
 
-**Q8. What does the file say happens if you stuff too much retrieved context or chat history into a prompt, and what's the guard against it?**
-A: Some providers truncate silently or return a degraded answer rather than a clear error, since LangChain does not enforce token budgets for you by default. The guard is checking `.get_num_tokens()` or a `tiktoken`-based counter before sending, and capping retriever `k` and text-splitter `chunk_size` with the model's real context window in mind.
+**Q8. What happens if you stuff too much retrieved context or chat history into a prompt? What guards against it?**
+A: LangChain doesn't enforce token budgets for you by default. Some providers just truncate silently, or return a degraded answer, instead of a clear error. The guard: check `.get_num_tokens()` or a `tiktoken`-based counter before sending, and cap retriever `k` and text-splitter `chunk_size` with the model's real context window in mind.
 
-**Q9. Why can `temperature=0` still produce non-identical outputs across calls, and what should a test suite assert instead of exact string equality?**
-A: Even at temperature 0, most hosted APIs are not bit-for-bit reproducible across calls due to different hardware paths, provider-side batching, and minor floating-point nondeterminism. A test suite should assert on structure (valid JSON parse, an expected substring, or a tool call) rather than exact text, or it will flake.
+**Q9. Why can `temperature=0` still produce non-identical outputs across calls? What should a test suite assert instead of exact string equality?**
+A: Even at temperature 0, most hosted APIs aren't bit-for-bit reproducible. Different hardware paths, provider-side batching, and small floating-point differences all play a role. A test suite should assert on structure instead — a valid JSON parse, an expected substring, a tool call — rather than exact text. Otherwise it will flake.
 
-**Q10. What does the file say about calling `.invoke()` inside an async context, and what's the fix?**
-A: `.invoke()` is synchronous, so calling it inside an `async def` (e.g., inside a FastAPI/Flask-async route) blocks the entire event loop for the duration of the network call. The fix is to use `.ainvoke()`/`.astream()` — every Runnable has async variants — anywhere the surrounding code is already async.
+**Q10. What happens if you call `.invoke()` inside an async context? What's the fix?**
+A: `.invoke()` is synchronous. Call it inside an `async def` — say, a FastAPI or Flask-async route — and it blocks the entire event loop for the whole network call. The fix: use `.ainvoke()`/`.astream()` instead. Every Runnable has async variants, so use them anywhere the surrounding code is already async.
 
 
 ---

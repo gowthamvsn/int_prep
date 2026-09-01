@@ -1,12 +1,20 @@
 # TensorFlow / Keras Deep Dive — Built as a Chain, Not a List
 
-Same format as `pytorch-deep-dive.md`, the TensorFlow/Keras side. **Verification note, stated plainly:** this environment's global Python has a broken TensorFlow install (TF 2.15 vs. NumPy 2 — a real, pre-existing conflict, not something introduced this session). Every snippet below was actually run and verified, but in a separate, isolated virtual environment (`.venv-tf`, TensorFlow 2.10.1 — the last version with native Windows GPU support) created specifically so this verification never touched the global environment. `import tensorflow as tf` and `from tensorflow import keras` assumed throughout. New to the deep-learning vocabulary (tensor, layer, loss, gradient, batch, learning rate)? The plain-English primer at the top of `deep-learning-practice.md` defines all of it once — this doc assumes those. Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+This is the TensorFlow/Keras half of `pytorch-deep-dive.md`, in the same format.
+
+A quick note on how this was checked. This machine's global Python has a broken TensorFlow install — TF 2.15 clashes with NumPy 2, a real conflict that existed before this doc was written, not something this session introduced. So every snippet below was actually run, but inside a separate, isolated virtual environment (`.venv-tf`, TensorFlow 2.10.1 — the last version with native Windows GPU support), built just for this check. The global environment was never touched.
+
+Assume `import tensorflow as tf` and `from tensorflow import keras` everywhere below.
+
+New to terms like tensor, layer, loss, gradient, batch, or learning rate? The primer at the top of `deep-learning-practice.md` defines all of them once. This doc assumes you've already read that.
+
+Each cluster builds on the one before it, and ends with a worked summary example.
 
 ---
 
 ## Cluster 1 — Functional API: When Sequential Genuinely Can't Express the Model
 
-### 1. How do you build the same model with the Functional API instead of Sequential, and why would you need to?
+### 1. How do you build a model with the Functional API instead of Sequential?
 ```python
 import tensorflow as tf
 from tensorflow import keras
@@ -19,9 +27,19 @@ outputs = layers.Dense(2, activation="softmax")(x)
 model = keras.Model(inputs=inputs, outputs=outputs)
 model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 ```
-Keras name-translations worth fixing in your head once: `Dense` is a fully-connected linear layer (PyTorch's `nn.Linear`), the `activation="softmax"` on the last layer turns raw scores into probabilities that sum to 1, and `.compile()` doesn't compile anything in the C++ sense — it just attaches the optimizer, loss, and metrics to the model before training. As for why Functional exists: `Sequential` only supports one input, one output, and a single linear chain of layers — the moment you need multiple inputs, multiple outputs, a skip/residual connection, or any layer reused in more than one place, `Sequential` genuinely cannot express it. The Functional API represents the model as an explicit graph of tensors, which can express all of those.
+A few Keras names worth translating once, in your head:
+- `Dense` is a fully-connected linear layer. In PyTorch, that's `nn.Linear`.
+- `activation="softmax"` on the last layer turns raw scores into probabilities that add up to 1.
+- `.compile()` doesn't compile anything, in the C++ sense. It just attaches the optimizer, loss, and metrics to the model, before training starts.
 
-### 2. Given that Functional can express more than one input, how do you build a model with TWO inputs and one output — a real use case, not a toy?
+Why does Functional exist at all, when Sequential already works? Because Sequential has real limits. It only supports:
+- one input,
+- one output,
+- a single, linear chain of layers.
+
+The moment you need more than one input, more than one output, a skip connection, or a layer reused in more than one place, Sequential genuinely can't express it. The Functional API represents the model as an explicit graph of tensors, instead of a straight line. A graph can express all of those cases. A straight line can't.
+
+### 2. How do you build a model with two inputs and one output?
 ```python
 tabular_input = keras.Input(shape=(10,), name="tabular")
 image_input = keras.Input(shape=(32, 32, 3), name="image")
@@ -34,16 +52,26 @@ merged = layers.concatenate([tab_branch, img_branch])
 output = layers.Dense(1, activation="sigmoid")(merged)
 model = keras.Model(inputs=[tabular_input, image_input], outputs=output)
 ```
-`layers.concatenate` (not `layers.Add`) is the right merge here: `concatenate` joins two different-meaning feature vectors side by side, preserving both independently for later layers to combine as they learn to; `Add` requires matching shapes and forces an element-wise sum, which only makes sense when both branches represent the SAME kind of quantity (like a residual connection), not two unrelated feature spaces like tabular data and an image embedding.
+Why `layers.concatenate` here, and not `layers.Add`?
+- `concatenate` places two different feature vectors side by side. Each one stays intact. Later layers learn how to combine them.
+- `Add` needs both inputs to already share the same shape, and it forces an element-wise sum. That only makes sense when both branches represent the same *kind* of quantity — like a residual connection, adding two versions of similar information.
+
+A transaction amount and an image embedding aren't the same kind of quantity. So this needs `concatenate`, not `Add`.
 
 ### Summary example
-A fraud model that combines structured transaction fields with a scanned receipt image needs exactly this shape: two `keras.Input` branches (question 2), each processed by layers suited to its own data type, merged with `concatenate` rather than `Add` because a transaction amount and an image embedding aren't the same kind of quantity — a model `Sequential` (question 1) could never express, since it only ever accepts one input tensor.
+A fraud model reads two different kinds of input: structured transaction fields, and a scanned receipt image.
+
+1. Build two separate `keras.Input` branches, one per input type (question 2).
+2. Run each branch through the layers suited to its own data type.
+3. Merge the two branches with `concatenate`, not `Add`, since a transaction amount and an image embedding aren't the same kind of quantity.
+
+`Sequential` (question 1) could never build this model. It only ever accepts one input tensor.
 
 ---
 
 ## Cluster 2 — Custom Training Loops: What `.fit()` Was Hiding
 
-### 1. How do you write a custom training loop with `GradientTape`, for when `.fit()` isn't flexible enough?
+### 1. How do you write a custom training loop with `GradientTape`?
 ```python
 import numpy as np
 
@@ -61,9 +89,17 @@ grads = tape.gradient(loss, model.trainable_weights)
 optimizer.apply_gradients(zip(grads, model.trainable_weights))
 print(float(loss))
 ```
-(`from_logits=True` on the loss: the model's last layer here outputs raw, pre-softmax scores — logits — and this flag tells the loss function to apply the softmax itself in one numerically stable step, the same logits-not-probabilities discipline explained in `deep-learning-practice.md` Cluster 6.) `GradientTape` records only what happens inside its `with` block: it watches every trainable-variable operation while open and builds a computation graph for differentiation on the fly — anything computed outside the block (or on a tensor not marked as watched) simply won't have a gradient, mirroring PyTorch's dynamic-graph model rather than TF1's static-graph approach.
+A quick note on `from_logits=True`: the model's last layer here outputs raw, pre-softmax scores — logits, not probabilities. This flag tells the loss function to apply softmax itself, in one numerically stable step. Same discipline covered in `deep-learning-practice.md` Cluster 6.
 
-**Visual + memory hook — an actual cassette tape, recording only while it's rolling:**
+What does `GradientTape` actually record? Only what happens inside its `with` block.
+
+1. While the block is open, the tape watches every operation that touches a trainable variable.
+2. It builds a computation graph for differentiation, on the fly, as those operations run.
+3. Anything computed outside the block — or on a tensor the tape isn't watching — simply won't have a gradient.
+
+This mirrors PyTorch's dynamic-graph model, not TF1's older static-graph approach.
+
+Here's the same idea as a literal cassette tape, recording only while it's rolling:
 ```
                     ┌───────────────────────────────┐
                     │   with tf.GradientTape() as tape:   ◀── tape starts ROLLING
@@ -78,9 +114,9 @@ print(float(loss))
                                           the tape was already stopped — no recording,
                                           no gradient, silently
 ```
-**Remember it as a tape recorder, literally** — indentation inside the `with` block is the record light being on; anything that happens once you've dedented back out happened after the recorder was switched off, and asking `tape.gradient()` for something it never recorded returns `None` rather than an error, which is exactly why a custom training loop can silently fail to train a layer if part of the forward pass accidentally sits outside the block.
+The `with` block is the record light being on. Once you dedent back out, the recorder is off. Ask `tape.gradient()` for something it never recorded, and you get `None` back — not an error. That's exactly why a custom training loop can silently fail to train a layer, if part of the forward pass accidentally sits outside the block.
 
-### 2. Given the tape recorded `model(X, training=True)`, what does that `training=` flag actually control, and why does it matter outside `.fit()`/`.predict()`?
+### 2. What does the `training=` flag actually control, and why do you have to set it yourself outside `.fit()`?
 ```python
 # during custom training:
 logits = model(X, training=True)     # Dropout active, BatchNorm uses CURRENT batch statistics
@@ -88,16 +124,20 @@ logits = model(X, training=True)     # Dropout active, BatchNorm uses CURRENT ba
 # during custom evaluation/inference:
 logits = model(X, training=False)     # Dropout off, BatchNorm uses stored RUNNING statistics
 ```
-This is the direct Keras analogue of PyTorch's `model.train()`/`model.eval()`: `.fit()` and `.predict()` set this flag for you automatically; the moment you call the model directly (inside a custom `GradientTape` loop, or for a manual inference call), YOU are responsible for passing the right value — forgetting `training=False` at inference time is the same class of bug as forgetting `model.eval()` in PyTorch, with the same consequence (wrong BatchNorm statistics, unwanted Dropout noise).
+This is the direct Keras version of PyTorch's `model.train()` / `model.eval()`.
+- `.fit()` and `.predict()` set this flag for you, automatically.
+- Call the model directly — inside a custom `GradientTape` loop, or for a manual inference call — and now you're responsible for it.
+
+Forget `training=False` at inference time, and you get the same class of bug as forgetting `model.eval()` in PyTorch: wrong BatchNorm statistics, and unwanted Dropout noise.
 
 ### Summary example
-A custom `GradientTape` loop that trains but evaluates suspiciously worse than `.fit()` would on the same data usually has one bug: the eval call still says `training=True` (question 2) — Dropout is still randomly zeroing activations and BatchNorm is still using per-batch statistics instead of the stored running ones, degrading eval numbers for a reason that has nothing to do with the tape's recording (question 1) at all.
+A custom `GradientTape` loop trains fine, but evaluates suspiciously worse than `.fit()` would on the same data. There's usually one bug behind that: the eval call still says `training=True` (question 2). Dropout is still randomly zeroing activations. BatchNorm is still using per-batch statistics instead of the stored running ones. Both degrade eval numbers, for a reason that has nothing to do with the tape's recording (question 1) at all.
 
 ---
 
 ## Cluster 3 — Custom Layers and Models: Subclassing When Built-Ins Run Out
 
-### 1. How do you build a custom layer (subclassing), not just stacking built-in ones?
+### 1. How do you build a custom layer by subclassing?
 ```python
 class WeightedSum(layers.Layer):
     def __init__(self, **kwargs):
@@ -112,9 +152,13 @@ layer = WeightedSum()
 out = layer(tf.random.normal((4, 10)))
 print(out.shape, layer.w.shape)
 ```
-Weight creation goes in `build()`, not `__init__`: at `__init__` time, the layer doesn't yet know the shape of its actual input (you might not have connected it to anything yet) — `build()` is called automatically the first time real data flows through, when `input_shape` is genuinely known, which is what lets the SAME layer class adapt to different input sizes without hardcoding a shape in the constructor.
+Why does weight creation go in `build()`, not `__init__`?
 
-### 2. Given a custom layer handles one non-standard OPERATION, how do you subclass `keras.Model` itself for non-standard forward LOGIC (control flow, not just a new op)?
+1. At `__init__` time, the layer doesn't know the shape of its real input yet. You might not have connected it to anything.
+2. `build()` runs automatically the first time real data flows through the layer — that's when `input_shape` is actually known.
+3. This lets the same layer class adapt to different input sizes, without hardcoding a shape in the constructor.
+
+### 2. How do you subclass `keras.Model` itself, for non-standard forward logic?
 ```python
 class TwoTowerModel(keras.Model):
     def __init__(self):
@@ -131,16 +175,18 @@ model = TwoTowerModel()
 out = model([tf.random.normal((4, 10)), tf.random.normal((4, 8))])
 print(out.shape)
 ```
-Subclassing is the right tool when the forward pass has real CONTROL FLOW (a conditional branch, a loop over a variable number of inputs, recursive calls) that the Functional API's static-graph-of-layers can't express — for a fixed, static architecture like this simple example, Functional (Cluster 1) would actually be the more common choice; subclassing earns its complexity when the logic genuinely needs it.
+Subclassing earns its keep when the forward pass has real control flow — a conditional branch, a loop over a variable number of inputs, a recursive call. The Functional API's static graph of layers can't express that.
+
+For a fixed, static architecture like this simple example, though, Functional (Cluster 1) would actually be the more common choice. Subclassing is worth the extra complexity only when the logic genuinely needs it.
 
 ### Summary example
-A recommendation model that routes each input through a DIFFERENT tower depending on a runtime flag (real conditional control flow) can't be expressed as a static Functional graph at all — it needs `keras.Model` subclassing (question 2), the same escalation from custom-operation (question 1's `WeightedSum`, one learned multiply) to custom-control-flow (an `if` inside `call()`) that separates "needs a new layer" from "needs a new model class."
+A recommendation model routes each input through a different tower, depending on a runtime flag. That's real conditional control flow. A static Functional graph can't express it at all, so it needs `keras.Model` subclassing (question 2). That's the same escalation as before: a custom operation (question 1's `WeightedSum`, one learned multiply) needs a new layer. Custom control flow (an `if` inside `call()`) needs a new model class.
 
 ---
 
 ## Cluster 4 — Custom Losses and Metrics, With Configuration
 
-### 1. How do you write a custom loss as a CLASS (not just a function) when it needs configuration, like focal loss's `gamma`?
+### 1. How do you write a custom loss as a class, when it needs its own configuration?
 ```python
 class FocalLoss(keras.losses.Loss):
     def __init__(self, gamma=2.0, **kwargs):
@@ -153,9 +199,11 @@ class FocalLoss(keras.losses.Loss):
 
 model.compile(optimizer="adam", loss=FocalLoss(gamma=2.0))
 ```
-Standard cross-entropy weighs every example equally regardless of how confidently correct the model already is on it; focal loss's `(1-p_t)^gamma` term shrinks the loss contribution from examples the model already classifies confidently and correctly, effectively focusing training signal on the hard/misclassified examples — genuinely useful on severely imbalanced data where easy negatives would otherwise dominate the gradient.
+Standard cross-entropy treats every example the same, no matter how confidently correct the model already is on it. Focal loss changes that.
 
-### 2. Given a loss needs its own state (`gamma`), a METRIC needs running state too (precision/recall accumulated across batches) — how do you write a custom metric class?
+The `(1 - p_t) ** gamma` term shrinks the loss on examples the model already classifies confidently and correctly. That leaves more of the training signal focused on the hard, misclassified examples. It's genuinely useful on badly imbalanced data, where easy negatives would otherwise dominate the gradient.
+
+### 2. How do you write a custom metric, when it needs to track running state across batches?
 ```python
 class F1Score(keras.metrics.Metric):
     def __init__(self, name="f1", **kwargs):
@@ -174,16 +222,18 @@ class F1Score(keras.metrics.Metric):
 
 model.compile(optimizer="adam", loss="binary_crossentropy", metrics=[F1Score()])
 ```
-`keras.backend.epsilon()` in the denominator, specifically: early in training (or on a bad batch), precision and recall can both legitimately be exactly 0, making `p + r` zero — without the small epsilon guard, this raises a division error or produces `nan` that can silently propagate into logged metrics and confuse monitoring. Note the three-method shape (`update_state`/`result`/`reset_state`) is what lets a metric accumulate correctly ACROSS batches within an epoch, unlike a loss which is computed fresh per batch.
+Why the `keras.backend.epsilon()` in the denominator? Early in training — or on a bad batch — precision and recall can both legitimately come out as exactly 0. That makes `p + r` zero too. Without the small epsilon guard, that's a division error, or a silent `nan` that can creep into your logged metrics and confuse monitoring.
+
+Notice the three-method shape: `update_state`, `result`, `reset_state`. That's what lets a metric accumulate correctly across a whole epoch's worth of batches. A loss, by contrast, gets computed fresh on every single batch.
 
 ### Summary example
-Training on severely imbalanced fraud data: `FocalLoss` (question 1) reshapes the GRADIENT signal so easy negatives stop dominating, while a custom `F1Score` metric (question 2) reshapes what gets REPORTED, since plain accuracy on imbalanced data is misleading regardless of what loss was used to train — the two customizations solve different problems (what the optimizer optimizes vs. what you actually read to judge the model) and are routinely used together.
+Training on severely imbalanced fraud data uses both customizations together, for different jobs. `FocalLoss` (question 1) reshapes the *gradient* — it stops easy negatives from dominating training. A custom `F1Score` metric (question 2) reshapes what gets *reported* — plain accuracy on imbalanced data is misleading, no matter what loss trained the model. One changes what the optimizer optimizes. The other changes what you actually read to judge the model.
 
 ---
 
 ## Cluster 5 — Efficient Data Pipelines
 
-### 1. How do you build an efficient input pipeline with `tf.data` instead of feeding raw NumPy arrays directly?
+### 1. How do you build an efficient input pipeline with `tf.data`, instead of feeding raw NumPy arrays directly?
 ```python
 X = np.random.randn(1000, 10).astype("float32")
 y = np.random.randint(0, 2, 1000)
@@ -194,9 +244,9 @@ dataset = dataset.shuffle(buffer_size=1000).batch(32).prefetch(tf.data.AUTOTUNE)
 for xb, yb in dataset.take(1):
     print(xb.shape, yb.shape)
 ```
-`.prefetch(tf.data.AUTOTUNE)` matters specifically: without it, the GPU sits idle while the CPU prepares the next batch, and vice versa — `prefetch` overlaps data preparation for batch N+1 with the model's computation on batch N, and `AUTOTUNE` lets TensorFlow pick the actual optimal buffer size at runtime rather than you guessing a fixed number.
+Why does `.prefetch(tf.data.AUTOTUNE)` matter? Without it, the GPU sits idle while the CPU prepares the next batch — and then the CPU sits idle while the GPU computes. `prefetch` overlaps the two: batch N+1 gets prepared while the model is still computing on batch N. `AUTOTUNE` lets TensorFlow pick the actual best buffer size at runtime, instead of you guessing a fixed number.
 
-### 2. Given a `tf.data` pipeline feeds the model, how do you add on-the-fly data augmentation as part of the model itself, rather than a separate preprocessing step outside the pipeline?
+### 2. How do you add data augmentation as part of the model, instead of a separate preprocessing step outside the pipeline?
 ```python
 data_augmentation = keras.Sequential([
     layers.RandomFlip("horizontal"),
@@ -212,10 +262,12 @@ model = keras.Sequential([
     layers.Dense(10, activation="softmax"),
 ])
 ```
-Augmentation layers built INTO the model (vs. a separate offline preprocessing script) apply ONLY during training (the same `training=True`/`False` flag from Cluster 2) and pass through unchanged during inference — no separate code path needed, no risk of accidentally applying random augmentation to real inference input, and the augmentation runs on GPU as part of the model graph instead of the CPU, which is often faster.
+Augmentation layers built into the model behave differently from an offline preprocessing script, in one important way. They apply only during training — the same `training=True`/`False` flag from Cluster 2 — and pass through unchanged during inference.
+
+That buys you three things: no separate code path, no risk of accidentally applying random augmentation to real inference input, and the augmentation itself runs on GPU as part of the model graph, instead of on the CPU. That's often faster too.
 
 ### Summary example
-A vision pipeline that both loads efficiently AND augments correctly needs both pieces: `tf.data` with `prefetch(AUTOTUNE)` (question 1) keeps the GPU fed instead of idle, and augmentation layers inside the model (question 2) reuse the exact same `training=` flag from Cluster 2's `GradientTape` discussion to guarantee augmentation never leaks into a real inference call.
+A vision pipeline needs to load efficiently *and* augment correctly. Both pieces are needed together: `tf.data` with `prefetch(AUTOTUNE)` (question 1) keeps the GPU fed instead of idle, and augmentation layers built into the model (question 2) reuse the exact same `training=` flag from Cluster 2's `GradientTape` discussion, guaranteeing augmentation never leaks into a real inference call.
 
 ---
 
@@ -228,41 +280,47 @@ early_stop = keras.callbacks.EarlyStopping(
 )
 # model.fit(X, y, validation_split=0.2, epochs=100, callbacks=[early_stop])
 ```
-`restore_best_weights=True` is the detail worth not skipping: without it, training stops at the RIGHT time but the model's weights are left at whatever the LAST epoch produced (already past the best point, by definition of "patience" epochs) — this flag rolls the weights back to the actual best-performing checkpoint before returning, which is almost always what you actually want.
+Don't skip `restore_best_weights=True`. Without it, training stops at the right time, but the model's weights get left wherever the last epoch landed — which, by definition of "patience" epochs, is already past the best point. This flag rolls the weights back to the actual best checkpoint before returning. That's almost always what you want.
 
-### 2. Given early stopping ends training at the right point, how do you also save a checkpoint DURING training, only when the model actually improves?
+### 2. How do you also save a checkpoint during training, only when the model actually improves?
 ```python
 checkpoint = keras.callbacks.ModelCheckpoint(
     filepath="best_model.keras", monitor="val_loss", save_best_only=True,
 )
 ```
-`save_best_only=True` matters over saving every epoch: saving every epoch either wastes disk space or forces you to manually track which file was best — this flag does the "only checkpoint on improvement" logic that had to be hand-rolled manually in `pytorch-deep-dive.md`'s early-stopping example, built directly into the framework here.
+Why `save_best_only=True` over saving every epoch? Saving every epoch either wastes disk space, or forces you to manually track which file was the best one. This flag does that "only checkpoint on improvement" logic for you. In `pytorch-deep-dive.md`'s early-stopping example, you had to hand-roll this yourself. Here it's built into the framework.
 
-### 3. Given training eventually stalls, is stopping the only option — how do you have Keras try a smaller learning rate FIRST, before giving up?
+### 3. If training stalls, is stopping the only option — how do you have Keras try a smaller learning rate first?
 ```python
 reduce_lr = keras.callbacks.ReduceLROnPlateau(
     monitor="val_loss", factor=0.5, patience=3, min_lr=1e-6,
 )
 ```
-This is a genuinely different tool from `EarlyStopping`, not a duplicate: `EarlyStopping` gives up on training entirely once it stalls; `ReduceLROnPlateau` instead tries a smaller learning rate first (a stalled loss often means the current LR is too large to make further progress near a minimum) — commonly used TOGETHER, with `ReduceLROnPlateau`'s patience set lower so it tries recovering before `EarlyStopping`'s patience gives up entirely.
+This is a genuinely different tool from `EarlyStopping`, not a duplicate of it.
+- `EarlyStopping` gives up on training entirely once it stalls.
+- `ReduceLROnPlateau` tries a smaller learning rate first. A stalled loss often just means the current learning rate is too large to make further progress near a minimum.
+
+They're commonly used together. Set `ReduceLROnPlateau`'s patience lower, so it tries to recover before `EarlyStopping`'s patience runs out.
 
 ### Summary example
-A realistic callback stack combines all three, tuned in the order they should fire: `ReduceLROnPlateau` (question 3) with `patience=3` tries a smaller LR first at the first sign of a stall, `ModelCheckpoint` (question 2) saves every genuine improvement along the way regardless of which LR produced it, and `EarlyStopping` (question 1) with `patience=5` and `restore_best_weights=True` only gives up — and rolls back to the true best epoch — if even the reduced LR fails to help within 2 further epochs.
+A realistic callback stack combines all three, tuned to fire in this order: `ReduceLROnPlateau` (question 3) with `patience=3` tries a smaller learning rate first, at the first sign of a stall. `ModelCheckpoint` (question 2) saves every genuine improvement along the way, regardless of which learning rate produced it. `EarlyStopping` (question 1), with `patience=5` and `restore_best_weights=True`, only gives up — and rolls back to the true best epoch — if even the reduced learning rate fails to help within 2 further epochs.
 
 ---
 
 ## Cluster 7 — Mixed Precision and Transfer Learning
 
-### 1. How do you enable mixed-precision training in Keras — the TF-side equivalent of `torch.autocast` from `pytorch-deep-dive.md`?
+### 1. How do you enable mixed-precision training in Keras?
 ```python
 keras.mixed_precision.set_global_policy("mixed_float16")
 # every new model built after this line uses float16 for most compute, float32 for numerically sensitive ops
 model = keras.Sequential([layers.Dense(64, activation="relu"), layers.Dense(2, activation="softmax")])
 print(model.dtype_policy)
 ```
-This needs to be set as a GLOBAL POLICY before model creation, unlike PyTorch's per-op `autocast` context: Keras bakes the precision policy into each layer at construction time — layers built before calling `set_global_policy` keep their original (usually float32) policy, so this must run before you build the model, not wrapped around just the training step like PyTorch's `autocast` context manager.
+This is the TF-side equivalent of PyTorch's `torch.autocast` from `pytorch-deep-dive.md` — but it works differently. It has to be set as a global policy, *before* you build the model.
 
-### 2. Separately from precision, how do you do transfer learning with a pretrained model in Keras?
+Keras bakes the precision policy into each layer at construction time. Any layer built before you call `set_global_policy` keeps its original policy — usually float32. So this line has to run before the model is built, not wrapped around just the training step, the way PyTorch's `autocast` context manager works.
+
+### 2. Separately from precision, how do you do transfer learning with a pretrained model?
 ```python
 base_model = keras.applications.MobileNetV2(input_shape=(96, 96, 3), include_top=False, weights="imagenet")
 base_model.trainable = False        # freeze the pretrained backbone entirely
@@ -274,25 +332,36 @@ model = keras.Sequential([
 ])
 model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 ```
-`include_top=False` matters: the pretrained model's original final classification layers were trained for ImageNet's specific 1000 classes — `include_top=False` strips those off, keeping only the convolutional feature-extraction backbone, so you can attach your own classification head sized for YOUR number of classes.
+Why `include_top=False`? The pretrained model's original final classification layers were trained for ImageNet's specific 1000 classes. `include_top=False` strips those off, keeping only the convolutional feature-extraction backbone. Now you can attach your own classification head, sized for your own number of classes.
 
-### 3. Given the backbone trained frozen in question 2, how do you unfreeze part of it for fine-tuning, and why change the learning rate when you do?
+### 3. How do you unfreeze part of the backbone for fine-tuning, and why lower the learning rate when you do?
 ```python
 base_model.trainable = True
 for layer in base_model.layers[:-20]:      # keep all but the last 20 layers frozen
     layer.trainable = False
 model.compile(optimizer=keras.optimizers.Adam(learning_rate=1e-5), loss="sparse_categorical_crossentropy")
 ```
-Unfreeze only the LAST layers, and use a much lower learning rate this time: early layers in a pretrained CNN learn generic features (edges, textures) that transfer well across almost any image task; later layers learn more task-specific, higher-level features — unfreezing just the later layers lets the model adapt those specifically to your task while preserving the generic early features. The much lower LR (1e-5 vs. a typical 1e-3) protects the pretrained weights from being destroyed by a large gradient step now that they're unfrozen and being updated.
+Why unfreeze only the last layers?
+- Early layers in a pretrained CNN learn generic features — edges, textures. Those transfer well to almost any image task.
+- Later layers learn more task-specific, higher-level features.
+
+Unfreezing just the later layers lets the model adapt those to your specific task, while keeping the generic early features intact.
+
+Why the much lower learning rate — `1e-5` instead of a typical `1e-3`? The pretrained weights are valuable. A large gradient step, now that they're unfrozen and being updated, could destroy them. The low learning rate protects them.
 
 ### Summary example
-A resource-constrained image classifier trains in two phases that combine questions 2 and 3, optionally sped up by question 1: first with `base_model.trainable = False` and a normal LR to train just the new head cheaply, then with the last 20 layers unfrozen and `lr=1e-5` to gently adapt task-specific features — both phases can run under `mixed_precision.set_global_policy("mixed_float16")` set once at the very start, since it must precede model construction entirely.
+A resource-constrained image classifier trains in two phases, combining questions 2 and 3, optionally sped up by question 1.
+
+1. First, with `base_model.trainable = False` and a normal learning rate, to train just the new head cheaply.
+2. Then, with the last 20 layers unfrozen and `lr=1e-5`, to gently adapt task-specific features.
+
+Both phases can run under `mixed_precision.set_global_policy("mixed_float16")`, set once at the very start — since it must precede model construction entirely.
 
 ---
 
 ## Cluster 8 — Sequence Models and Learning-Rate Schedules
 
-### 1. How do you build an LSTM classifier in Keras — the direct equivalent of the PyTorch version in `deep-learning-practice.md`?
+### 1. How do you build an LSTM classifier in Keras?
 ```python
 model = keras.Sequential([
     layers.Embedding(input_dim=1000, output_dim=32, mask_zero=True),   # mask_zero: Keras' padding_idx equivalent
@@ -301,19 +370,22 @@ model = keras.Sequential([
 ])
 model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 ```
-`mask_zero=True` is the direct Keras analogue of PyTorch's `padding_idx=0`: it tells every downstream layer (the LSTM specifically) to skip position 0 (the padding token) entirely rather than process it as real content — same purpose as `padding_idx`, implemented as an automatically-propagated mask instead of a per-layer flag.
+This is the direct equivalent of the PyTorch version in `deep-learning-practice.md`. `mask_zero=True` is the direct Keras version of PyTorch's `padding_idx=0`. It tells every downstream layer — the LSTM here — to skip position 0 (the padding token) entirely, instead of processing it as real content. Same purpose as `padding_idx`, just implemented as a mask that propagates automatically, instead of a flag you set on each layer.
 
-### 2. Given the LSTM trains with `optimizer="adam"` at a fixed rate, how do you use a learning-rate SCHEDULE instead — and why pass the schedule object rather than updating a plain float manually?
+### 2. How do you use a learning-rate schedule, instead of a fixed rate?
 ```python
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2, decay_steps=1000, decay_rate=0.9,
 )
 optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
 ```
-The schedule is evaluated fresh at every single training STEP (not just every epoch), giving smooth, fine-grained decay — and it's saved/restored correctly alongside the optimizer's other state if you checkpoint mid-training, which a manually-updated plain float wouldn't be.
+Why pass the schedule object, instead of just updating a plain float yourself?
+
+1. The schedule gets evaluated fresh at every single training step, not just every epoch. That gives smooth, fine-grained decay.
+2. It gets saved and restored correctly alongside the optimizer's other state, if you checkpoint mid-training. A manually-updated plain float wouldn't be.
 
 ### Summary example
-An LSTM text classifier (question 1) trained on variable-length, padded sequences needs `mask_zero=True` so padding never pollutes the recurrent state, and pairing it with an `ExponentialDecay` schedule (question 2) instead of `ReduceLROnPlateau` (Cluster 6) is a deliberate choice for smooth, predictable decay on a known step budget rather than reactive, validation-driven decay.
+An LSTM text classifier (question 1), trained on variable-length, padded sequences, needs `mask_zero=True` so padding never pollutes the recurrent state. Pairing it with an `ExponentialDecay` schedule (question 2), instead of `ReduceLROnPlateau` (Cluster 6), is a deliberate choice — smooth, predictable decay on a known step budget, rather than reactive, validation-driven decay.
 
 ---
 
@@ -325,9 +397,9 @@ tensorboard_cb = keras.callbacks.TensorBoard(log_dir="./logs", histogram_freq=1)
 # model.fit(X, y, epochs=10, callbacks=[tensorboard_cb])
 # then run in a terminal: tensorboard --logdir ./logs
 ```
-`histogram_freq=1` is worth knowing about beyond just the default scalar logging: this setting logs weight and activation HISTOGRAMS every epoch — genuinely useful for spotting a layer whose weights are collapsing toward zero or exploding, a diagnostic scalar loss curves alone won't show you directly.
+Beyond the default scalar logging, `histogram_freq=1` is worth knowing about. It logs weight and activation histograms every epoch. That's genuinely useful for spotting a layer whose weights are collapsing toward zero, or exploding — something a scalar loss curve alone won't show you.
 
-### 2. Given TensorBoard logs training as it happens, how do you save the trained model afterward — and when does saving weights-only matter more than saving the full model?
+### 2. How do you save the trained model afterward, and when does saving weights-only matter more than saving the full model?
 ```python
 model.save("full_model.keras")                    # architecture + weights + optimizer state, one file
 reloaded = keras.models.load_model("full_model.keras")
@@ -336,51 +408,54 @@ model.save_weights("weights_only.weights.h5")       # JUST the learned numbers, 
 # model2 = build_same_architecture_function()
 # model2.load_weights("weights_only.weights.h5")
 ```
-Weights-only saving is sometimes the more robust choice, mirroring PyTorch's `state_dict` guidance in `pytorch-deep-dive.md`: saving the full model bundles in the exact class/config at save time — if you refactor your model-building code later, reloading the full saved model can break; saving just the weights and re-running your (version-controlled) model-building code to reconstruct the architecture is more robust to that kind of drift, at the cost of needing to keep the building code around.
+This mirrors the `state_dict` guidance in `pytorch-deep-dive.md`. Saving the full model bundles in the exact class and config from save time.
+- Refactor your model-building code later, and reloading that full saved model can break.
+- Save just the weights instead, and re-run your (version-controlled) model-building code to reconstruct the architecture. That's more robust to that kind of drift — at the cost of needing to keep the building code around.
 
 ### Summary example
-A model trained with `histogram_freq=1` logging (question 1) reveals a layer's weights collapsing toward zero mid-training — a real bug worth fixing before shipping. Once fixed, saving the corrected model as weights-only (question 2) rather than a full `.keras` file is the safer long-term choice if the model-building code is still actively evolving, since a full-model reload would break the moment that building code changes shape.
+A model trained with `histogram_freq=1` logging (question 1) reveals a layer's weights collapsing toward zero mid-training — a real bug, worth fixing before shipping. Once it's fixed, saving the corrected model as weights-only (question 2), rather than a full `.keras` file, is the safer long-term choice if the model-building code is still actively evolving. A full-model reload would break the moment that building code changes shape.
 
 ---
 
 ## Practice Q&A (Self-Test)
 
 **Q1. Why can't the two-input `tabular_input`/`image_input` model be built with `Sequential`, and what does the Functional API do differently?**
-A: `Sequential` only supports one input, one output, and a single linear chain of layers. The Functional API represents the model as an explicit graph of tensors, which can express multiple inputs/outputs, skip connections, or any layer reused in more than one place — exactly what the two-tower example needs.
+A: `Sequential` only supports one input, one output, and a single linear chain of layers. The Functional API represents the model as an explicit graph of tensors instead, which can express multiple inputs and outputs, skip connections, or any layer reused in more than one place — exactly what the two-tower example needs.
 
-**Q2. Why is `layers.concatenate` used to merge the tabular and image branches rather than `layers.Add`?**
-A: `concatenate` joins two different-meaning feature vectors side by side, preserving both independently for later layers to combine. `Add` requires matching shapes and forces an element-wise sum, which only makes sense when both branches represent the same kind of quantity (like a residual connection) — not two unrelated feature spaces like tabular data and an image embedding.
+**Q2. Why is `layers.concatenate` used to merge the tabular and image branches, rather than `layers.Add`?**
+A: `concatenate` places two different feature vectors side by side, keeping both intact for later layers to combine. `Add` needs matching shapes and forces an element-wise sum, which only makes sense when both branches represent the same kind of quantity — like a residual connection — not two unrelated feature spaces like tabular data and an image embedding.
 
 **Q3. In the custom `GradientTape` training loop, what exactly does the tape record, and what happens to a computation done outside the `with tf.GradientTape() as tape:` block?**
-A: The tape watches every trainable-variable operation that happens while it's open and builds a computation graph for differentiation on the fly. Anything computed outside the block (or on a tensor not being watched) simply won't have a gradient — this mirrors PyTorch's dynamic-graph model rather than TF1's static-graph approach.
+A: The tape watches every trainable-variable operation that happens while it's open, and builds a computation graph for differentiation on the fly. Anything computed outside the block — or on a tensor it isn't watching — simply won't have a gradient. This mirrors PyTorch's dynamic-graph model, not TF1's static-graph approach.
 
 **Q4. Why must you pass `training=True`/`training=False` explicitly when calling a model directly inside a custom training loop, but not when using `.fit()`/`.predict()`?**
-A: `.fit()` and `.predict()` set this flag for you automatically, but calling the model directly makes you responsible for it. Forgetting `training=False` at inference time is the same class of bug as forgetting `model.eval()` in PyTorch, with the same consequence: wrong BatchNorm statistics and unwanted Dropout noise.
+A: `.fit()` and `.predict()` set this flag for you automatically. Calling the model directly makes you responsible for it yourself. Forgetting `training=False` at inference time is the same class of bug as forgetting `model.eval()` in PyTorch, with the same consequence: wrong BatchNorm statistics, and unwanted Dropout noise.
 
 **Q5. In the custom `WeightedSum` layer, why does weight creation happen in `build()` rather than in `__init__`?**
-A: At `__init__` time the layer doesn't yet know the shape of its actual input. `build()` is called automatically the first time real data flows through, when `input_shape` is genuinely known — this is what lets the same layer class adapt to different input sizes without hardcoding a shape in the constructor.
+A: At `__init__` time, the layer doesn't yet know the shape of its real input. `build()` runs automatically the first time real data flows through, when `input_shape` is genuinely known — this is what lets the same layer class adapt to different input sizes without hardcoding a shape in the constructor.
 
 **Q6. When would you choose to subclass `keras.Model` (like `TwoTowerModel`) instead of using the Functional API?**
-A: Subclassing is the right tool when the forward pass has real control flow — a conditional branch, a loop over a variable number of inputs, recursive calls — that the Functional API's static graph of layers can't express. For a fixed, static architecture, Functional would actually be the more common, simpler choice.
+A: When the forward pass has real control flow — a conditional branch, a loop over a variable number of inputs, a recursive call — that the Functional API's static graph of layers can't express. For a fixed, static architecture, Functional would actually be the more common, simpler choice.
 
 **Q7. In the `FocalLoss` custom loss class, what does the `(1 - p_t) ** gamma` term do, and why is it useful on imbalanced data?**
-A: It shrinks the loss contribution from examples the model already classifies confidently and correctly, focusing training signal on the hard/misclassified examples. Standard cross-entropy weighs every example equally regardless of confidence, so on severely imbalanced data, easy negatives would otherwise dominate the gradient.
+A: It shrinks the loss contribution from examples the model already classifies confidently and correctly, focusing training signal on the hard or misclassified examples instead. Standard cross-entropy weighs every example equally regardless of confidence, so on severely imbalanced data, easy negatives would otherwise dominate the gradient.
 
 **Q8. In the MobileNetV2 transfer-learning example, why set `include_top=False`, and why does the later fine-tuning step use a much lower learning rate (1e-5 vs. a typical 1e-3)?**
-A: `include_top=False` strips off the pretrained model's ImageNet-specific classification layers, keeping only the convolutional feature-extraction backbone so a custom head can be attached. The much lower learning rate when unfreezing the last 20 layers protects the pretrained weights from being destroyed by a large gradient step now that they're being updated.
+A: `include_top=False` strips off the pretrained model's ImageNet-specific classification layers, keeping only the convolutional feature-extraction backbone, so a custom head can be attached. The much lower learning rate, when unfreezing the last 20 layers, protects the pretrained weights from being destroyed by a large gradient step now that they're being updated.
 
-**Q9. Why must `keras.mixed_precision.set_global_policy("mixed_float16")` be called before building the model, unlike PyTorch's `autocast` context manager which wraps just the training step?**
-A: Keras bakes the precision policy into each layer at construction time. Layers built before calling `set_global_policy` keep their original (usually float32) policy, so the call must happen before the model is built rather than around the training step.
+**Q9. Why must `keras.mixed_precision.set_global_policy("mixed_float16")` be called before building the model, unlike PyTorch's `autocast` context manager, which wraps just the training step?**
+A: Keras bakes the precision policy into each layer at construction time. Layers built before calling `set_global_policy` keep their original — usually float32 — policy, so the call must happen before the model is built, rather than around the training step.
 
 **Q10. Why does the custom `F1Score` metric add `keras.backend.epsilon()` in the denominator of `2 * p * r / (p + r + epsilon)`?**
-A: Early in training, or on a bad batch, precision and recall can both legitimately be exactly 0, making `p + r` zero. Without the small epsilon guard, this raises a division error or produces `nan` that can silently propagate into logged metrics and confuse monitoring.
-
+A: Early in training, or on a bad batch, precision and recall can both legitimately be exactly 0, making `p + r` zero. Without the small epsilon guard, this raises a division error, or produces a `nan` that can silently propagate into logged metrics and confuse monitoring.
 
 ---
 
 ## Video-Sourced Practice MCQs
 
-A practice set for TensorFlow/Keras, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube TensorFlow-interview-prep video, then written up as fully original multiple-choice questions here. This video was foundational/beginner level (tensors, ops, computational graphs, the 5-step Keras workflow, deployment targets) -- genuinely complementary to the intermediate/advanced clusters above (Functional API, custom training loops, custom layers/losses, tf.data, callbacks, mixed precision, sequence models) rather than overlapping them.
+This quiz was built the same way as the hub's NCA-GENL community bank. The topics come from a real YouTube TensorFlow interview-prep video, checked for accuracy, then written up here as fully original multiple-choice questions.
+
+The video itself was beginner level — tensors, basic ops, computational graphs, the 5-step Keras workflow, deployment targets. That's genuinely different ground from the intermediate/advanced clusters above (Functional API, custom training loops, custom layers and losses, tf.data, callbacks, mixed precision, sequence models). Nothing here overlaps with those.
 
 <script type="application/json" class="topic-quiz-data" data-title="TensorFlow/Keras Deep Dive">
 [

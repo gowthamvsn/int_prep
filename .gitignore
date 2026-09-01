@@ -23,6 +23,10 @@ streamlit_progress.json
 # "Secrets" panel instead, never commit a real secrets.toml
 .streamlit/secrets.toml
 
+# Git Simulator sandboxes — real local git repos generated/wiped per browser
+# session by git_sim.py, never something to commit
+git_sim_sandboxes/
+
 # misc local scratch — not read by any server route, not needed to deploy
 transcripts/
 .claude/

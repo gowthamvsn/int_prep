@@ -237,6 +237,18 @@ Incremental upsert/delete by ID — nothing else needs to be touched. Keep a doc
 
 **Tools:** Qdrant and Pinecone both expose a plain `upsert(id, vector, payload)` call. In pgvector it's just an `UPDATE` on the row.
 
+### 11. When would you choose a larger LLM versus improving retrieval?
+
+Diagnose before spending money on either. If the right chunks are being retrieved and the model still gets it wrong — weak synthesis, or a query that needs multi-step reasoning over several facts at once — that's a generation-capability problem, upgrade the model. If retrieval isn't surfacing the right chunks in the first place, a bigger model just reasons more confidently over the wrong context, which is strictly worse, not better. Check retrieval quality before ever touching the model tier — the far more common real-world finding is that retrieval is the bottleneck, not the LLM.
+
+**Tools:** **RAGAS**'s `context_precision`/`context_recall` to isolate which side is actually failing before paying for a bigger model.
+
+### 12. What makes a good embedding model?
+
+Domain match beats raw benchmark rank — a general-purpose model trained mostly on web text can lose to a smaller domain-tuned one on legal, medical, or code text, since it's never seen that vocabulary distribution. Past that: dimensionality (higher isn't free — more storage and slower search for a diminishing quality return past a point), and whether it's **symmetric** (built for matching similar-length texts) or **asymmetric** (built for short-query-to-long-document matching — the actual shape of RAG retrieval). Treat a leaderboard rank as a shortlist filter, not a final verdict — validate on an in-domain eval set before committing, the same discipline as chunk size in Q2.
+
+**Tools:** **MTEB** leaderboard to shortlist candidates; **BGE-large-en-v1.5** or **Cohere embed-v3** for asymmetric retrieval; a small in-domain eval set to confirm the shortlisted pick before it goes to production.
+
 ---
 
 ## 04 · Prompt Engineering

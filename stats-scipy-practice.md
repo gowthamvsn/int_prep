@@ -1,23 +1,42 @@
-# Statistics with SciPy/statsmodels — Built as a Chain, Not a List
+# Statistics with SciPy/statsmodels
 
-`from scipy import stats; import statsmodels.api as sm; import numpy as np` assumed throughout.
+This doc assumes `from scipy import stats; import statsmodels.api as sm; import numpy as np` throughout.
 
-Every cluster below is one continuous thread — each numbered question inherits directly from the answer before it, the way you'd actually ask it out loud if you kept saying "okay but then..." No raw LaTeX anywhere on this page — every formula is written out in plain, readable symbols (`x̄`, `μ`, `σ`, `√`, `Σ`) inside a code block, because notation nobody can read at a glance teaches nothing. Every cluster ends with one small worked example carrying real numbers end to end, and every cluster closes with "what else is in this family" so a single method never looks like the only option.
+Every cluster below builds on the one before it. No fancy notation — every formula is written out in plain symbols (`x̄`, `μ`, `σ`, `√`, `Σ`) inside a code block, so you can actually read it. Every cluster ends with one small worked example using real numbers, start to finish.
 
 ---
 
 ## Cluster 1 — The Basic Idea of a Hypothesis Test
 
-### 1. What is a sample, and why do we use one instead of measuring everyone?
-A **sample** is a smaller, manageable subset of data pulled from a much larger **population** you actually care about. You use a sample because measuring the whole population is usually impossible or absurdly expensive (you can't test every locomotive bearing ever made, or survey every customer who will ever exist) — the entire goal of everything below is to use the sample to make a trustworthy statement about the population you didn't fully measure.
+### 1. What is a sample, and why not just measure everyone?
+
+A **population** is everyone or everything you actually care about. A **sample** is a smaller, manageable piece of it that you actually measure.
+
+You use a sample because measuring the whole population is usually impossible, or absurdly expensive. You can't test every locomotive bearing ever made. You can't survey every customer who will ever exist.
+
+Everything in this doc exists to answer one question: given only a sample, how do you make a trustworthy statement about the full population you didn't measure?
 
 ### 2. Do two samples always come from the same population?
-Not necessarily — that's exactly the question a hypothesis test answers. The **null hypothesis (H₀)** starts by *assuming* they do (no real difference between them, any gap you see is just random sampling noise); the test then checks whether your data makes that assumption look implausible. If it does, you reject H₀ and conclude the two samples more likely came from genuinely different populations (i.e., there's a real effect).
+
+Not necessarily. That's the exact question a hypothesis test answers.
+
+Start by assuming they do come from the same population — no real difference, any gap you see is just random noise. This starting assumption is called the **null hypothesis**, written `H₀`.
+
+Then check whether your actual data makes that assumption look believable, or not. If the data makes `H₀` look implausible, you reject it, and conclude there's probably a real difference.
 
 ### 3. Why is the null hypothesis value so often exactly zero?
-The **null hypothesis value** (written `μ₀`) is whatever number H₀ claims is true. It's conventionally zero because "zero" is the mathematical way of saying "no difference, no effect, no change" — testing whether a new drug changes blood pressure means testing whether the *difference* in means is zero; testing whether a coin is fair means testing whether its bias away from 50% is zero. Zero isn't special mathematically, it's just what "nothing is happening" looks like as a number.
 
-### 4. Given a sample and a null value to test against, how do you actually measure how far apart they are (the t-statistic)?
+The **null hypothesis value**, written `μ₀`, is whatever number `H₀` claims is true.
+
+It's usually zero because zero is the mathematical way of saying "nothing is happening."
+
+- Testing whether a new drug changes blood pressure means testing whether the *difference* in means is zero.
+- Testing whether a coin is fair means testing whether its bias away from 50% is zero.
+
+Zero isn't mathematically special. It's just what "no effect" looks like as a number.
+
+### 4. How do you measure how far apart a sample and a null value are? (the t-statistic)
+
 ```
 t = (x̄ − μ₀) / (s / √n)
 
@@ -26,32 +45,63 @@ x̄  = sample mean
 s  = sample standard deviation
 n  = sample size
 ```
-This is a **one-sample t-test** shape — comparing one sample's mean against a fixed benchmark value. Read it as a ratio: the top (`x̄ − μ₀`) is the raw gap you observed; the bottom (`s / √n`, the **standard error**) is how much noise you'd expect a sample of this size and spread to naturally produce. A large `t` means the gap is big *relative to the noise you'd expect by chance* — small noise (small `s`) or a big sample (`n` large, shrinking `s/√n`) makes even a modest-looking gap register as a large `t`.
 
-### 5. What does the SIZE of that t-statistic actually buy you (why compute it at all)?
-The raw value of `t` gets converted into a **p-value** — the probability of seeing a gap at least this extreme *if the null hypothesis (μ₀, no real difference) were actually true*. A large `|t|` → a small p-value → "this gap is surprising if nothing real were going on" → reject H₀. A small `|t|` → a large p-value → "this gap is exactly the kind of noise you'd expect anyway" → fail to reject H₀. The t-statistic is the intermediate number; the p-value is the thing you actually report and act on.
+This shape is called a **one-sample t-test** — comparing one sample's mean against a fixed benchmark.
 
-### 6. What does that p-value NOT mean — the misreading everyone falls into?
-p = 0.03 means "if nothing real were going on, you'd still see a gap this big about 3% of the time by pure chance." It is **not** "there's a 97% chance the effect is real," and it is **not** "there's a 3% chance the null hypothesis is true." The p-value is a statement about how surprising your DATA is under an assumption (H₀), not a probability attached to the hypothesis itself — this exact mix-up is one of the most commonly tested statistics-literacy traps in interviews.
+Read it as a ratio:
+- The top (`x̄ − μ₀`) is the raw gap you actually observed.
+- The bottom (`s / √n`, called the **standard error**) is how much noise you'd expect from a sample of this size and spread, just by chance.
 
-### 7. Comparing TWO samples instead of one sample against a fixed value — what changes?
+A large `t` means the gap is big *compared to the noise you'd expect randomly*. Two things can make `t` large: small noise (small `s`), or a big sample (large `n`, which shrinks `s/√n`). Either one can turn even a modest-looking gap into a large `t`.
+
+### 5. What does the size of the t-statistic actually buy you?
+
+The raw `t` value gets converted into a **p-value** — the probability of seeing a gap at least this extreme, *if the null hypothesis were actually true*.
+
+- A large `|t|` → a small p-value → "this gap would be surprising if nothing real were going on" → reject `H₀`.
+- A small `|t|` → a large p-value → "this gap is exactly the kind of noise you'd expect anyway" → fail to reject `H₀`.
+
+The t-statistic is the intermediate step. The p-value is the number you actually report and act on.
+
+### 6. What does a p-value NOT mean?
+
+`p = 0.03` means: "if nothing real were going on, you'd still see a gap this big about 3% of the time, purely by chance."
+
+Here's what it does **not** mean:
+- It does **not** mean "there's a 97% chance the effect is real."
+- It does **not** mean "there's a 3% chance the null hypothesis is true."
+
+A p-value is a statement about how surprising your *data* is, under an assumption. It is not a probability attached to the hypothesis itself. This exact mix-up is one of the most commonly tested statistics traps in interviews.
+
+### 7. What changes when you're comparing TWO samples instead of one against a fixed value?
+
 ```python
 group_a = [82, 85, 79, 91, 88]
 group_b = [76, 74, 80, 71, 77]
 t_stat, p_value = stats.ttest_ind(group_a, group_b, equal_var=False)
 ```
-Same underlying idea — `(gap between means) / (expected noise)` — just now the "gap" is `mean(group_a) − mean(group_b)` instead of `x̄ − μ₀`, and the standard error accounts for BOTH samples' variability and sizes instead of just one. `equal_var=False` runs **Welch's t-test**, which doesn't assume the two groups have equal variance (a real, frequently-violated assumption — see Cluster 3 for how to actually check this) — the classic Student's t-test can give a misleadingly confident, too-small p-value when variances genuinely differ.
 
-### 8. One-tailed or two-tailed — how does deciding the direction in advance change the p-value?
+Same underlying idea as before: `(gap between means) / (expected noise)`. Two things change:
+- The "gap" is now `mean(group_a) − mean(group_b)`, instead of `x̄ − μ₀`.
+- The standard error now accounts for *both* samples' variability and sizes, instead of just one.
+
+`equal_var=False` runs **Welch's t-test**, which doesn't assume both groups have the same variance. That's a real assumption, and it's frequently wrong in practice — Cluster 3 shows you how to actually check it. The classic Student's t-test (which does assume equal variance) can give you a misleadingly confident, too-small p-value when the variances genuinely differ.
+
+### 8. One-tailed or two-tailed — how does deciding the direction change the p-value?
+
 ```python
 # two-tailed (default): "is group_a's mean DIFFERENT from group_b's, in either direction?"
 t_stat, p_two = stats.ttest_ind(group_a, group_b, equal_var=False, alternative="two-sided")
+
 # one-tailed: "is group_a's mean SPECIFICALLY GREATER?" -- a stronger, narrower claim
 t_stat, p_one = stats.ttest_ind(group_a, group_b, equal_var=False, alternative="greater")
 ```
-A two-tailed test spreads your 5% error budget (α) across BOTH ends ("is A bigger, or is B bigger") — a one-tailed test spends the whole budget on one specific end, because you've committed in advance to only caring about that direction. For symmetric data, the one-tailed p-value comes out to roughly *half* the two-tailed value on identical numbers — which is exactly why the direction has to be picked *before* looking at the data, not after ("we always expected ours to be better, so let's re-run one-tailed" after a two-tailed result narrowly missed significance is p-hacking, not a legitimate choice).
 
-**Visual — where the rejection region (the shaded "surprising enough" zone) actually sits:**
+A **two-tailed test** splits your error budget (usually 5%) across both directions — "is A bigger, or is B bigger." A **one-tailed test** spends the whole budget on just one direction, because you've committed in advance to only caring about that one.
+
+For the same data, a one-tailed p-value comes out to roughly *half* the two-tailed value. That's exactly why you have to pick the direction *before* looking at the data — not after. Running a two-tailed test, seeing it narrowly miss significance, and then switching to one-tailed "because we always expected ours to be better" is p-hacking. It's picking the test that gives you the answer you want.
+
+Here's where the "reject" zone actually sits, visually:
 ```
 TWO-TAILED                                   ONE-TAILED (alternative="greater")
     reject here    reject here                              reject here
@@ -60,75 +110,123 @@ TWO-TAILED                                   ONE-TAILED (alternative="greater")
    2.5% in EACH tail = 5% total                 all 5% in the ONE tail
 ```
 
-### 9. What other tests live in this same "compare means" family, for cases the two-sample t-test doesn't fit?
-- **Paired t-test** — the two samples are actually the SAME subjects measured twice (before/after), not independent groups (Cluster 2).
-- **ANOVA** — comparing three or more group means at once, not just two (Cluster 2).
-- **Mann-Whitney U** — comparing two groups when the data isn't normal enough to trust a mean-based test (Cluster 4).
+### 9. What other tests live in this "compare means" family?
 
-### Summary example — tying the whole chain together
-A teacher wants to know if a new teaching method changes test scores. H₀: the true mean difference is zero (no change) — that's `μ₀`. She collects a sample of 25 students' before/after scores, computes `x̄` (the sample's average difference) and `s` (how much that difference varies student to student), and plugs them into `t = (x̄ − μ₀) / (s / √n)`. Suppose `x̄ = 4.2`, `s = 9.1`, `n = 25`: `t = 4.2 / (9.1/5) = 4.2 / 1.82 ≈ 2.31`. That `t ≈ 2.31` converts to a two-tailed p-value around 0.03 — small enough to reject H₀ and conclude the method likely does change scores, while staying honest that "likely" is exactly what a p-value of 0.03 (not 0.97, not certainty) actually supports.
+- **Paired t-test** — the two samples are actually the SAME subjects, measured twice (before/after), not two independent groups. (Cluster 2)
+- **ANOVA** — comparing three or more group means at once, not just two. (Cluster 2)
+- **Mann-Whitney U** — comparing two groups when the data isn't normal enough to trust a mean-based test. (Cluster 4)
+
+### Summary example
+
+A teacher wants to know if a new teaching method changes test scores.
+
+- `H₀`: the true mean difference is zero — no real change. That's `μ₀`.
+- She collects before/after scores from 25 students.
+- She computes `x̄` (the average difference) and `s` (how much that difference varies student to student).
+- She plugs them in: `t = (x̄ − μ₀) / (s / √n)`.
+
+Say `x̄ = 4.2`, `s = 9.1`, `n = 25`:
+```
+t = 4.2 / (9.1/5) = 4.2 / 1.82 ≈ 2.31
+```
+
+That `t ≈ 2.31` converts to a two-tailed p-value around 0.03. Small enough to reject `H₀`. Her honest conclusion: the method likely does change scores — and "likely" is exactly what p = 0.03 supports. Not certainty. Not 97%.
 
 ---
 
 ## Cluster 2 — Comparing Groups That Aren't a Simple Two-Sample Split
 
 ### 1. What if the two samples aren't independent — they're the SAME people, measured twice?
+
 ```python
 before = [70, 75, 68, 80, 72]
 after  = [74, 78, 70, 85, 77]
 t_stat, p_value = stats.ttest_rel(before, after)
 ```
-`ttest_ind` treats the two lists as unrelated groups and throws away the fact that `before[i]` and `after[i]` are the same person — that pairing is real information (person 3's own baseline matters more than the group average does). `ttest_rel` (the **paired t-test**) works on the per-person DIFFERENCES (`after[i] − before[i]`) directly, which removes person-to-person variation that has nothing to do with the treatment, giving a more powerful, correctly-specified test whenever the pairing is real.
+
+`ttest_ind` treats the two lists as unrelated groups. It throws away the fact that `before[i]` and `after[i]` are the same person. That pairing is real, useful information — person 3's own starting point matters more than the group average does.
+
+`ttest_rel`, the **paired t-test**, works directly on the per-person differences (`after[i] − before[i]`). This removes person-to-person variation that has nothing to do with the actual treatment, giving you a more powerful and correctly-specified test whenever the pairing is real.
 
 ### 2. What if there's no second group at all — just one sample and a fixed target?
-That's exactly the one-sample t-test from Cluster 1, question 4 — `t = (x̄ − μ₀) / (s/√n)`, with `μ₀` as the fixed benchmark (a spec value, a regulatory limit, a historical baseline) rather than a second group's mean.
 
-### 3. What if there are THREE OR MORE groups — why not just run pairwise t-tests on every pair?
+That's the one-sample t-test from Cluster 1, question 4: `t = (x̄ − μ₀) / (s/√n)`. Here, `μ₀` is a fixed benchmark — a spec value, a regulatory limit, a historical baseline — rather than a second group's mean.
+
+### 3. What if there are three or more groups? Why not just run pairwise t-tests on every pair?
+
 ```python
 group_a = [82, 85, 79, 91, 88]
 group_b = [76, 74, 80, 71, 77]
 group_c = [90, 95, 92, 88, 94]
 f_stat, p_value = stats.f_oneway(group_a, group_b, group_c)
 ```
-Each individual t-test at α=0.05 carries its own 5% false-positive chance. Three separate pairwise tests (A-vs-B, B-vs-C, A-vs-C) compound that risk — this is the **multiple comparisons problem**, covered in full in Cluster 9. **ANOVA** (`f_oneway`) tests the single, combined question "are ANY of these means different" in one test at the stated α, instead of stacking three separately-risky tests.
 
-### 4. How does ANOVA's F-statistic actually work — what is it comparing?
+Each individual t-test at the 5% level carries its own 5% chance of a false positive. Running three separate pairwise tests (A-vs-B, B-vs-C, A-vs-C) compounds that risk. This is called the **multiple comparisons problem** — Cluster 9 covers it in full.
+
+**ANOVA** (`f_oneway`) tests one combined question — "are ANY of these means different" — in a single test, at the level you actually stated. Instead of stacking three separately-risky tests.
+
+### 4. How does ANOVA's F-statistic actually work?
+
 ```
 F = (variance BETWEEN group means) / (variance WITHIN each group)
 ```
-If the groups are truly identical, the spread *between* their means should look about the same size as the ordinary noise *within* any one group — `F ≈ 1`. If the groups are genuinely different, the between-group spread dwarfs the within-group noise — `F` gets large, and the p-value gets small. This is why ANOVA needs the variances to be reasonably similar across groups in the first place (the same `equal_var` idea from Cluster 1, tested properly in Cluster 3) — the whole comparison assumes "within-group noise" means roughly the same thing in every group.
 
-### 5. ANOVA says the groups differ — but WHICH ones? Why can't you just run pairwise t-tests now?
+If the groups are truly identical, the spread *between* their means should look about the same size as the ordinary noise *within* any one group. That gives you `F ≈ 1`.
+
+If the groups are genuinely different, the between-group spread dwarfs the within-group noise. `F` gets large, and the p-value gets small.
+
+This is also why ANOVA needs the variances to be reasonably similar across groups in the first place (the same `equal_var` idea from Cluster 1, checked properly in Cluster 3). The comparison only makes sense if "within-group noise" means roughly the same thing in every group.
+
+### 5. ANOVA says the groups differ. But which ones? Why not just run pairwise t-tests now?
+
 ```python
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 data = group_a + group_b + group_c
 labels = ["A"]*len(group_a) + ["B"]*len(group_b) + ["C"]*len(group_c)
 print(pairwise_tukeyhsd(data, labels))
 ```
-Falling back to raw pairwise t-tests here re-introduces exactly the multiple-comparisons risk ANOVA was used to avoid in the first place. **Tukey's HSD** runs the pairwise comparisons you now legitimately want, with a built-in correction for testing multiple pairs at once — you get which-pairs-differ answers without re-inflating the false-positive rate.
+
+Falling back to raw pairwise t-tests here brings back the exact multiple-comparisons risk ANOVA was used to avoid in the first place.
+
+**Tukey's HSD** runs the pairwise comparisons you now legitimately want, with a built-in correction for testing multiple pairs at once. You get which-pairs-differ answers, without re-inflating the false-positive rate.
 
 ### 6. What else lives in this "comparing groups" family?
-- **Levene's test** — do the groups have the same VARIANCE, a different question from "same mean" entirely (Cluster 3).
-- **Mann-Whitney U / Kruskal-Wallis** — the rank-based versions of the two-sample t-test and ANOVA, for when the data isn't normal enough to trust either (Cluster 4).
-- **Chi-square** — comparing groups defined by CATEGORIES instead of a numeric measurement (Cluster 5).
+
+- **Levene's test** — do the groups have the same VARIANCE? A completely different question from "same mean." (Cluster 3)
+- **Mann-Whitney U / Kruskal-Wallis** — the rank-based versions of the two-sample t-test and ANOVA, for when your data isn't normal enough to trust either. (Cluster 4)
+- **Chi-square** — comparing groups defined by CATEGORIES instead of a numeric measurement. (Cluster 5)
 
 ### Summary example
-Comparing defect rates across 3 manufacturing shifts. `f_oneway` on the three shifts' daily defect counts gives `F = 6.8, p = 0.004` — small enough to conclude at least one shift genuinely differs. Running `pairwise_tukeyhsd` afterward shows Shift 2 vs. Shift 3 is the significant pair (p=0.01), while Shift 1 vs. either other shift isn't (p>0.3) — the two-step process (ANOVA to detect ANY difference, Tukey to localize WHICH pair) is what correctly answers "which shift has a problem" without the false-positive inflation of just running three raw t-tests from the start.
+
+Comparing defect rates across 3 manufacturing shifts.
+
+`f_oneway` on the three shifts' daily defect counts gives `F = 6.8, p = 0.004` — small enough to conclude at least one shift genuinely differs.
+
+Running `pairwise_tukeyhsd` next shows Shift 2 vs. Shift 3 is the significant pair (`p = 0.01`), while Shift 1 vs. either other shift isn't (`p > 0.3`).
+
+This two-step process — ANOVA first to detect *any* difference, then Tukey to find *which* pair — correctly answers "which shift has a problem" without the false-positive risk of just running three raw t-tests from the start.
 
 ---
 
 ## Cluster 3 — Comparing Variance Itself, Not Just the Mean
 
 ### 1. Can two groups have identical means but still be meaningfully different?
-Yes — and it's a real, common blind spot. `group_a = [10, 12, 11, 13, 9]` and `group_b = [5, 20, 2, 25, 3]` both have mean 11, **identical**. A t-test comparing these would find no difference at all, because a t-test only ever looks at means. But `group_b` swings from 2 to 25 while `group_a` stays tightly between 9 and 13 — a real, measurable difference in consistency that a mean-based test is structurally blind to.
+
+Yes. And it's a common blind spot.
+
+`group_a = [10, 12, 11, 13, 9]` and `group_b = [5, 20, 2, 25, 3]` — both have a mean of 11. Identical. A t-test comparing these would find no difference at all, because a t-test only ever looks at means.
+
+But `group_b` swings all the way from 2 to 25, while `group_a` stays tightly between 9 and 13. That's a real, measurable difference in consistency. A mean-based test is completely blind to it.
 
 ### 2. How do you actually test whether two groups' VARIANCES differ?
+
 ```python
 stat, p_value = stats.levene(group_a, group_b)
 ```
-**Levene's test** (preferred over the older classic F-test because it doesn't require the data to be normally distributed) tests specifically whether the spread differs, independent of whether the means differ.
 
-**Visual — same center, different width, a shape a t-test cannot see:**
+**Levene's test** checks specifically whether the spread differs, independent of whether the means differ. It's preferred over the older classic F-test because it doesn't require your data to be normally distributed.
+
+Same center, very different width — a shape a t-test simply cannot see:
 ```
 group_a:        group_b:
     ▁▃▅█▅▃▁          ▂▂▂▃▃▃▃▃▂▂▂
@@ -137,39 +235,65 @@ group_a:        group_b:
    (mean = 11)            (mean = 11, SAME)
 ```
 
-### 3. How does this connect back to `equal_var=False` from the very first t-test in Cluster 1?
-Directly — `equal_var=False` was choosing Welch's t-test specifically *because* the analyst can't assume the two groups have equal variance. Levene's test is how you'd actually CHECK that assumption with a number instead of guessing: run Levene's first, and if it comes back significant (variances genuinely differ), that's your confirmation that Welch's (not classic Student's) t-test was the right call all along.
+### 3. How does this connect back to `equal_var=False` from Cluster 1?
+
+Directly. `equal_var=False` was choosing Welch's t-test *because* you can't assume the two groups have equal variance.
+
+Levene's test is how you'd actually check that assumption with a real number, instead of guessing. Run Levene's first. If it comes back significant — meaning the variances genuinely differ — that confirms Welch's (not the classic Student's) t-test was the right call all along.
 
 ### 4. Where does this matter outside of picking a t-test variant?
-Anywhere consistency itself is the thing being measured — comparing two manufacturing processes with identical average output but very different variability, comparing two model versions' prediction consistency even when their average accuracy matches, or comparing two ad campaigns' conversion rates when one is wildly inconsistent day to day and the other isn't.
+
+Anywhere consistency itself is the thing being measured:
+- Two manufacturing processes with identical average output, but very different variability.
+- Two model versions with matching average accuracy, but very different prediction consistency.
+- Two ad campaigns with the same average conversion rate, but one is wildly inconsistent day to day.
 
 ### Summary example
-Two production lines both average 11 units/hour defect-free output. Line A's hourly counts barely move (`[10,12,11,13,9]`); Line B swings wildly (`[5,20,2,25,3]`). `stats.levene(line_a, line_b)` returns a small p-value — the variances are genuinely different even though `stats.ttest_ind` on the same data would report no significant difference in the means at all. The honest conclusion: Line B isn't worse on average, but it's far less predictable, which is itself an operational problem a mean-only comparison would have completely missed.
+
+Two production lines both average 11 units/hour of defect-free output.
+
+Line A's hourly counts barely move: `[10,12,11,13,9]`. Line B swings wildly: `[5,20,2,25,3]`.
+
+`stats.levene(line_a, line_b)` returns a small p-value — the variances are genuinely different. But `stats.ttest_ind` on the same two lines would report no significant difference in the means at all.
+
+The honest conclusion: Line B isn't worse *on average*. But it's far less predictable — which is itself a real operational problem that a mean-only comparison would have completely missed.
 
 ---
 
 ## Cluster 4 — When the Data Isn't Well-Behaved
 
-### 1. What does "normally distributed" actually mean, and why do t-tests/ANOVA lean on it?
-A normal distribution is the familiar symmetric bell curve — most values cluster near the mean, with progressively fewer values further out in either direction, in a specific, predictable proportion. The t-test and ANOVA's p-value math is built assuming the underlying data (or at least the sampling distribution of the mean) follows this shape closely enough — badly skewed data or a few extreme outliers can distort the mean and standard deviation enough to make the resulting p-value untrustworthy.
+### 1. What does "normally distributed" mean, and why do t-tests and ANOVA lean on it?
 
-### 2. How do you actually check whether your data is normal enough to trust, instead of assuming?
+A normal distribution is the familiar symmetric bell curve — most values cluster near the mean, with fewer and fewer values as you move further out, in a specific, predictable proportion.
+
+The math behind t-test and ANOVA p-values assumes your data (or at least the sampling distribution of its mean) follows this shape closely enough. Badly skewed data, or a few extreme outliers, can distort the mean and standard deviation enough to make the resulting p-value untrustworthy.
+
+### 2. How do you actually check whether your data is normal enough to trust?
+
 ```python
 stat, p_value = stats.shapiro(sample)
 ```
-**Shapiro-Wilk** tests the null hypothesis "this data IS normally distributed" — a small p-value here means you should be suspicious of the normality assumption. **The catch:** with a very large sample, Shapiro-Wilk becomes hyper-sensitive and flags trivial, practically-irrelevant deviations from perfect normality as "significant" — a Q-Q plot (plotting your data's quantiles against a normal distribution's) is often more useful to actually LOOK at than the p-value alone once `n` is large.
 
-### 3. Shapiro-Wilk says the data ISN'T normal enough — now what?
+**Shapiro-Wilk** tests the hypothesis "this data IS normally distributed." A small p-value here means you should be suspicious of that assumption.
+
+**One catch:** with a very large sample, Shapiro-Wilk gets hyper-sensitive. It will flag trivial, practically-irrelevant deviations from perfect normality as "significant." Once your sample is large, a Q-Q plot (plotting your data's quantiles against a normal distribution's) is often more useful to actually look at than the p-value alone.
+
+### 3. Shapiro-Wilk says the data isn't normal enough. Now what?
+
 Reach for a **non-parametric test** — the rank-based cousin of whichever mean-based test you were about to run:
+
 ```python
 stat, p_value = stats.mannwhitneyu(group_a, group_b)     # non-parametric alternative to ttest_ind
 stat, p_value = stats.kruskal(group_a, group_b, group_c)  # non-parametric alternative to ANOVA
 ```
 
-### 4. How do these actually work — what does "non-parametric" mean mechanically?
-Instead of comparing raw values (which a few extreme outliers can dominate), Mann-Whitney U and Kruskal-Wallis convert every value to its RANK (1st smallest, 2nd smallest, ...) across all groups combined, and test whether those ranks are randomly mixed between groups or systematically clustered. A single extreme outlier can only ever shift by one rank position no matter how extreme it is — this is exactly why these tests are robust to the two problems (outliers, non-normality) that make a mean-based test untrustworthy.
+### 4. How do these actually work? What does "non-parametric" mean, mechanically?
 
-**Visual — the same value-vs-rank tradeoff as Pearson vs. Spearman correlation (Cluster 6), applied to comparing groups instead:**
+Instead of comparing raw values (which a few extreme outliers can dominate), Mann-Whitney U and Kruskal-Wallis convert every value to its **rank** — 1st smallest, 2nd smallest, and so on — across all groups combined. Then they test whether those ranks are randomly mixed between groups, or systematically clustered.
+
+A single extreme outlier can only ever shift by one rank position, no matter how extreme it actually is. That's exactly why these tests are robust to the two problems — outliers and non-normality — that make a mean-based test untrustworthy.
+
+This is the same value-vs-rank tradeoff you'll see again in Cluster 6, comparing Pearson and Spearman correlation:
 ```
               uses raw VALUES              uses RANKS instead
   compare 2   t-test (ttest_ind)           Mann-Whitney U
@@ -177,26 +301,36 @@ Instead of comparing raw values (which a few extreme outliers can dominate), Man
 ```
 
 ### Summary example
-Response times for a support system, heavily skewed by a handful of multi-hour outlier tickets. `stats.shapiro(response_times)` comes back with p < 0.001 — not normal, an outlier-dominated t-test would be untrustworthy here. Switching to `stats.mannwhitneyu(team_a_times, team_b_times)` instead compares the two teams' RANKS rather than their raw (outlier-corrupted) times, giving a trustworthy answer to "is one team genuinely faster" that the raw-value comparison couldn't provide.
+
+Response times for a support system, heavily skewed by a handful of multi-hour outlier tickets.
+
+`stats.shapiro(response_times)` comes back with `p < 0.001` — not normal. A t-test here, dominated by those outliers, would be untrustworthy.
+
+Switching to `stats.mannwhitneyu(team_a_times, team_b_times)` instead compares the two teams' *ranks*, not their raw (outlier-corrupted) times. That gives a trustworthy answer to "is one team genuinely faster" — one the raw-value comparison couldn't have given you.
 
 ---
 
 ## Cluster 5 — Two Categorical Variables
 
 ### 1. What if neither variable is a number at all — both are categories?
-Comparing means (everything in Clusters 1-4) doesn't apply when there's nothing to average — e.g. "device type" (mobile/desktop) and "converted" (yes/no) are both categories, not numbers. The question becomes "are these two categorical variables ASSOCIATED" instead of "do these means differ."
+
+Everything in Clusters 1–4 compares means, which doesn't apply when there's nothing to average. "Device type" (mobile/desktop) and "converted" (yes/no) are both categories, not numbers.
+
+The question changes from "do these means differ" to "are these two categorical variables ASSOCIATED."
 
 ### 2. How do you actually test for association between two categorical variables?
+
 ```python
 observed = np.array([[50, 30], [20, 40]])    # rows = category A levels, cols = category B levels
 chi2, p_value, dof, expected = stats.chi2_contingency(observed)
 ```
-The chi-square statistic compares your real counts (`observed`) against the counts you'd expect if the two variables were completely unrelated (`expected`, computed from the row/column totals alone):
+
+The chi-square statistic compares your real counts (`observed`) against the counts you'd *expect* if the two variables had no relationship at all (`expected`, computed purely from the row and column totals):
 ```
 chi² = Σ (observed − expected)² / expected
 ```
 
-**Visual — the whole test as "how far apart are these two grids":**
+Here's the whole test as "how far apart are these two grids":
 ```
 OBSERVED (what really happened)        EXPECTED (if the two variables were
                                          totally unrelated -- just row% × col%)
@@ -205,32 +339,49 @@ OBSERVED (what really happened)        EXPECTED (if the two variables were
  A=1  [ 20    40 ]  60                  A=1  [ 28    32 ]  60
         70    70   140                        70     70   140
 ```
-Big gaps between the two grids → big chi² → small p-value → a real association. **Why also look at `expected`, not just the p-value:** the p-value only says IF there's an association; comparing the two grids directly shows you the DIRECTION (here, A=0 over-represents B=0 relative to what independence would predict).
+
+Big gaps between the two grids → big chi² → small p-value → a real association.
+
+**Why also look at `expected`, not just the p-value:** the p-value only tells you *if* there's an association. Comparing the two grids directly shows you the *direction* — here, A=0 shows up with B=0 more than independence alone would predict.
 
 ### 3. What assumption does this test need, and how do you check it?
+
 ```python
 if (expected < 5).any():
     print("warning: some expected cell counts are below 5 — chi-square approximation may be unreliable")
 ```
-Chi-square is itself an approximation that assumes reasonably large expected counts in every cell — with small samples or rare categories, that approximation breaks down and the p-value can't be trusted. Mentioning this check unprompted is exactly the kind of assumption-awareness that separates a senior answer from a "ran the function, reported the number" answer.
+
+Chi-square is itself an approximation. It assumes reasonably large expected counts in every cell. With small samples or rare categories, that approximation breaks down, and the p-value can't be trusted. Mentioning this check without being asked is exactly the kind of assumption-awareness that separates a senior answer from a "ran the function, reported the number" answer.
 
 ### Summary example
-Testing whether mobile vs. desktop users convert at different rates. `observed = [[50,30],[20,40]]` (mobile: 50 converted/30 didn't; desktop: 20/40). `chi2_contingency` returns chi²≈15.2, p<0.001 — a real association. Comparing `expected` (`[[42,38],[28,32]]`) to `observed` shows mobile converts MORE than independence would predict (50 vs. expected 42) — the direction the p-value alone couldn't tell you.
+
+Testing whether mobile vs. desktop users convert at different rates.
+
+`observed = [[50,30],[20,40]]` — mobile: 50 converted, 30 didn't; desktop: 20 converted, 40 didn't.
+
+`chi2_contingency` returns `chi² ≈ 15.2, p < 0.001` — a real association.
+
+Comparing `expected` (`[[42,38],[28,32]]`) to `observed` shows mobile converts *more* than independence would predict (50 vs. an expected 42). That's the direction the p-value alone couldn't have told you.
 
 ---
 
 ## Cluster 6 — Correlation Between Two Numeric Variables
 
 ### 1. What does it actually mean for two numeric variables to be "correlated"?
-That they tend to move together — as one goes up, the other tends to go up (positive) or down (negative), consistently enough to not look like coincidence.
+
+They tend to move together. As one goes up, the other tends to go up too (positive correlation), or down (negative correlation) — consistently enough that it doesn't look like coincidence.
 
 ### 2. How do you measure that, and what does the resulting number mean?
+
 ```python
 r, p_value = stats.pearsonr(df["age_days"], df["wear_pct"])
 ```
-**Pearson's r** ranges from -1 to +1. `|r|` is how TIGHT the relationship is (how close the points sit to a straight line); the sign is whether it rises or falls.
 
-**Visual — what each r value actually looks like as a scatterplot, so a reported number maps to a picture, not just a range:**
+**Pearson's r** ranges from -1 to +1.
+- `|r|` (the size, ignoring the sign) tells you how *tight* the relationship is — how close the points sit to a straight line.
+- The sign tells you whether it rises or falls.
+
+Here's what different r values actually look like as a scatterplot:
 ```
 r = 0.95 (strong+)     r = 0.5 (moderate)     r ≈ 0.0 (none)      r = -0.9 (strong-)
  .                       .    .                  .   .   .          .
@@ -242,47 +393,63 @@ r = 0.95 (strong+)     r = 0.5 (moderate)     r ≈ 0.0 (none)      r = -0.9 (st
   left-to-right   still trending up   pattern at all       left-to-right
 ```
 
-### 3. When does Pearson's r give a misleading answer, and what's the alternative?
+### 3. When does Pearson's r give a misleading answer?
+
 ```python
 rho, p_value_s = stats.spearmanr(df["age_days"], df["wear_pct"])
 ```
-Pearson's r specifically measures LINEAR association — a real, strong, consistently-increasing-but-CURVED relationship still drags Pearson's r down, because the relationship isn't a straight line, even though it's a genuinely strong monotonic trend. **Spearman's rho** works on ranks instead of raw values, so it only cares whether the relationship is consistently monotonic (always increasing or always decreasing), catching non-linear-but-monotonic relationships Pearson understates.
 
-### 4. What's next once you know two variables are correlated — can you predict one from the other?
-That's regression (Cluster 7) — correlation tells you THAT two variables move together; regression gives you an actual equation for predicting one from the other, plus a number (R²) for how much of the variation that equation actually explains.
+Pearson's r specifically measures *linear* association — a straight-line fit. A real, strong relationship that's consistently increasing but *curved* still drags Pearson's r down, even though it's a genuinely strong trend. It just isn't a straight line.
+
+**Spearman's rho** works on ranks instead of raw values, so it only cares whether the relationship is consistently monotonic — always increasing, or always decreasing. This catches strong non-linear (but still monotonic) relationships that Pearson understates.
+
+### 4. Once two variables are correlated, can you predict one from the other?
+
+That's regression, covered in Cluster 7. Correlation only tells you *that* two variables move together. Regression gives you an actual equation for predicting one from the other, plus a number (R²) for how much of the variation that equation actually explains.
 
 ### Summary example
-Equipment wear vs. age in days: `pearsonr` gives r=0.61, but the scatterplot curves — wear climbs fast early, then levels off. `spearmanr` gives rho=0.89. Trust Spearman here — the relationship is genuinely strong and consistently increasing, just not a straight line, which is exactly the situation Pearson understates and Spearman doesn't.
+
+Equipment wear vs. age in days: `pearsonr` gives `r = 0.61`. But the scatterplot curves — wear climbs fast early, then levels off.
+
+`spearmanr` gives `rho = 0.89`. Trust Spearman here. The relationship is genuinely strong and consistently increasing — just not a straight line. That's exactly the situation Pearson understates and Spearman catches correctly.
 
 ---
 
 ## Cluster 7 — Regression as an Extension of Correlation
 
-### 1. Correlation says two variables move together — how do I get an actual equation predicting one from the other?
+### 1. How do I get an actual equation predicting one variable from another?
+
 ```python
 X = sm.add_constant(df[["age_days", "mileage"]])   # statsmodels does NOT auto-add an intercept
 model = sm.OLS(df["wear_pct"], X).fit()
 print(model.summary())
 ```
-**Why `sm.add_constant` is a real, easy-to-forget gotcha:** without it, statsmodels fits a line forced through the origin — every coefficient comes out wrong, silently, with no error raised. **Why statsmodels over sklearn here:** `model.summary()` gives p-values, confidence intervals, and R² directly — sklearn's `LinearRegression` gives predictions and coefficients but no built-in statistical inference, because sklearn is built for prediction pipelines, not for explaining a relationship.
 
-### 2. Once fit, how do I know if the equation is actually any good (R²)?
+**Why `sm.add_constant` matters, and is an easy thing to forget:** without it, statsmodels fits a line forced through the origin. Every coefficient comes out wrong — silently, with no error raised.
+
+**Why statsmodels instead of sklearn here:** `model.summary()` gives you p-values, confidence intervals, and R² directly. sklearn's `LinearRegression` gives you predictions and coefficients, but no built-in statistical inference — because sklearn is built for prediction pipelines, not for explaining a relationship.
+
+### 2. Once fit, how do you know if the equation is actually any good?
+
 ```python
 model.rsquared        # e.g. 0.71 -- 71% of the variance in wear_pct is "explained" by age_days + mileage
 ```
 ```
 R² = 1 − (unexplained scatter around the line) / (total scatter around the mean)
 ```
-R² answers "how much better is this equation than just always guessing the average wear_pct for everyone."
 
-### 3. Does adding more predictors always make R² go up — is that a problem?
-Yes, and yes. Plain R² can only stay flat or increase as you add predictors, even completely useless, random ones — the model can always find some tiny coincidental fit in more columns.
+R² answers: "how much better is this equation than just always guessing the average `wear_pct` for everyone?"
+
+### 3. Does adding more predictors always make R² go up? Is that a problem?
+
+Yes, and yes. Plain R² can only stay flat or increase as you add more predictors — even completely useless, random ones — because the model can always find some tiny coincidental fit in more columns.
+
 ```python
 model.rsquared_adj    # e.g. 0.68 -- the same idea, penalized for how many predictors were used
 ```
-**Adjusted R²** charges a penalty per predictor, so it can actually go DOWN when a new feature isn't earning its place — exactly the signal plain R² structurally can't give you. Always report both when comparing models with different numbers of predictors.
 
-**Visual:**
+**Adjusted R²** charges a penalty for every predictor added. That means it can actually go *down* when a new feature isn't earning its place — exactly the warning signal plain R² structurally can't give you. Always report both when comparing models with different numbers of predictors.
+
 ```
   R² = 0.9  ──▶  ●●●●●●●●●●●  tight around the line, line explains almost everything
   R² = 0.3  ──▶  ● ●  ●●  ●    ●  loose scatter, line explains only a little
@@ -292,15 +459,20 @@ model.rsquared_adj    # e.g. 0.68 -- the same idea, penalized for how many predi
   even while plain R² ticks up
 ```
 
-### 4. A high R² still doesn't guarantee the regression is trustworthy — what else has to be checked?
+### 4. A high R² still doesn't guarantee the regression is trustworthy. What else needs checking?
+
 ```python
 residuals = model.resid
 fitted = model.fittedvalues
 # plot residuals vs fitted -- looking for a random cloud, NOT a pattern
 ```
-A good regression's residuals (actual − predicted) should look like structureless noise scattered evenly around zero, regardless of the fitted value. Two patterns to watch for: a **funnel shape** (spread growing/shrinking as fitted values increase) is **heteroscedasticity** — non-constant error variance, which doesn't bias the coefficients themselves but DOES make `model.summary()`'s p-values and confidence intervals untrustworthy, since those are computed assuming constant variance. A **curved band** means the true relationship isn't linear at all — no amount of tuning a linear model fixes a shape problem like that.
 
-**Visual — three residual-plot shapes, three different verdicts:**
+A good regression's residuals (actual minus predicted) should look like structureless noise, scattered evenly around zero, no matter what the fitted value is. Watch for two specific patterns:
+
+- A **funnel shape** — the spread growing or shrinking as fitted values increase. This is called **heteroscedasticity**, or non-constant error variance. It doesn't bias the coefficients themselves, but it *does* make `model.summary()`'s p-values and confidence intervals untrustworthy, since those are computed assuming constant variance.
+- A **curved band** — meaning the true relationship isn't linear at all. No amount of tuning a linear model fixes a shape problem like this.
+
+Three residual-plot shapes, three different verdicts:
 ```
 GOOD (homoscedastic)      BAD (heteroscedastic,          BAD (non-linear,
                            funnel shape)                   curved band)
@@ -313,77 +485,110 @@ spread                    values grow                    line was the wrong shap
 ```
 
 ### 5. What if two predictors are correlated with EACH OTHER, not just with the target?
+
 ```python
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 X_vars = df[["age_days", "mileage", "wear_pct"]]
 vif = pd.DataFrame({"feature": X_vars.columns,
                      "VIF": [variance_inflation_factor(X_vars.values, i) for i in range(X_vars.shape[1])]})
 ```
-**VIF** measures how much a feature's variance is inflated because it's linearly predictable from the OTHER features. VIF=1 means no correlation with other predictors; VIF>5 (some use >10) signals real **multicollinearity** — individual coefficients become unstable and hard to interpret one at a time, even though the model's overall predictions may still be fine.
+
+**VIF** measures how much a feature's variance is inflated because it's predictable from the *other* features in the model. `VIF = 1` means no correlation with other predictors. `VIF > 5` (some use 10) signals real **multicollinearity** — individual coefficients become unstable and hard to interpret one at a time, even though the model's overall predictions may still be fine.
 
 ### Summary example
-Predicting `wear_pct` from `age_days` and `mileage`: R²=0.71, adjusted R²=0.68 (close together — both predictors are pulling real weight). Residual plot shows a random cloud (homoscedastic, linear assumption looks fine). VIF on `age_days` comes back at 6.2 — moderately concerning, since older equipment also tends to have more mileage, meaning the two coefficients individually are less trustworthy even though the overall R² is solid.
+
+Predicting `wear_pct` from `age_days` and `mileage`:
+- `R² = 0.71`, adjusted `R² = 0.68` — close together, meaning both predictors are pulling real weight.
+- The residual plot shows a random cloud — homoscedastic, so the linear assumption looks fine.
+- VIF on `age_days` comes back at 6.2 — moderately concerning, since older equipment also tends to have higher mileage. That means the two coefficients individually are less trustworthy, even though the overall R² is solid.
 
 ---
 
 ## Cluster 8 — How Confident Should You Be In a Single Estimate?
 
-### 1. A sample gives me one number (a mean). How confident should I be that it's close to the true population value?
-That's what a **confidence interval** answers — a range that's likely to contain the true population mean, not just the single point estimate.
+### 1. A sample gives me one number. How confident should I be that it's close to the truth?
+
+That's what a **confidence interval** answers — a range likely to contain the true population value, not just a single point estimate.
 
 ### 2. How do you compute a 95% confidence interval for a mean by hand?
+
 ```python
 mean = sample.mean()
 sem = stats.sem(sample)                      # standard error of the mean = std / sqrt(n)
 ci_low, ci_high = stats.t.interval(confidence=0.95, df=n-1, loc=mean, scale=sem)
 ```
 
-### 3. Why the t-distribution instead of the normal distribution here?
-With a SAMPLE (not the true population), you're also estimating the standard deviation from that same data — that adds extra uncertainty beyond just the mean's own sampling variation. The t-distribution has heavier tails than normal specifically to account for that extra layer of uncertainty, converging to normal only as `n` grows large. Using normal instead of t for a small sample understates how uncertain you really should be.
+### 3. Why use the t-distribution instead of the normal distribution here?
+
+With a *sample* (not the true population), you're also estimating the standard deviation from that same data. That adds an extra layer of uncertainty on top of the mean's own sampling variation.
+
+The t-distribution has heavier tails than normal, specifically to account for that extra uncertainty. It converges to normal only as `n` grows large. Using normal instead of t for a small sample understates how uncertain you really should be.
 
 ### Summary example
-`sample = [102, 98, 105, 110, 95, 101]`, mean=101.8, `sem≈2.2`, `df=5`. `stats.t.interval(0.95, df=5, loc=101.8, scale=2.2)` gives roughly (96.1, 107.6) — you can say "the true population mean is most likely between 96 and 108," a genuinely more useful statement than just reporting 101.8 alone.
+
+`sample = [102, 98, 105, 110, 95, 101]`. Mean = 101.8, standard error ≈ 2.2, `df = 5`.
+
+`stats.t.interval(0.95, df=5, loc=101.8, scale=2.2)` gives roughly `(96.1, 107.6)`.
+
+You can now say: "the true population mean is most likely between 96 and 108." That's a genuinely more useful statement than just reporting 101.8 alone, with no sense of how uncertain that number is.
 
 ---
 
 ## Cluster 9 — When You Run Many Tests at Once
 
-### 1. If I run 20 hypothesis tests on the same dataset, what goes wrong even if nothing real is happening anywhere?
-Each individual test at α=0.05 carries its own 5% false-positive chance. Run 20 independent tests where NOTHING real is going on, and the chance that at least one comes back "significant" purely by luck climbs to roughly `1 − 0.95²⁰ ≈ 64%` — you're now more likely than not to see a fake positive somewhere, just from volume.
+### 1. If I run 20 hypothesis tests on the same dataset, what goes wrong — even if nothing real is happening anywhere?
+
+Each individual test at the 5% level carries its own 5% false-positive chance.
+
+Run 20 independent tests, where *nothing* real is going on in any of them. The chance that at least one comes back "significant," purely by luck, climbs to roughly `1 − 0.95²⁰ ≈ 64%`. You're now more likely than not to see a fake positive somewhere — just from running so many tests.
 
 ### 2. How do you correct for this?
+
 ```python
 from statsmodels.stats.multitest import multipletests
 reject, corrected_pvals, _, _ = multipletests(p_values_list, alpha=0.05, method="fdr_bh")
 ```
-Bonferroni (divide α by the number of tests) is the simplest, most conservative fix; **FDR (False Discovery Rate, Benjamini-Hochberg)** is the more commonly used modern default — it controls the expected PROPORTION of false positives among your significant results rather than the probability of even one, which is less punishingly conservative when you're running many tests.
+
+**Bonferroni** (divide your significance level by the number of tests) is the simplest, most conservative fix.
+
+**FDR — False Discovery Rate, Benjamini-Hochberg** — is the more common modern default. It controls the *expected proportion* of false positives among your significant results, rather than the probability of even one. That makes it less punishingly conservative when you're running many tests at once.
 
 ### Summary example
-A/B testing 20 different button colors against a control, all at once. Without correction, roughly 12-13 of the 20 would show "significant" results purely by chance even if none of them actually work. Applying `multipletests(..., method="fdr_bh")` shrinks the list down to the 1-2 that survive correction — those are the ones actually worth trusting.
+
+A/B testing 20 different button colors against a control, all at once.
+
+Without correction, roughly 12–13 of the 20 would show "significant" results purely by chance, even if none of them actually work.
+
+Applying `multipletests(..., method="fdr_bh")` shrinks that list down to the 1–2 that survive correction. Those are the only ones actually worth trusting.
 
 ---
 
 ## Cluster 10 — Verifying a Method Actually Does What You Think
 
 ### 1. How do you know a statistical method is doing what you think it's doing?
-Generate data with a KNOWN true answer, run the method on it, and check whether it recovers that known answer. This is the single best sanity check available whenever you're not 100% sure a test/method is behaving correctly.
+
+Generate data with a **known** true answer, run the method on it, and check whether it recovers that known answer. This is the single best sanity check available, any time you're not 100% sure a test or method is behaving correctly.
 
 ### 2. How do you simulate data from a known distribution to test a method?
+
 ```python
 rng = np.random.default_rng(42)
 samples = rng.normal(loc=50, scale=10, size=1000)     # 1000 draws from N(50, 10)
 ```
-Now you KNOW the true mean is 50 — running your confidence-interval code on `samples` and checking that 50 falls inside the resulting interval (most of the time, across repeated simulations) verifies the method is working before you trust it on real data where you don't know the true answer.
 
-### 3. What if you need a confidence interval for a statistic with no clean formula (a median, say)?
+Now you *know* the true mean is 50. Run your confidence-interval code on `samples`, and check that 50 falls inside the resulting interval, across repeated simulations. This verifies the method is working correctly, before you trust it on real data where you don't know the true answer.
+
+### 3. What if you need a confidence interval for a statistic with no clean formula — a median, say?
+
 ```python
 rng = np.random.default_rng(42)
 boot_means = [rng.choice(sample, size=len(sample), replace=True).mean() for _ in range(10_000)]
 ci_low, ci_high = np.percentile(boot_means, [2.5, 97.5])
 ```
-**Bootstrapping**: resample the ORIGINAL data, with replacement, to the same size, thousands of times — each resample gives a slightly different statistic, and the spread of those thousands of results approximates the statistic's true sampling distribution, with no formula required at all. Works identically for a median, a correlation coefficient, or any custom metric.
 
-**Visual — pulling thousands of "parallel universe" samples from the one dataset you actually have:**
+**Bootstrapping**: resample your original data, with replacement, back to the same size, thousands of times. Each resample gives a slightly different statistic. The spread of those thousands of results approximates the statistic's true sampling distribution — with no formula required at all. This works identically for a median, a correlation coefficient, or any custom metric you can define.
+
+Here's what's actually happening — pulling thousands of "parallel universe" samples from the one dataset you have:
 ```
   original data: [10, 12, 11, 13, 9]
         ├──▶ resample (w/ replacement) ──▶ [11, 9, 11, 13, 12] ──▶ mean = 11.2
@@ -395,24 +600,30 @@ ci_low, ci_high = np.percentile(boot_means, [2.5, 97.5])
 ```
 
 ### Summary example
-Need a 95% CI for the MEDIAN wear_pct across a skewed set of equipment readings — no clean formula exists for a median's CI the way there is for a mean. Bootstrap 10,000 resamples of the data, compute the median of each, and take the 2.5th/97.5th percentiles of that whole distribution — a valid CI with zero formula-lookup required.
+
+You need a 95% confidence interval for the *median* `wear_pct`, across a skewed set of equipment readings. There's no clean formula for a median's CI, the way there is for a mean.
+
+Bootstrap 10,000 resamples of the data, compute the median of each one, then take the 2.5th and 97.5th percentiles of that whole distribution. That's a valid confidence interval, with zero formula-lookup required.
 
 ---
 
 ## Cluster 11 — Distribution Shape Beyond Mean and Variance
 
-### 1. Can two datasets share the same mean AND variance but still look totally different?
-Yes — one could be symmetric, the other could have a long tail dragging a few extreme values off to one side, while both still average out to the same center and the same overall spread.
+### 1. Can two datasets share the same mean AND variance, but still look totally different?
+
+Yes. One could be symmetric. The other could have a long tail dragging a few extreme values off to one side. Both can still average out to the same center, with the same overall spread.
 
 ### 2. How do you measure that asymmetry (skewness) and tail-heaviness (kurtosis)?
+
 ```python
 from scipy.stats import skew, kurtosis
 skew(df["wear_pct"])       # >0: long tail to the RIGHT; <0: long tail to the LEFT; ~0: roughly symmetric
 kurtosis(df["wear_pct"])   # >0: heavier tails / more outliers than normal; <0: lighter tails
 ```
-A fast, no-formula skew check: compare mean to median — in a right-skewed dataset the mean sits noticeably ABOVE the median, because the mean gets pulled toward the long tail while the median doesn't.
 
-**Visual — the direction of the LONG TAIL is the sign, not where most of the data sits:**
+A fast, no-formula skew check: compare the mean to the median. In a right-skewed dataset, the mean sits noticeably *above* the median, because the mean gets pulled toward the long tail, while the median doesn't.
+
+The direction of the long tail is what the sign means — not where most of the data actually sits:
 ```
 NEGATIVE skew (left tail)      SYMMETRIC (skew ≈ 0)         POSITIVE skew (right tail)
         ▂▄▆██                       ▁▃▆█▆▃▁                      ██▆▄▂
@@ -420,16 +631,20 @@ NEGATIVE skew (left tail)      SYMMETRIC (skew ≈ 0)         POSITIVE skew (rig
     mean < median                  mean ≈ median                   mean > median
 ```
 
-### 3. Given a skewed dataset with some extreme values, how do you actually find the outliers?
+### 3. Given a skewed dataset with extreme values, how do you actually find the outliers?
+
 ```python
 q1, q3 = df["wear_pct"].quantile([0.25, 0.75])
 iqr = q3 - q1
 lower_bound, upper_bound = q1 - 1.5 * iqr, q3 + 1.5 * iqr
 outliers = df[(df["wear_pct"] < lower_bound) | (df["wear_pct"] > upper_bound)]
 ```
-**Why IQR instead of "more than 2 standard deviations from the mean":** the z-score method computes the mean and standard deviation FROM the same data the outliers are corrupting — a few extreme outliers inflate the standard deviation itself, hiding moderate outliers and understating how extreme the real ones are. IQR is based on the 25th/75th percentiles, which barely move even with several extreme values present.
 
-**Visual — this is literally the math behind a box plot's whiskers:**
+**Why use IQR instead of "more than 2 standard deviations from the mean"?** The z-score method computes the mean and standard deviation *from the same data the outliers are corrupting*. A few extreme outliers inflate the standard deviation itself, which hides moderate outliers and understates how extreme the real ones are.
+
+IQR is based on the 25th and 75th percentiles instead, which barely move even with several extreme values present.
+
+This is literally the math behind a box plot's whiskers:
 ```
         lower bound          Q1      median      Q3          upper bound
         (Q1 − 1.5×IQR)        │25%│      │      │75%│        (Q3 + 1.5×IQR)
@@ -439,28 +654,39 @@ outliers = df[(df["wear_pct"] < lower_bound) | (df["wear_pct"] > upper_bound)]
 ```
 
 ### Summary example
-`wear_pct` readings mostly cluster 30-50%, with a handful of readings above 90%. `skew()` reports 1.8 (strongly right-skewed) — confirmed cheaply by mean (48) sitting well above median (41). IQR method: Q1=35, Q3=50, IQR=15, upper bound = 50+22.5=72.5 — every reading above 72.5% flags as an outlier worth investigating individually, without the standard deviation itself being distorted by those same extreme values.
+
+`wear_pct` readings mostly cluster between 30–50%, with a handful of readings above 90%.
+
+`skew()` reports 1.8 — strongly right-skewed. Confirmed cheaply: mean (48) sits well above median (41).
+
+IQR method: `Q1 = 35`, `Q3 = 50`, `IQR = 15`, upper bound = `50 + 22.5 = 72.5`. Every reading above 72.5% flags as an outlier worth investigating — without the standard deviation itself being distorted by those same extreme values.
 
 ---
 
 ## Cluster 12 — How the Sample Itself Can Be the Problem
 
 ### 1. Does it matter HOW a sample was collected, even if every test afterward is run correctly?
-Yes — every test in this entire doc silently assumes the sample was collected in an unbiased way. Run a perfect t-test on a badly-collected sample and you get a perfectly-computed, completely misleading answer.
+
+Yes. Every test in this entire doc silently assumes the sample was collected without bias. Run a perfectly-computed t-test on a badly-collected sample, and you get a perfectly-computed, completely misleading answer.
 
 ### 2. What's the simplest fix when one subgroup is much smaller than another?
+
 ```python
 df.groupby("region", group_keys=False).apply(lambda g: g.sample(frac=0.1))  # stratified: same % from EVERY group
 ```
-Plain random sampling (`df.sample(n=500)`) can end up with almost no rows from a small subgroup purely by chance if that subgroup is a tiny fraction of the whole. **Stratified sampling** guarantees every stratum is actually represented by sampling proportionally WITHIN each group first.
+
+Plain random sampling (`df.sample(n=500)`) can end up with almost no rows from a small subgroup, purely by chance, if that subgroup is a tiny fraction of the whole.
+
+**Stratified sampling** fixes this by sampling proportionally *within* each group first, guaranteeing every group is actually represented.
 
 ### 3. What are the actual named failure modes when a sample is collected badly?
-- **Selection bias** — the sample systematically excludes part of the population by HOW it was collected (a survey emailed only to active users misses exactly the churned customers who'd answer differently).
-- **Survivorship bias** — analyzing only the cases that "survived" some filter, with the excluded cases leaving zero trace at all.
-- **Non-response bias** — validly selected people who never respond, systematically different from those who do.
-- **Convenience sampling** — using whichever data was easiest to grab, not a sample representative of the real target population.
 
-**Visual — survivorship bias specifically, the least intuitive of the four:**
+- **Selection bias** — the sample systematically excludes part of the population, because of how it was collected. A survey emailed only to active users misses exactly the churned customers who'd have answered differently.
+- **Survivorship bias** — analyzing only the cases that "survived" some filter, while the excluded cases leave zero trace at all.
+- **Non-response bias** — validly selected people who never respond, and who are systematically different from those who do.
+- **Convenience sampling** — using whichever data was easiest to grab, instead of a sample that actually represents your real target population.
+
+Survivorship bias, the least intuitive of the four, deserves its own picture:
 ```
 100 planes take off
         │
@@ -477,37 +703,47 @@ Plain random sampling (`df.sample(n=500)`) can end up with almost no rows from a
 ```
 
 ### Summary example
-A company studies only customers who completed 6 months of subscription to find what "successful" customers have in common — survivorship bias, since every early-churner is invisible to the analysis with zero trace. A pattern found among survivors can look completely convincing while being the exact opposite of what actually causes early churn, the same "reinforce where the surviving planes were hit" mistake.
+
+A company studies only customers who completed 6 months of subscription, to find out what "successful" customers have in common. This is survivorship bias — every early-churner is invisible to the analysis, with zero trace of them anywhere.
+
+A pattern found among survivors can look completely convincing, while actually being the *opposite* of what really causes early churn. The same mistake as reinforcing where the surviving planes got hit.
 
 ---
 
 ## Cluster 13 — Quantifying HOW MUCH, Not Just Whether
 
 ### 1. A p-value says an effect is statistically significant. Does that mean it's a BIG effect?
-No — a large enough sample can make a trivially small, practically meaningless difference statistically significant, because p-values are sensitive to sample size in a way that says nothing about practical importance.
 
-### 2. How do you measure the actual SIZE of an effect, separately from whether it's "real"?
+No. A large enough sample can make a trivially small, practically meaningless difference come out statistically significant. P-values are sensitive to sample size in a way that says nothing about how much the effect actually matters.
+
+### 2. How do you measure the actual SIZE of an effect, separate from whether it's "real"?
+
 ```python
 mean_a, mean_b = np.mean(group_a_scores), np.mean(group_b_scores)     # 85, 75.6 (Cluster 1's own numbers)
 pooled_std = np.sqrt((np.var(group_a_scores, ddof=1) + np.var(group_b_scores, ddof=1)) / 2)   # 4.11
 cohens_d = (mean_a - mean_b) / pooled_std     # (85 - 75.6) / 4.11 = 2.29
 ```
-**Cohen's d** measures how many standard deviations apart the two means are, regardless of sample size. Conventionally: 0.2=small, 0.5=medium, 0.8=large — reusing Cluster 1's own t-test numbers, `d≈2.29` is a huge effect, not just a "detectable" one.
 
-**Visual — d is directly how far apart the two humps from Cluster 1's t-test visual have slid:**
+**Cohen's d** measures how many standard deviations apart the two means are, regardless of sample size. The usual rule of thumb: `0.2 = small`, `0.5 = medium`, `0.8 = large`. Reusing Cluster 1's own numbers, `d ≈ 2.29` is a huge effect — not just a barely-detectable one.
+
+`d` is literally how far apart the two humps from Cluster 1's t-test picture have slid:
 ```
 d = 0.2 (small)      d = 0.5 (medium)      d = 0.8 (large)       d = 2.29 (this example)
  ⬮⬮  overlapping       ⬮ ⬮  some gap         ⬮  ⬮  clear gap      ⬮    ⬮  barely touching
 ```
 
-### 3. Before even running the experiment — how much data do you actually need?
+### 3. Before even running the experiment, how much data do you actually need?
+
 ```python
 from statsmodels.stats.power import TTestIndPower
 required_n = TTestIndPower().solve_power(effect_size=0.5, alpha=0.05, power=0.8)   # ~64 per group
 ```
-**Power analysis** answers "how many samples do I need" given the smallest effect size worth caring about, BEFORE spending time/money collecting data — an underpowered experiment's null result is genuinely ambiguous (no real effect, or an effect too small for this sample to detect, look identical).
 
-**Visual — the full 2×2 that power, Type I, and Type II error all live inside (the "crying wolf" table):**
+**Power analysis** answers "how many samples do I need," given the smallest effect size actually worth caring about — *before* you spend time and money collecting data.
+
+This matters because an underpowered experiment's null result is genuinely ambiguous. "No real effect" and "an effect too small for this sample to detect" look identical from the outside.
+
+Here's the full 2×2 table that power, Type I error, and Type II error all live inside — the "crying wolf" table:
 ```
                         H0 actually TRUE            H0 actually FALSE
   Reject H0          Type I error (α)              Correct! (True Positive)
@@ -519,84 +755,86 @@ required_n = TTestIndPower().solve_power(effect_size=0.5, alpha=0.05, power=0.8)
 ```
 
 ### Summary example
-A study reports p<0.001 for a new teaching method. Computing Cohen's d on the same data gives d=0.15 — statistically real, but a genuinely tiny effect, barely worth the cost of rolling it out. A separate small pilot study finds "no significant effect" of a different intervention — but a power analysis shows the sample was only powered to detect d≥0.8, meaning a real, moderate effect (d=0.4) could easily have been missed entirely, not ruled out.
+
+A study reports `p < 0.001` for a new teaching method. Computing Cohen's d on the same data gives `d = 0.15` — statistically real, but a genuinely tiny effect. Barely worth the cost of rolling it out.
+
+A separate small pilot study finds "no significant effect" of a different intervention. But a power analysis shows the sample was only powered to detect `d ≥ 0.8`. A real, moderate effect (`d = 0.4`) could easily have been missed entirely — not ruled out, just never given a real chance to be caught.
 
 ---
 
 ## Practice Q&A (Self-Test)
 
-**Q1. Why does `stats.ttest_ind(group_a, group_b, equal_var=False)` use Welch's t-test instead of the classic Student's t-test, and why is that the safer default?**
-A: `equal_var=False` runs Welch's t-test, which does not assume the two groups have equal variance — an assumption the classic Student's t-test makes and that is frequently violated in practice. The classic test can give a misleadingly confident (too-small) p-value when variances genuinely differ between groups, so Welch's is the safer default.
+**Q1. Why does `stats.ttest_ind(group_a, group_b, equal_var=False)` use Welch's t-test, and why is that the safer default?**
+A: `equal_var=False` runs Welch's t-test, which doesn't assume the two groups have equal variance — an assumption the classic Student's t-test makes, and one that's frequently wrong in practice. The classic test can give a misleadingly confident (too-small) p-value when variances genuinely differ, so Welch's is the safer default.
 
-**Q2. A p-value comes back as 0.03. What does that number actually mean, and what is the common misinterpretation to avoid?**
-A: The p-value is the probability of seeing a difference this large (or larger) IF the null hypothesis were true — it is NOT the probability that the null hypothesis is true, and NOT the probability the finding is a fluke. Saying "0.03 means there's a 97% chance this is real" is exactly the misinterpretation to avoid.
+**Q2. A p-value comes back as 0.03. What does it actually mean, and what's the common misreading?**
+A: It's the probability of seeing a difference this large, or larger, *if the null hypothesis were true*. It is NOT the probability that the null hypothesis is true, and NOT the probability the finding is a fluke. Saying "0.03 means there's a 97% chance this is real" is exactly the misreading to avoid.
 
-**Q3. You have before/after measurements on the same units. Why is `stats.ttest_rel` the correct test instead of `stats.ttest_ind`?**
-A: `ttest_ind` treats the two samples as independent and ignores that each "before" is linked to a specific matching "after" for the same unit. Throwing away that pairing information typically produces a much less statistically powerful (and technically wrong) test, so `ttest_rel` (the paired t-test) should be used whenever the two samples are the same subjects measured twice.
+**Q3. You have before/after measurements on the same people. Why use `stats.ttest_rel` instead of `stats.ttest_ind`?**
+A: `ttest_ind` treats the two samples as independent and ignores that each "before" is linked to a specific matching "after" for the same person. Throwing away that pairing gives a much less powerful — and technically wrong — test. `ttest_rel` (the paired t-test) is correct whenever the two samples are the same subjects measured twice.
 
-**Q4. After running `stats.chi2_contingency`, why should you look at the `expected` array and not just the p-value?**
-A: The chi-square test only tells you IF there's an association between the two categorical variables, not what it looks like. Comparing the `observed` table to the `expected` table (what you'd see under no association) reveals the direction and nature of the association, which the p-value alone can't show.
+**Q4. After running `stats.chi2_contingency`, why look at the `expected` array and not just the p-value?**
+A: The chi-square test only tells you *if* there's an association, not what it looks like. Comparing `observed` to `expected` (what you'd see if there were no association) reveals the direction of the relationship — something the p-value alone can't show.
 
-**Q5. What assumption should you check before trusting a chi-square test's result, and how do you check it?**
-A: Chi-square is itself an approximation that assumes reasonably large expected counts in every cell; check `(expected < 5).any()` — if any expected cell count is below 5, the approximation may be unreliable and the p-value can't be trusted.
+**Q5. What assumption should you check before trusting a chi-square test, and how?**
+A: Chi-square is itself an approximation, and it assumes reasonably large expected counts in every cell. Check `(expected < 5).any()` — if any expected cell count is below 5, the approximation may be unreliable, and the p-value can't be trusted.
 
-**Q6. Why run ANOVA (`stats.f_oneway`) across three groups instead of three separate pairwise t-tests?**
-A: Each individual t-test at α=0.05 carries a 5% false-positive chance, and running three separate tests compounds that risk — the multiple comparisons problem. ANOVA tests the overall "are ANY of these means different" question in one test at the stated α, properly controlling the overall false-positive rate.
+**Q6. Why run ANOVA across three groups, instead of three separate pairwise t-tests?**
+A: Each individual t-test at the 5% level carries its own 5% false-positive chance, and running three separate tests compounds that risk — the multiple comparisons problem. ANOVA tests the overall "are ANY of these means different" question in one test, properly controlling the overall false-positive rate.
 
-**Q7. If ANOVA shows a significant difference among groups, how do you find out which specific groups differ, and why not just use raw pairwise t-tests for that?**
-A: Use `pairwise_tukeyhsd` from `statsmodels.stats.multicomp` — it performs the pairwise comparisons you now want but with a built-in correction for the multiple-comparisons problem, so you get which-pairs-differ answers without re-inflating the false-positive rate ANOVA was used to avoid.
+**Q7. If ANOVA shows a significant difference, how do you find which specific groups differ — and why not just use raw pairwise t-tests for that?**
+A: Use `pairwise_tukeyhsd`. It performs the pairwise comparisons you now want, but with a built-in correction for the multiple-comparisons problem, so you get which-pairs-differ answers without re-inflating the false-positive rate ANOVA was used to control in the first place.
 
-**Q8. What silent mistake happens if you fit `sm.OLS(y, X)` without calling `sm.add_constant(X)` first, and why does sklearn's `LinearRegression` not have this problem?**
-A: Without `sm.add_constant`, statsmodels fits a regression forced through the origin (no intercept term), and every coefficient comes out wrong — silently, with no error raised. sklearn's `LinearRegression` adds an intercept by default, but it also doesn't give the p-values/CIs/R² that `model.summary()` provides, since sklearn is built for prediction, not inferential statistics.
+**Q8. What silently breaks if you fit `sm.OLS(y, X)` without calling `sm.add_constant(X)` first? Why doesn't sklearn's `LinearRegression` have this problem?**
+A: Without `sm.add_constant`, statsmodels fits a regression forced through the origin — no intercept — and every coefficient comes out wrong, with no error raised. sklearn's `LinearRegression` adds an intercept by default, but it also doesn't give the p-values, confidence intervals, or R² that `model.summary()` provides, since sklearn is built for prediction, not statistical inference.
 
-**Q9. How do you interpret a VIF (variance inflation factor) value, and what does a high VIF actually mean for your model?**
-A: VIF measures how much a feature's variance is inflated because it's linearly predictable from the other features; VIF=1 means no correlation with other predictors, while VIF>5 (some use >10) signals real multicollinearity. High VIF makes individual coefficients unstable and hard to interpret, even though the model's overall predictions may still be fine.
+**Q9. How do you interpret a VIF value, and what does a high one mean for your model?**
+A: VIF measures how much a feature's variance is inflated because it's predictable from the other features. VIF = 1 means no correlation with other predictors. VIF > 5 (some use 10) signals real multicollinearity — individual coefficients become unstable and hard to interpret, even though the model's overall predictions may still be fine.
 
-**Q10. Why does the confidence interval for a sample mean use `stats.t.interval` with `df=n-1` rather than the normal distribution, and what's the practical caveat when checking normality with Shapiro-Wilk on large samples?**
-A: With a sample (not the true population), you're also estimating the standard deviation from the same data, adding extra uncertainty; the t-distribution has heavier tails than normal to account for that, converging to normal only as n grows large — using normal instead understates true uncertainty for small samples. Separately, Shapiro-Wilk becomes hyper-sensitive with very large samples and flags trivial, practically-irrelevant deviations from normality as "significant," so a Q-Q plot is often more useful than the p-value alone at large n.
+**Q10. Why does a confidence interval for a sample mean use `stats.t.interval` with `df=n-1`, instead of the normal distribution? What's the caveat with Shapiro-Wilk on large samples?**
+A: With a sample, you're also estimating the standard deviation from the same data, which adds extra uncertainty beyond the mean's own sampling variation. The t-distribution has heavier tails than normal specifically to account for that, converging to normal only as `n` grows large — using normal instead understates true uncertainty for small samples. Separately: Shapiro-Wilk becomes hyper-sensitive with very large samples, flagging trivial deviations from normality as "significant," so a Q-Q plot is often more useful than the p-value alone at large `n`.
 
-**Q11. A scatterplot shows wear percentage rising with equipment age, but the relationship curves — it climbs fast early on, then keeps climbing but more slowly. `pearsonr` gives r=0.61; `spearmanr` gives rho=0.89. Which number should you trust as "how strong is this relationship," and why the gap?**
-A: Trust Spearman's rho here. Pearson's r specifically measures LINEAR association, so a real, strong, consistently-increasing-but-curved relationship still drags Pearson's r down since the relationship isn't a straight line — it isn't wrong, it's answering a narrower question ("how linear is this") than the one being asked. Spearman's rho works on ranks rather than raw values, so it only cares whether the relationship is consistently monotonic (always increasing), which this is — 0.89 is the more honest answer to "how strong is this relationship," and the 0.61-vs-0.89 gap itself is the tell that the true relationship is monotonic but non-linear.
+**Q11. A scatterplot shows wear rising with age, but the relationship curves — fast early, slower later. `pearsonr` gives r=0.61; `spearmanr` gives rho=0.89. Which should you trust, and why the gap?**
+A: Trust Spearman's rho. Pearson's r measures *linear* association specifically, so a real, strong, but curved relationship still drags it down, even though the trend is genuinely strong — it isn't wrong, it's just answering a narrower question ("how linear is this") than the one being asked. Spearman's rho works on ranks, so it only cares whether the relationship is consistently monotonic, which this one is. The 0.61-vs-0.89 gap itself is the tell that the true relationship is monotonic but non-linear.
 
-**Q12. Two manufacturing lines produce parts with the exact same average weight. Line A's t-test against Line B shows no significant difference. Does that mean the two lines are equally good?**
-A: Not necessarily — a t-test only compares means, and two datasets can have identical means while one is far more variable than the other. If Line B's output swings much more widely around that same average, Levene's test (comparing variance, not mean) would catch a real quality difference the t-test is structurally blind to — consistency itself can be the thing that matters, and "same average" says nothing about it.
+**Q12. Two manufacturing lines have the exact same average part weight. A t-test finds no significant difference. Does that mean the lines are equally good?**
+A: Not necessarily. A t-test only compares means, and two datasets can have identical means while one is far more variable than the other. If Line B's output swings much more widely around that same average, Levene's test (comparing variance, not mean) would catch a real quality difference the t-test is structurally blind to.
 
-**Q13. A dataset has a few extreme outliers, and you're not confident it's normally distributed. Why reach for Mann-Whitney U instead of just running `ttest_ind` anyway and hoping for the best?**
-A: The t-test compares means, which outliers can drag substantially in either direction, and it formally assumes the underlying data is roughly normal. Mann-Whitney U converts every value to its rank first, so a single extreme outlier only shifts by one rank position no matter how extreme it is — it tests whether ranks are randomly mixed between groups rather than comparing raw magnitudes, making it robust to exactly the two problems (outliers, non-normality) that make a t-test's result untrustworthy here.
+**Q13. A dataset has a few extreme outliers, and you're not confident it's normally distributed. Why use Mann-Whitney U instead of just running `ttest_ind` and hoping for the best?**
+A: The t-test compares means, which outliers can drag substantially, and it formally assumes roughly normal data. Mann-Whitney U converts every value to its rank first, so a single extreme outlier only shifts by one rank position, no matter how extreme it is — making it robust to both problems (outliers, non-normality) that make a t-test's result untrustworthy here.
 
-**Q14. A study reports p < 0.001 for a new teaching method's effect on test scores. A colleague says "that's a massive effect." Is that a safe conclusion from the p-value alone?**
-A: No — p-values are sensitive to sample size, and a large enough study can make a tiny, practically trivial difference statistically significant. A very small p-value tells you the effect is unlikely to be pure chance; it says nothing about whether the effect is big enough to matter practically. That second question needs an effect size (Cohen's d) computed separately, not inferred from how small the p-value is.
+**Q14. A study reports p < 0.001 for a new teaching method's effect on scores. A colleague says "that's a massive effect." Is that a safe conclusion from the p-value alone?**
+A: No. P-values are sensitive to sample size, and a large enough study can make a tiny, practically trivial difference statistically significant. A very small p-value tells you the effect is unlikely to be pure chance — it says nothing about whether the effect is big enough to matter. That second question needs an effect size (Cohen's d), computed separately.
 
-**Q15. A small pilot study finds "no statistically significant effect" of a new feature on user engagement. Is it safe to conclude the feature genuinely has no effect?**
-A: Not necessarily — if the study was underpowered (too small a sample for the effect size realistically worth detecting), a true, real effect can easily fail to reach significance simply because the study never had a good chance of detecting it. This is a Type II error risk, and "no significant effect found" and "no effect exists" are genuinely different claims that a low-power study can't distinguish between. A power analysis run *before* the study would have flagged whether the sample size was even large enough to matter.
+**Q15. A small pilot study finds "no statistically significant effect" of a new feature on engagement. Is it safe to conclude the feature genuinely has no effect?**
+A: Not necessarily. If the study was underpowered — too small a sample for the effect size realistically worth detecting — a true, real effect can easily fail to reach significance just because the study never had a good chance of catching it. "No significant effect found" and "no effect exists" are genuinely different claims, and a low-power study can't tell them apart.
 
-**Q16. You need a 95% confidence interval for the MEDIAN of a skewed dataset, and you don't know a clean formula for that. What's the practical way to get one?**
-A: Bootstrapping — resample the original data with replacement (same size) thousands of times, compute the median of each resample, and take the 2.5th and 97.5th percentiles of that whole distribution of medians as the CI bounds. This works for the median (or any other statistic) without needing a closed-form formula, which is exactly the situation a formula-based approach like this doc's earlier by-hand mean CI can't handle.
+**Q16. You need a 95% confidence interval for the MEDIAN of a skewed dataset, with no clean formula available. What's the practical way to get one?**
+A: Bootstrapping — resample the original data with replacement (same size) thousands of times, compute the median of each resample, and take the 2.5th and 97.5th percentiles of that whole distribution as your CI bounds. This works for the median, or any other statistic, without needing a closed-form formula.
 
-**Q17. A two-tailed test gives p=0.07 (not significant at α=0.05). Someone suggests re-running it one-tailed since "we always expected the new version to be better anyway," and it comes back at p=0.035 (significant). Is this a legitimate result?**
-A: No — this is p-hacking, not a legitimate use of a one-tailed test. A one-tailed test is only valid when the direction was committed to *before* seeing the data, for a real reason the other direction genuinely wasn't worth testing. Switching to one-tailed specifically because the two-tailed result wasn't significant, after already seeing which direction the data leans, is choosing the test that gives the answer you want rather than the test that matches your actual prior claim.
+**Q17. A two-tailed test gives p=0.07 (not significant). Someone suggests re-running it one-tailed since "we always expected the new version to be better anyway," and it comes back at p=0.035 (significant). Is this legitimate?**
+A: No — this is p-hacking. A one-tailed test is only valid when the direction was committed to *before* seeing the data, for a real reason the other direction genuinely wasn't worth testing. Switching to one-tailed specifically because the two-tailed result wasn't significant, after already seeing which way the data leans, is choosing the test that gives you the answer you want.
 
-**Q18. Why does scipy default to `alternative="two-sided"` rather than defaulting to whichever direction is more common in practice?**
-A: Two-tailed is the more conservative choice — it doesn't assume a direction, so it can't be quietly misused to manufacture significance by picking the direction after the fact. Defaulting to two-sided forces the analyst to make an explicit, deliberate choice to narrow to one tail (and be able to justify why), rather than making the easier-to-abuse option the path of least resistance.
+**Q18. Why does scipy default to `alternative="two-sided"`, instead of defaulting to whichever direction is more common in practice?**
+A: Two-tailed is the more conservative choice — it doesn't assume a direction, so it can't be quietly misused to manufacture significance by picking the direction after seeing the data. Defaulting to two-sided forces an explicit, deliberate choice to narrow to one tail, rather than making the easier-to-abuse option the default.
 
 **Q19. Adding a completely random, useless column to a regression makes plain R² tick up slightly. Does that mean the model actually improved?**
-A: No — plain R² can only stay flat or increase as predictors are added, even genuinely random ones, because the model can always find some tiny coincidental fit in more columns. Adjusted R² is the number that actually answers "did this predictor earn its place" — it penalizes for predictor count and can go down when a new feature isn't pulling real weight, which is exactly the case here.
+A: No. Plain R² can only stay flat or increase as predictors are added, even genuinely random ones, because the model can always find some tiny coincidental fit. Adjusted R² is the number that actually answers "did this predictor earn its place" — it penalizes for predictor count and can go down when a new feature isn't pulling real weight, which is exactly what's happening here.
 
-**Q20. A regression's residual-vs-fitted plot shows a clear funnel shape — tight near small fitted values, spreading wide near large ones. Does this mean the coefficients themselves are wrong?**
-A: Not necessarily — this is heteroscedasticity (non-constant error variance), and it doesn't automatically bias the coefficient estimates themselves. What it does break is the trustworthiness of the p-values and confidence intervals in `model.summary()`, since those are computed under an assumption of constant variance across all fitted values.
+**Q20. A regression's residual-vs-fitted plot shows a clear funnel shape — tight near small fitted values, wide near large ones. Does this mean the coefficients themselves are wrong?**
+A: Not necessarily. This is heteroscedasticity — non-constant error variance — and it doesn't automatically bias the coefficient estimates themselves. What it does break is the trustworthiness of the p-values and confidence intervals in `model.summary()`, since those are computed assuming constant variance across all fitted values.
 
-**Q21. Two datasets have identical mean and standard deviation. `skew()` reports 0.05 for one and 1.8 for the other. What does that difference actually tell you, and how would you sanity-check it without even running the function?**
-A: The second dataset has a long tail stretching toward larger values, even though its center and spread match the first dataset. A fast sanity check without computing skewness directly: compare the mean to the median — in a right-skewed dataset, the mean sits noticeably above the median, because the mean gets pulled toward the long tail while the median doesn't.
+**Q21. Two datasets have identical mean and standard deviation. `skew()` reports 0.05 for one and 1.8 for the other. What does that tell you, and how would you sanity-check it without running the function?**
+A: The second dataset has a long tail stretching toward larger values, even though its center and spread match the first. A quick sanity check without computing skewness directly: compare the mean to the median. In a right-skewed dataset, the mean sits noticeably above the median, because the mean gets pulled toward the long tail while the median doesn't.
 
-**Q22. A company analyzes only customers who completed a 6-month subscription to see what "successful" customers have in common, in order to design a retention strategy. What's the specific bias risk here, and why is it more dangerous than a normal sampling problem?**
-A: Survivorship bias — the analysis only looks at customers who survived to 6 months, and completely excludes everyone who churned earlier, with zero trace of them in the "successful customer" analysis. It's more dangerous than ordinary selection bias because the missing cases leave no signal in the data at all that anything is wrong.
-
+**Q22. A company analyzes only customers who completed a 6-month subscription, to see what "successful" customers have in common, for a retention strategy. What's the specific bias risk, and why is it more dangerous than a normal sampling problem?**
+A: Survivorship bias — the analysis only looks at customers who survived to 6 months, completely excluding everyone who churned earlier, with zero trace of them in the "successful customer" analysis. It's more dangerous than ordinary selection bias because the missing cases leave no signal in the data at all that anything is wrong.
 
 ---
 
 ## Video-Sourced Practice MCQs (Set 2)
 
-A second practice set for Statistics, sourced differently from this hub's other video-based quizzes: rather than covering the same hypothesis-testing ground as the clusters above, this one is built entirely from two classic probability-teaser interview problems (a weighted-average waiting-time problem, and a Bayes' theorem biased-coin problem) walked through in a real YouTube data-scientist-interview-prep video. Every number below was independently re-verified with exact fraction arithmetic (not just re-stated from the video), and one scenario (the batch-size-20 variant) is a genuinely new twist on the original problem to test real understanding rather than memorized recall. All wording, wrong-answer options, and explanations are original.
+*This section is an interactive quiz, built from two classic probability-teaser interview problems. It's left as-is for now — the rewrite above covers the main teaching content first. Ask if you'd like this section simplified too.*
 
 <script type="application/json" class="topic-quiz-data" data-title="Statistics (SciPy/statsmodels) Practice (Set 2)">
 [

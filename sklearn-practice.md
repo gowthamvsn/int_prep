@@ -1,47 +1,71 @@
 # scikit-learn Practice — Built as a Chain, Not a List
 
-Most snippets assume `X, y` already exist — `X` is the **feature matrix** (one row per example, one column per measured attribute: a spreadsheet of inputs) and `y` is the **target** (the single column you're trying to predict, one value per row). Each cluster is one continuous thread — every question inherits the answer before it, closing with a worked summary example.
+Most snippets on this page assume `X, y` already exist.
 
-**If you're new to ML, five terms carry most of this page's weight — defined here once** (deeper, diagrammed treatments live in `ds-fundamentals` and `math-foundations-refresher.md`):
+- `X` is the **feature matrix** — one row per example, one column per measured attribute. Think of it as a spreadsheet of inputs.
+- `y` is the **target** — the one column you're trying to predict, one value per row.
 
-- **Model / fitting** — a model is a formula with adjustable numbers inside. *Fitting* (training) means letting the algorithm tune those numbers until the formula predicts `y` from `X` as well as it can on the data it was given.
-- **Train/test split** — you hide part of the data (the test set) from the model during fitting, so you can later measure how it does on data it never saw. A score on already-seen data flatters the model; the score on held-out data is the honest one.
-- **Overfitting** — the model memorized the training data's quirks and noise instead of learning the general pattern, so it looks great on seen data and falls apart on new data. (*Underfitting* is the opposite failure: a model too simple to capture the real pattern, mediocre everywhere.)
-- **Hyperparameter** — a setting *you* choose before training (tree depth, regularization strength), as opposed to the parameters the model learns on its own during fitting. "Tuning" means systematically trying settings and keeping what works best.
-- **Data leakage** — any way information from the test set (or from the future) sneaks into training or preprocessing. It inflates your measured score without making the model any better — worse than no score, because it's a *convincing wrong* number. Most of Cluster 1 exists to prevent it structurally rather than by discipline.
+Each cluster below is one continuous thread. Every question builds on the answer before it, and each cluster ends with a worked summary example.
+
+**If you're new to ML, five terms carry most of this page's weight — defined here once.** (Deeper, diagrammed treatments live in `ds-fundamentals` and `math-foundations-refresher.md`.)
+
+- **Model / fitting.** A model is a formula with adjustable numbers inside. *Fitting* (training) means letting the algorithm tune those numbers until the formula predicts `y` from `X` as well as it can, on the data it was given.
+- **Train/test split.** You hide part of the data — the test set — from the model during fitting. Later, you use it to measure how the model does on data it's never seen. A score on already-seen data flatters the model. The score on held-out data is the honest one.
+- **Overfitting.** The model memorized the training data's quirks and noise instead of learning the general pattern. It looks great on seen data and falls apart on new data. (*Underfitting* is the opposite failure — a model too simple to capture the real pattern, mediocre everywhere.)
+- **Hyperparameter.** A setting *you* choose before training — tree depth, regularization strength. That's different from the parameters the model learns on its own during fitting. "Tuning" means systematically trying settings and keeping whichever works best.
+- **Data leakage.** Any way information from the test set (or from the future) sneaks into training or preprocessing. It inflates your measured score without making the model any better — worse than no score at all, because it's a *convincing wrong* number. Most of Cluster 1 exists to prevent leakage structurally, not just by discipline.
 
 ---
 
 ## Cluster 1 — Splitting and Preprocessing Without Leaking
 
-### 1. How do you split data into train/test sets correctly?
+### 1. How do you split data into train and test sets correctly?
+
 ```python
 from sklearn.model_selection import train_test_split
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 ```
-Without `stratify=y`, a random split can (especially on imbalanced data) produce a test set with a very different class balance than train — `stratify` forces both splits to preserve the same class proportions as the full dataset. Without `random_state`, every run produces a different split, making results non-reproducible between you and anyone reviewing your work.
 
-### 2. Given a clean split, how do you standardize features WITHOUT leaking test information into it?
+`stratify=y` forces both the train split and the test split to keep the same class proportions as the full dataset. Without it, a random split can produce a test set with a very different class balance than train — especially likely on imbalanced data.
+
+`random_state` fixes the randomness. Without it, every run of this code produces a different split, and your results aren't reproducible — not by you next week, and not by anyone reviewing your work.
+
+### 2. How do you standardize features without leaking test information into it?
+
 ```python
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)   # fit_transform: learns mean/std FROM train, then applies
 X_test_scaled = scaler.transform(X_test)          # transform only: reuses train's mean/std, does NOT refit
 ```
-**Standardizing** means rescaling each column to mean 0 and standard deviation 1, so a column measured in thousands (income) and one measured in single digits (age) end up on equal footing — anything distance-based or gradient-based needs that to treat features fairly. The leakage risk: fitting the scaler on test data lets information about the test set's distribution leak into preprocessing — a real, common form of data leakage that inflates reported performance versus what the model would actually do on truly unseen data. Never call `fit_transform` on test data — only `transform`.
 
-### 3. Given that numeric scaling must not touch test data, what about CATEGORICAL columns — how do you encode them, and what happens if test has a category train never saw?
+**Standardizing** rescales each column to mean 0 and standard deviation 1. That puts a column measured in thousands (income) and a column measured in single digits (age) on equal footing. Anything distance-based or gradient-based needs that, or it ends up treating features unfairly.
+
+Here's the leakage risk, step by step:
+
+1. If you call `fit_transform` on the test set, the scaler relearns its mean and standard deviation from test data.
+2. That lets information about the test set's distribution leak into preprocessing.
+3. Your reported performance ends up inflated — higher than what the model would actually do on truly unseen data.
+
+The rule that avoids all of this: never call `fit_transform` on test data. Only `transform`.
+
+### 3. How do you encode categorical columns, and what happens if test has a category train never saw?
+
 ```python
 from sklearn.preprocessing import OneHotEncoder
 enc = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
 X_train_enc = enc.fit_transform(X_train[["depot"]])
 X_test_enc = enc.transform(X_test[["depot"]])     # any category not seen in train is handled, not crashed
 ```
-**One-hot encoding** is how a text category becomes numbers a model can use: `depot = "Dallas"` turns into a set of 0/1 columns, one per depot seen in training, with a 1 in the matching column — necessary because models do math on numbers, not strings. Without `handle_unknown="ignore"`, a category appearing in test/production but never seen during training raises an error at inference time — `"ignore"` instead encodes it as all-zeros, letting the pipeline keep running (worth monitoring for, but not a hard crash).
 
-### 4. Both scaler and encoder above need the SAME fit-on-train-only discipline. How do you enforce that structurally, not just by remembering it every time?
+**One-hot encoding** turns a text category into numbers a model can use. `depot = "Dallas"` becomes a set of 0/1 columns, one per depot seen in training, with a 1 in the matching column. Models do math on numbers, not strings, so this step is necessary.
+
+Without `handle_unknown="ignore"`, a category that shows up in test or production but was never seen during training raises an error at inference time. With `"ignore"`, that category gets encoded as all-zeros instead, and the pipeline keeps running. Still worth monitoring for — just not a hard crash.
+
+### 4. Both the scaler and the encoder need the same fit-on-train-only discipline. How do you enforce that structurally?
+
 ```python
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -54,7 +78,10 @@ pipe = Pipeline([
 pipe.fit(X_train, y_train)
 pipe.score(X_test, y_test)
 ```
-A `Pipeline` guarantees the scaler is fit ONLY on whatever data `.fit()` is called with — inside cross-validation (splitting the training data into several "folds" and holding each one out in turn to test on; Cluster 2 covers it properly), this means each fold's scaler is refit on just that fold's training portion, which is the only way to avoid leakage during CV. Manually scaling before CV and passing the pre-scaled data in is a very common, very real leakage bug.
+
+A `Pipeline` guarantees that the scaler is fit only on whatever data `.fit()` is called with. Inside cross-validation — splitting the training data into several "folds" and holding each one out in turn to test on, which Cluster 2 covers properly — this means each fold's scaler is refit on just that fold's own training portion. That's the only way to avoid leakage during CV.
+
+Manually scaling the data before CV, then passing the pre-scaled data in, is a very common leakage bug. A `Pipeline` closes that door for you.
 
 **Visual + memory hook — a Pipeline is a sealed pipe: data goes in one end, nothing skips a station:**
 ```
@@ -69,9 +96,11 @@ Inside cross-validation, this whole sealed pipe gets rebuilt fresh, per fold:
   Fold 2: [scaler learns fold 2's train stats] → [model learns on fold 2's train]
   (never: one scaler fit on everything, reused across folds — that's the leak)
 ```
+
 **Remember it as:** a `Pipeline` isn't convenience syntax, it's a seal against "peeking" — every step's `.fit()` only ever sees exactly the rows the outer `.fit()` call was given.
 
-### 5. Given that a Pipeline chains steps in SEQUENCE, what if numeric and categorical columns need genuinely DIFFERENT transformers applied in PARALLEL?
+### 5. A Pipeline chains steps in sequence. What if numeric and categorical columns need different transformers applied in parallel?
+
 ```python
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -81,10 +110,20 @@ preprocess = ColumnTransformer([
     ("cat", OneHotEncoder(handle_unknown="ignore"), ["depot"]),
 ])
 ```
-Numeric and categorical columns need fundamentally different treatment — applying `StandardScaler` to a categorical column (or one-hot encoding to a continuous one) is a common beginner error `ColumnTransformer` structurally prevents by naming exactly which columns get which transformer. This `preprocess` object then slots into a `Pipeline` (question 4) as its first step, exactly like `StandardScaler` did.
+
+Numeric and categorical columns need fundamentally different treatment. Applying `StandardScaler` to a categorical column — or one-hot encoding to a continuous one — is a common beginner error. `ColumnTransformer` prevents it structurally, by naming exactly which columns get which transformer.
+
+This `preprocess` object then slots into a `Pipeline` as its first step, the same way `StandardScaler` did on its own above.
 
 ### Summary example
-A dataset with both `wear_pct` (numeric) and `depot` (categorical): `ColumnTransformer` routes each column type to its correct transformer, wrapped inside a `Pipeline` alongside the classifier — the WHOLE thing then gets `.fit()`-ed only on `X_train`, so every leakage risk from questions 2-5 is closed by one structural choice rather than four separate manual disciplines to remember.
+
+A dataset has both `wear_pct` (numeric) and `depot` (categorical).
+
+1. `ColumnTransformer` routes each column to its correct transformer — `StandardScaler` for `wear_pct`, `OneHotEncoder` for `depot`.
+2. That `ColumnTransformer` gets wrapped inside a `Pipeline`, alongside the classifier.
+3. The whole thing gets `.fit()`-ed only on `X_train`.
+
+One structural choice, building the Pipeline this way, closes every leakage risk from the questions above — instead of leaving several separate manual disciplines to remember.
 
 ---
 
@@ -93,22 +132,33 @@ A dataset with both `wear_pct` (numeric) and `depot` (categorical): `ColumnTrans
 ## Cluster 2 — Cross-Validation and Hyperparameter Tuning
 
 ### 1. A single train/test split gives one score. How do you get a more reliable estimate?
+
 ```python
 from sklearn.model_selection import cross_val_score
 scores = cross_val_score(pipe, X_train, y_train, cv=5, scoring="roc_auc")
 print(scores.mean(), scores.std())    # report BOTH — std tells you how stable the estimate is
 ```
-`cv=5` means the training data is split into 5 folds; the model is trained 5 times, each time holding a different fold out as a mini test set, giving 5 scores instead of 1. Two models with the same mean CV score but very different standard deviations are NOT equally trustworthy — high variance across folds means the estimate itself is unstable, which a single mean number hides. (`scoring="roc_auc"` picks AUC as the score — a classification metric that, unlike accuracy, isn't flattered by imbalanced classes; Cluster 3 unpacks it.)
 
-### 2. Given imbalanced classes, does plain k-fold CV risk the same class-balance problem `stratify` fixed in Cluster 1?
+`cv=5` splits the training data into 5 folds. The model trains 5 separate times, each time holding a different fold out as a mini test set. That gives you 5 scores instead of 1.
+
+Two models can have the same mean CV score and still not be equally trustworthy. If one has a much higher standard deviation across folds, its estimate is less stable — and a single mean number hides that completely. Always report both.
+
+(`scoring="roc_auc"` picks AUC as the score here — a classification metric that, unlike accuracy, isn't flattered by imbalanced classes. Cluster 3 unpacks it.)
+
+### 2. With imbalanced classes, does plain k-fold CV risk the same class-balance problem `stratify` fixed in Cluster 1?
+
 ```python
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 scores = cross_val_score(pipe, X_train, y_train, cv=cv, scoring="f1")
 ```
-Yes — and `shuffle=True` matters for a related but distinct reason: without it, `StratifiedKFold` splits the data in its ORIGINAL order, so if the data happens to be sorted or grouped in any way (common with real-world exports), folds can end up systematically different. Shuffling (with a fixed seed for reproducibility) avoids that.
 
-### 3. Given a reliable CV estimate, how do you actually search for the best hyperparameters?
+Yes — `StratifiedKFold` fixes it the same way `stratify=y` did back in Cluster 1.
+
+`shuffle=True` matters for a separate reason. Without it, `StratifiedKFold` splits the data in its original order. If the data happens to be sorted or grouped in any way — common with real-world exports — the folds can end up systematically different from each other. Shuffling, with a fixed seed for reproducibility, avoids that.
+
+### 3. With a reliable CV estimate in hand, how do you actually search for the best hyperparameters?
+
 ```python
 from sklearn.model_selection import GridSearchCV
 param_grid = {"clf__C": [0.01, 0.1, 1, 10], "clf__penalty": ["l1", "l2"]}
@@ -116,9 +166,18 @@ grid = GridSearchCV(pipe, param_grid, cv=5, scoring="roc_auc", n_jobs=-1)
 grid.fit(X_train, y_train)
 print(grid.best_params_, grid.best_score_)
 ```
-The two hyperparameters being searched here are both **regularization** controls — regularization is a deliberate penalty on model complexity, discouraging extreme learned coefficients so the model can't contort itself around training noise. `C` is the *inverse* strength of that penalty (smaller C = stronger restraint), and `penalty` picks the flavor (L1 vs. L2 — worked out with real numbers in `math-foundations-refresher.md`). When tuning a `Pipeline`, parameter names must be `<step_name>__<param_name>` so `GridSearchCV` knows which pipeline step each hyperparameter belongs to — a plain `"C"` instead of `"clf__C"` raises an error. `n_jobs=-1` uses all available CPU cores in parallel — grid search over many combinations is embarrassingly parallel, and leaving this at the default (1) can make tuning take many times longer than necessary.
 
-### 4. Grid search tries EVERY combination — what if there are too many hyperparameters for that to be practical?
+The two hyperparameters being searched here are both **regularization** controls. Regularization is a deliberate penalty on model complexity — it discourages extreme learned coefficients, so the model can't contort itself around training noise.
+
+- `C` is the *inverse* strength of that penalty. Smaller `C` means stronger restraint.
+- `penalty` picks the flavor — L1 vs. L2. (Worked out with real numbers in `math-foundations-refresher.md`.)
+
+When tuning a `Pipeline`, parameter names must follow the pattern `<step_name>__<param_name>`. That's how `GridSearchCV` knows which pipeline step each hyperparameter belongs to. A plain `"C"` instead of `"clf__C"` raises an error.
+
+`n_jobs=-1` uses all available CPU cores in parallel. Grid search over many combinations is embarrassingly parallel — leaving this at the default of 1 core can make tuning take many times longer than it needs to.
+
+### 4. Grid search tries every combination. What if there are too many hyperparameters for that to be practical?
+
 ```python
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import loguniform
@@ -126,16 +185,25 @@ param_dist = {"clf__C": loguniform(1e-3, 1e2)}
 search = RandomizedSearchCV(pipe, param_dist, n_iter=20, cv=5, scoring="roc_auc", random_state=42, n_jobs=-1)
 search.fit(X_train, y_train)
 ```
-Grid search cost grows multiplicatively with every hyperparameter added; randomized search samples a fixed budget (`n_iter`) regardless of how many hyperparameters/values are in play, and empirically finds near-optimal regions almost as well as exhaustive search for a fraction of the compute. `loguniform` for `C` specifically: regularization strength spans orders of magnitude (0.001 to 100) — sampling uniformly on a linear scale wastes most samples in one narrow range; log-uniform spreads them evenly across orders of magnitude.
+
+Grid search's cost grows multiplicatively with every hyperparameter you add. Randomized search instead samples a fixed budget (`n_iter`), no matter how many hyperparameters or values are in play. Empirically, it finds near-optimal regions almost as well as exhaustive search, for a fraction of the compute.
+
+Why `loguniform` for `C` specifically: regularization strength spans orders of magnitude, from 0.001 to 100. Sampling uniformly on a linear scale wastes most of your samples in one narrow range. Log-uniform sampling spreads them evenly across every order of magnitude instead.
 
 ### Summary example
-Tuning a logistic regression's `C` and `penalty`: with only 2 hyperparameters and a handful of values each, `GridSearchCV` (8 total combinations) is cheap enough to run exhaustively. Scaling up to 5 hyperparameters with 10 values each would be 100,000 combinations — at that point `RandomizedSearchCV` with a fixed `n_iter=50` budget and `loguniform` sampling for anything spanning orders of magnitude becomes the only practical choice, trading a small amount of thoroughness for a massive compute saving.
+
+Tuning a logistic regression's `C` and `penalty`.
+
+1. With only 2 hyperparameters and a handful of values each, `GridSearchCV` covers 8 total combinations — cheap enough to run exhaustively.
+2. Scale that up to 5 hyperparameters with 10 values each, and you get 100,000 combinations.
+3. At that point, `RandomizedSearchCV` becomes the only practical choice: a fixed `n_iter=50` budget, with `loguniform` sampling for anything spanning orders of magnitude, trades a small amount of thoroughness for a massive compute saving.
 
 ---
 
 ## Cluster 3 — Evaluating Classification Properly
 
 ### 1. Beyond a single accuracy number, how do you evaluate a classifier properly?
+
 ```python
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 y_pred = pipe.predict(X_test)
@@ -144,25 +212,41 @@ print(classification_report(y_test, y_pred))
 print(confusion_matrix(y_test, y_pred))
 print(roc_auc_score(y_test, y_proba))           # AUC needs probabilities/scores, NOT hard 0/1 predictions
 ```
-What each of those three calls tells you, in plain terms: `classification_report` breaks out **precision** (of everything the model flagged as positive, what fraction really was?) and **recall** (of everything truly positive, what fraction did the model catch?) per class — two different questions that a single accuracy number blends together and hides. The `confusion_matrix` is the raw 2×2 count table underneath them: true positives, false positives, true negatives, false negatives. And **ROC-AUC** summarizes how well the model *ranks* positives above negatives across every possible decision threshold at once: 1.0 is perfect ranking, 0.5 is a coin flip.
 
-One mechanical trap: `predict_proba` returns a column per class; for binary classification, column 0 is P(negative), column 1 is P(positive) — passing the wrong column to `roc_auc_score` silently computes AUC for the wrong class.
+What each of those three calls actually tells you:
 
-### 2. Before trusting ANY of those numbers as "good," what's the cheapest sanity check — is the model even beating doing nothing?
+- `classification_report` breaks out **precision** and **recall** per class. Precision asks: of everything the model flagged as positive, what fraction really was? Recall asks: of everything truly positive, what fraction did the model catch? Those are two different questions, and a single accuracy number blends them together and hides the answer to both.
+- `confusion_matrix` is the raw 2×2 count table underneath: true positives, false positives, true negatives, false negatives.
+- **ROC-AUC** summarizes how well the model *ranks* positives above negatives, across every possible decision threshold at once. 1.0 is perfect ranking. 0.5 is a coin flip.
+
+One mechanical trap: `predict_proba` returns a column per class. For binary classification, column 0 is P(negative) and column 1 is P(positive). Pass the wrong column to `roc_auc_score`, and it silently computes AUC for the wrong class.
+
+### 2. Before trusting any of those numbers as "good," what's the cheapest sanity check?
+
 ```python
 from sklearn.dummy import DummyClassifier
 baseline = DummyClassifier(strategy="most_frequent")   # always predicts the majority class
 baseline.fit(X_train, y_train)
 print(baseline.score(X_test, y_test))    # THIS is the number your real model has to beat
 ```
-On a 95%-majority-class dataset, `DummyClassifier` scores 95% accuracy doing NOTHING intelligent at all — establishing this number first is what stops you from being impressed by a "good-looking" accuracy that a trivial baseline already achieves.
 
-### 3. Given a model that beats the baseline on test data, how do you quickly check if it's actually overfitting?
+Is the model even beating doing nothing? On a dataset that's 95% one class, `DummyClassifier` scores 95% accuracy doing nothing intelligent at all. Establish this number first. It's what stops you from being impressed by a good-looking accuracy that a trivial baseline already matches.
+
+### 3. A model beats the baseline. How do you quickly check if it's overfitting?
+
 ```python
 print("train:", pipe.score(X_train, y_train))
 print("test:", pipe.score(X_test, y_test))
 ```
-Train score much higher than test score is the single fastest overfitting diagnostic available — before touching any hyperparameter, always look at this gap first, since it directly tells you whether you have a variance problem (overfitting — the model is too flexible and latched onto training noise) or a bias problem (both scores low = underfitting — the model is too simple to capture the real pattern), which need very different fixes. (The full bias-variance story, with diagrams, lives in `ds-fundamentals`.)
+
+Compare the two numbers. A train score much higher than the test score is the single fastest overfitting diagnostic you have — check this gap before touching any hyperparameter.
+
+The gap tells you which problem you have, and the two need very different fixes:
+
+- Both scores low, small gap: a **bias** problem. The model is too simple to capture the real pattern (underfitting).
+- Train score high, test score much lower: a **variance** problem. The model latched onto training noise (overfitting).
+
+(The full bias-variance story, with diagrams, lives in `ds-fundamentals`.)
 
 **Visual + memory hook — the three possible gap shapes, and what each one means:**
 ```
@@ -178,7 +262,10 @@ test:  60%                 test:  89%                test:  71%
 ```
 
 ### Summary example
-A model scores 94% test accuracy — impressive, until `DummyClassifier(strategy="most_frequent")` also scores 94% because the classes are that imbalanced, revealing the "impressive" model added zero real signal. Checking train (96%) vs. test (94%) separately shows the gap is small, so it's not overfitting — the real problem is that accuracy was the wrong metric to be impressed by at all, which is exactly why `classification_report`'s precision/recall breakdown per class matters more than the single accuracy number here.
+
+A model scores 94% test accuracy. Impressive, until you check `DummyClassifier(strategy="most_frequent")` and it also scores 94%, because the classes are that imbalanced — the "impressive" model added zero real signal.
+
+Checking train (96%) against test (94%) shows the gap is small. So it's not overfitting. The real problem is that accuracy was the wrong metric to be impressed by in the first place — `classification_report`'s precision/recall breakdown per class matters far more here than the single accuracy number.
 
 ---
 
@@ -186,54 +273,75 @@ A model scores 94% test accuracy — impressive, until `DummyClassifier(strategy
 
 ## Cluster 4 — Handling Class Imbalance
 
-### 1. Given imbalanced classes (Cluster 3's exact scenario), what's the simplest fix, directly in the model itself?
+### 1. With imbalanced classes, what's the simplest fix, directly in the model itself?
+
 ```python
 from sklearn.linear_model import LogisticRegression
 clf = LogisticRegression(class_weight="balanced")    # auto-reweights inversely proportional to class frequency
 ```
-`class_weight="balanced"` is often the simpler, leakage-free FIRST move — it changes the loss function's penalty (the loss function is the running "how wrong am I" score that training minimizes) so that misclassifying a rare-class example hurts more than misclassifying a common one, rather than fabricating synthetic data — usually the right first thing to try before anything more involved.
 
-### 2. If reweighting the loss isn't enough, how do you actually generate more minority-class examples — and what's the one rule that must never be broken doing it?
+`class_weight="balanced"` changes the loss function's penalty — the loss function is the running "how wrong am I" score that training minimizes — so that misclassifying a rare-class example hurts more than misclassifying a common one. It doesn't fabricate any synthetic data. That makes it the simpler, leakage-free first move, usually worth trying before anything more involved.
+
+### 2. If reweighting the loss isn't enough, how do you generate more minority-class examples?
+
 ```python
 from imblearn.over_sampling import SMOTE
 sm = SMOTE(random_state=42)
 X_train_res, y_train_res = sm.fit_resample(X_train, y_train)
 ```
-SMOTE synthesizes new minority-class points by interpolating between real ones — drawing each new fake example somewhere along the straight line between two genuine minority-class neighbors, so the additions are plausible rather than random. The rule: if applied BEFORE the train/test split, synthetic points derived from what becomes test data can leak into training, and the test set's synthetic points don't represent real unseen data at all. SMOTE must be fit only on the training split, never before splitting — `imblearn`'s own `Pipeline` (not sklearn's) exists specifically to keep SMOTE properly scoped inside cross-validation folds, the exact same leakage discipline as Cluster 1's `StandardScaler`.
+
+SMOTE synthesizes new minority-class points by interpolating between real ones. It draws each new fake example somewhere along the straight line between two genuine minority-class neighbors, so the additions stay plausible instead of random.
+
+The one rule that must never be broken: SMOTE must be fit only on the training split, never before splitting. Apply it before the split, and synthetic points derived from what becomes test data can leak into training — plus the test set's own synthetic points wouldn't represent real unseen data at all. `imblearn`'s own `Pipeline` (not sklearn's) exists specifically to keep SMOTE properly scoped inside cross-validation folds — the same leakage discipline as Cluster 1's `StandardScaler`.
 
 ### Summary example
-A fraud dataset with 2% positive class: trying `class_weight="balanced"` first is cheap and leakage-free — if that alone gets acceptable recall, SMOTE isn't even needed. If it doesn't, SMOTE (correctly scoped to only the training fold, via `imblearn.pipeline.Pipeline`) generates synthetic fraud examples — but applying SMOTE to the FULL dataset before splitting would leak synthetic points derived from test-set fraud cases into training, silently inflating the test score in a way that wouldn't hold up in production.
+
+A fraud dataset with a 2% positive class.
+
+1. Try `class_weight="balanced"` first — it's cheap and leakage-free. If it alone gets acceptable recall, SMOTE isn't even needed.
+2. If it doesn't, apply SMOTE — but only inside `imblearn.pipeline.Pipeline`, so it stays correctly scoped to just the training fold.
+3. Applying SMOTE to the full dataset before splitting would leak synthetic points derived from test-set fraud cases into training, silently inflating the test score in a way that wouldn't hold up in production.
 
 ---
 
 ## Cluster 5 — Feature Selection and Importance
 
 ### 1. With many candidate features, how do you automatically select the most predictive ones?
+
 ```python
 from sklearn.feature_selection import SelectKBest, f_classif
 selector = SelectKBest(score_func=f_classif, k=10)
 X_train_sel = selector.fit_transform(X_train, y_train)
 selected_cols = X_train.columns[selector.get_support()]    # get_support() -> boolean mask of kept columns
 ```
-`f_classif` (ANOVA F-value — the same F-statistic idea from `stats-scipy-practice.md`'s ANOVA cluster) assumes a roughly linear relationship between each feature and the target; `mutual_info_classif` captures non-linear relationships too but is more expensive to compute — pick based on whether you suspect non-linear feature-target relationships.
 
-### 2. Instead of selecting features BEFORE training, how do you find out which features a trained tree-based model actually relied on?
+`f_classif` (the ANOVA F-value — the same F-statistic idea from `stats-scipy-practice.md`'s ANOVA cluster) assumes a roughly linear relationship between each feature and the target. `mutual_info_classif` captures non-linear relationships too, but costs more to compute. Pick based on whether you suspect a non-linear feature-target relationship.
+
+### 2. Instead of selecting features before training, how do you find out which features a trained tree-based model actually relied on?
+
 ```python
 from sklearn.ensemble import RandomForestClassifier
 rf = RandomForestClassifier(n_estimators=300, max_depth=8, random_state=42, n_jobs=-1)
 rf.fit(X_train, y_train)
 importances = pd.Series(rf.feature_importances_, index=X_train.columns).sort_values(ascending=False)
 ```
-`max_depth` matters here specifically: unconstrained trees (`max_depth=None`) grow until every leaf is pure, which tends to overfit AND inflates the apparent importance of high-cardinality features (columns with many distinct values, like a ZIP code or customer ID) that can split data very finely just by chance — capping depth is one of the simplest regularization levers for tree ensembles, directly the same bias-variance dial from `ml-models-practice.md`'s dartboard visual.
+
+`max_depth` matters here specifically. Unconstrained trees (`max_depth=None`) grow until every leaf is pure. That tends to overfit, and it also inflates the apparent importance of high-cardinality features — columns with many distinct values, like a ZIP code or customer ID — that can split data very finely just by chance. Capping depth is one of the simplest regularization levers for tree ensembles, the same bias-variance dial as `ml-models-practice.md`'s dartboard visual.
 
 ### Summary example
-30 candidate features, most of them noise: `SelectKBest(f_classif, k=10)` narrows to the 10 most linearly predictive BEFORE training anything, while training a `RandomForestClassifier` on all 30 and reading `feature_importances_` instead reveals which features the model actually leaned on AFTER training — the two approaches can disagree on a feature with a real but non-linear relationship to the target, which `f_classif` would underrate and a tree-based importance would correctly surface.
+
+30 candidate features, most of them noise.
+
+1. `SelectKBest(f_classif, k=10)` narrows to the 10 most linearly predictive features, before training anything.
+2. Training a `RandomForestClassifier` on all 30 features and reading `feature_importances_` instead shows which features the model actually leaned on, after training.
+3. The two approaches can disagree on a feature with a real but non-linear relationship to the target — `f_classif` underrates it, while a tree-based importance correctly surfaces it.
 
 ---
 
 ## Cluster 6 — Evaluating Regression
 
-### 1. Classification has accuracy/precision/recall — what's the equivalent for a regression model?
+### 1. Classification has accuracy, precision, and recall. What's the equivalent for a regression model?
+
 ```python
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 y_pred = reg.predict(X_test)
@@ -242,11 +350,13 @@ rmse = mean_squared_error(y_test, y_pred, squared=False)   # penalizes large err
 r2 = r2_score(y_test, y_pred)                       # fraction of variance explained, 1.0=perfect
 ```
 
-### 2. Given both MAE and RMSE measure error, why report BOTH instead of just picking one?
-If RMSE is much larger than MAE, that gap itself is diagnostic — it means a small number of predictions have LARGE errors dragging RMSE up (since RMSE squares errors before averaging, which MAE doesn't), which MAE alone would mask entirely.
+### 2. Both MAE and RMSE measure error. Why report both instead of just picking one?
+
+Because RMSE squares errors before averaging, and MAE doesn't. If RMSE comes out much larger than MAE, that gap itself is diagnostic — it means a small number of predictions have large errors dragging RMSE up. MAE alone would mask that entirely.
 
 ### Summary example
-A model's MAE is $500 but its RMSE is $3,200 — that large gap immediately signals a handful of predictions with huge errors (RMSE's squaring punishes them disproportionately) rather than uniformly mediocre predictions across the board, pointing an investigation toward specific outlier cases rather than the model's general calibration.
+
+A model's MAE is $500, but its RMSE is $3,200. That large gap immediately signals a handful of predictions with huge errors — RMSE's squaring punishes them disproportionately — rather than uniformly mediocre predictions across the board. It points an investigation toward specific outlier cases, not the model's general calibration.
 
 ---
 
@@ -255,6 +365,7 @@ A model's MAE is $500 but its RMSE is $3,200 — that large gap immediately sign
 ## Cluster 7 — Unsupervised: Clustering and Dimensionality Reduction
 
 ### 1. With no labels at all, how do you group similar data points together?
+
 ```python
 from sklearn.cluster import KMeans
 inertias = []
@@ -263,75 +374,100 @@ for k in range(1, 10):
     inertias.append(km.inertia_)     # sum of squared distances to nearest centroid
 # plot inertias vs k, look for the "elbow" where adding clusters stops helping much
 ```
-How K-means actually works, in one breath: place `k` **centroids** (imaginary center points) randomly, assign every row to its nearest centroid, move each centroid to the middle of the rows assigned to it, and repeat until nothing moves — the final groups are your clusters. Because the starting placement is random, the result can get stuck in a bad **local optimum** (a clustering that no small adjustment improves, even though a better overall one exists) — `n_init=10` runs the whole process 10 times from different random starts and keeps the best (lowest inertia) run; setting it too low risks a genuinely worse clustering purely from bad luck.
+
+How K-means actually works, one step at a time:
+
+1. Place `k` **centroids** — imaginary center points — at random.
+2. Assign every row to its nearest centroid.
+3. Move each centroid to the middle of the rows now assigned to it.
+4. Repeat steps 2 and 3 until nothing moves. The final groups are your clusters.
+
+Because the starting placement is random, the result can get stuck in a bad **local optimum** — a clustering that no small adjustment improves, even though a genuinely better overall clustering exists. `n_init=10` runs the whole process 10 times from different random starts and keeps the best (lowest-inertia) run. Set it too low, and you risk a genuinely worse clustering purely from bad luck.
 
 ### 2. With too many features to even visualize, how do you reduce dimensionality first?
+
 ```python
 from sklearn.decomposition import PCA
 pca = PCA(n_components=2, random_state=42)
 X_2d = pca.fit_transform(X_train_scaled)   # ALWAYS scale first -- PCA is sensitive to feature scale
 print(pca.explained_variance_ratio_)        # fraction of total variance each component captures
 ```
-**Dimensionality reduction** means compressing many columns into a few new synthetic ones that preserve as much of the data's spread as possible — so 20 features can become 2 you can actually plot. PCA is the standard linear way to do it: it finds directions of maximum variance (the eigenvector machinery from `math-foundations-refresher.md`) — but a feature measured in larger raw units (income in dollars vs. age in years) will dominate the principal components purely from its SCALE, not because it's actually more informative, unless everything is standardized first — the exact same "always scale first" discipline as Cluster 1's `StandardScaler`, just feeding PCA instead of a classifier.
+
+**Dimensionality reduction** compresses many columns into a few new synthetic ones that preserve as much of the data's spread as possible — so 20 features can become 2 you can actually plot.
+
+PCA is the standard linear way to do it. It finds directions of maximum variance — the eigenvector machinery from `math-foundations-refresher.md`. But scale first: a feature measured in larger raw units (income in dollars vs. age in years) will dominate the principal components purely from its scale, not because it's actually more informative, unless everything is standardized first. Same "always scale first" discipline as Cluster 1's `StandardScaler`, just feeding PCA this time instead of a classifier.
 
 ### Summary example
-Clustering customers on 20 raw features including both "annual income" (tens of thousands) and "age" (tens): without scaling first, K-means would effectively cluster almost entirely on income, since its raw numeric range dwarfs age's — `StandardScaler` before `KMeans` (or before `PCA` for a 2D visualization of the same clusters) puts every feature on equal footing first, so the resulting clusters reflect genuine multi-feature similarity, not one feature's arbitrary unit of measurement.
+
+Clustering customers on 20 raw features, including both "annual income" (tens of thousands) and "age" (tens).
+
+1. Without scaling first, K-means would effectively cluster almost entirely on income, since its raw numeric range dwarfs age's.
+2. Running `StandardScaler` before `KMeans` (or before `PCA`, for a 2D visualization of the same clusters) puts every feature on equal footing first.
+3. The resulting clusters then reflect genuine multi-feature similarity, not just one feature's arbitrary unit of measurement.
 
 ---
 
 ## Cluster 8 — Persisting a Trained Model
 
 ### 1. After all the above, how do you save a fitted pipeline so it doesn't need retraining every time?
+
 ```python
 import joblib
 joblib.dump(pipe, "model.joblib")
 loaded_pipe = joblib.load("model.joblib")
 ```
-This is **serialization** — saving a live Python object to a file byte-for-byte so a different process, later, can reload it exactly as it was, fitted state included. `joblib` over plain `pickle`: it's more efficient specifically for objects containing large NumPy arrays (like a fitted model's learned weights), which is exactly what most scikit-learn estimators are — it's the library's own recommended serialization tool for this reason.
+
+This is **serialization** — saving a live Python object to a file, byte for byte, so a different process, later, can reload it exactly as it was, fitted state included. `joblib` over plain `pickle`: it's more efficient specifically for objects containing large NumPy arrays, like a fitted model's learned weights — which is exactly what most scikit-learn estimators are. That's why it's the library's own recommended serialization tool.
 
 ### Summary example
-A tuned `Pipeline` (scaler + classifier, from Cluster 1) that took 20 minutes of `GridSearchCV` to produce gets saved once with `joblib.dump`, then loaded in a separate serving script with `joblib.load` — the entire fitted pipeline, preprocessing included, restored in milliseconds instead of re-running the full training and tuning process.
+
+A tuned `Pipeline` (scaler and classifier, from Cluster 1) that took 20 minutes of `GridSearchCV` to produce.
+
+1. Save it once, with `joblib.dump`.
+2. Load it in a separate serving script, with `joblib.load`.
+3. The entire fitted pipeline, preprocessing included, comes back in milliseconds — instead of re-running the full training and tuning process.
 
 ---
 
 ## Practice Q&A (Self-Test)
 
 **Q1. In `train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)`, what does each of `stratify` and `random_state` guard against?**
-A: `stratify=y` forces both the train and test splits to preserve the same class proportions as the full dataset, preventing a random split from producing a test set with a very different class balance (especially risky on imbalanced data). `random_state` fixes the randomness so the split is reproducible across runs and reviewers.
+A: `stratify=y` forces both the train and test splits to keep the same class proportions as the full dataset. That prevents a random split from producing a test set with a very different class balance — especially risky on imbalanced data. `random_state` fixes the randomness, so the split is reproducible across runs and reviewers.
 
 **Q2. Why is `scaler.fit_transform(X_test)` a data leakage bug, and what should you call instead?**
-A: `fit_transform` would relearn the mean/std from the test set itself, letting information about the test distribution leak into preprocessing and inflating reported performance versus what the model would actually see on truly unseen data. The correct call is `scaler.transform(X_test)`, which reuses the mean/std already learned from `X_train` without refitting.
+A: `fit_transform` would relearn the mean and standard deviation from the test set itself. That lets information about the test distribution leak into preprocessing, and it inflates reported performance above what the model would actually see on truly unseen data. The correct call is `scaler.transform(X_test)` — it reuses the mean/std already learned from `X_train`, without refitting.
 
 **Q3. What does `OneHotEncoder(handle_unknown="ignore")` do when `X_test` contains a category never seen in `X_train`, and what's the alternative behavior without it?**
-A: With `handle_unknown="ignore"`, an unseen category is encoded as all-zeros and the pipeline keeps running (worth monitoring, but not a crash). Without it, encountering an unseen category at inference/test time raises an error, halting the pipeline.
+A: With `handle_unknown="ignore"`, an unseen category gets encoded as all-zeros and the pipeline keeps running — worth monitoring, but not a crash. Without it, encountering an unseen category at inference or test time raises an error and halts the pipeline.
 
 **Q4. Why does wrapping `StandardScaler` and `LogisticRegression` in a `Pipeline` matter beyond convenience, specifically during cross-validation?**
-A: A `Pipeline` guarantees the scaler is fit only on whatever data `.fit()` is called with, so inside cross-validation each fold's scaler is refit on just that fold's training portion. Manually scaling the full dataset before running CV and passing the pre-scaled data in is a common leakage bug this structurally prevents.
+A: A `Pipeline` guarantees the scaler is fit only on whatever data `.fit()` is called with. Inside cross-validation, that means each fold's scaler is refit on just that fold's own training portion. Manually scaling the full dataset before running CV, then passing the pre-scaled data in, is a common leakage bug this structurally prevents.
 
 **Q5. What problem does `ColumnTransformer` solve when you have both numeric and categorical columns?**
-A: It lets you apply different transformers to different named columns in one object — e.g., `StandardScaler` to `["wear_pct", "age_days"]` and `OneHotEncoder` to `["depot"]`. This structurally prevents the common beginner error of applying scaling to categorical columns or one-hot encoding to continuous ones.
+A: It lets you apply different transformers to different named columns in one object — `StandardScaler` to `["wear_pct", "age_days"]` and `OneHotEncoder` to `["depot"]`. This structurally prevents a common beginner error: applying scaling to categorical columns, or one-hot encoding to continuous ones.
 
 **Q6. Why does the file recommend printing both `scores.mean()` and `scores.std()` after `cross_val_score`?**
-A: Two models can have the same mean CV score but very different standard deviations across folds — high variance means the estimate itself is unstable and less trustworthy, which the mean alone hides. Reporting both gives a fuller picture of reliability, not just central tendency.
+A: Two models can have the same mean CV score but very different standard deviations across folds. High variance means the estimate itself is less trustworthy — something the mean alone hides. Reporting both gives a fuller picture of reliability, not just central tendency.
 
 **Q7. In `GridSearchCV` with `param_grid = {"clf__C": [...], "clf__penalty": [...]}`, why is the `clf__` prefix required instead of just `"C"`?**
-A: When tuning a `Pipeline`, parameter names must follow `<step_name>__<param_name>` so `GridSearchCV` knows which pipeline step (here, the `"clf"` step) each hyperparameter belongs to. Passing a plain `"C"` instead of `"clf__C"` raises an error because it doesn't map to any pipeline step's parameter.
+A: When tuning a `Pipeline`, parameter names must follow `<step_name>__<param_name>`, so `GridSearchCV` knows which pipeline step — here, the `"clf"` step — each hyperparameter belongs to. A plain `"C"` instead of `"clf__C"` raises an error, because it doesn't map to any pipeline step's parameter.
 
 **Q8. Why does the file use `loguniform(1e-3, 1e2)` for sampling `C` in `RandomizedSearchCV` instead of a plain uniform range?**
-A: Regularization strength like `C` naturally spans orders of magnitude (0.001 to 100); sampling uniformly on a linear scale would waste most samples in one narrow range. Log-uniform sampling spreads samples evenly across orders of magnitude, matching how `C`'s effect actually varies.
+A: Regularization strength like `C` naturally spans orders of magnitude, from 0.001 to 100. Sampling uniformly on a linear scale would waste most samples in one narrow range. Log-uniform sampling spreads samples evenly across every order of magnitude, matching how `C`'s effect actually varies.
 
 **Q9. When computing `roc_auc_score(y_test, y_proba)`, why is `y_proba = pipe.predict_proba(X_test)[:, 1]` specifically indexed with `[:, 1]` rather than `[:, 0]`?**
-A: `predict_proba` returns one probability column per class — for binary classification, column 0 is P(negative) and column 1 is P(positive). `roc_auc_score` needs probabilities/scores for the positive class, so passing the wrong column silently computes AUC for the wrong class.
+A: `predict_proba` returns one probability column per class — for binary classification, column 0 is P(negative) and column 1 is P(positive). `roc_auc_score` needs probabilities for the positive class, so passing the wrong column silently computes AUC for the wrong class.
 
 **Q10. Why does the file suggest `class_weight="balanced"` as a first move for imbalanced classification, before trying SMOTE?**
-A: `class_weight="balanced"` reweights the loss function's penalty for misclassifying the minority class rather than fabricating synthetic data points, making it a simpler, leakage-free first option. SMOTE, by contrast, must be fit only on the training split (never before the train/test split) to avoid synthetic points leaking into or contaminating the test set.
-
+A: `class_weight="balanced"` reweights the loss function's penalty for misclassifying the minority class, instead of fabricating synthetic data points, making it a simpler, leakage-free first option. SMOTE, by contrast, must be fit only on the training split — never before the train/test split — to avoid synthetic points leaking into or contaminating the test set.
 
 ---
 
 ## Video-Sourced Practice MCQs (Set 2)
 
-A second practice set for scikit-learn, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube scikit-learn-interview-prep video, then written up as fully original multiple-choice questions here (every option and explanation below is original, not copied from the video). These focus on angles the clusters above don't already drill in depth -- clustering algorithm choice (KMeans vs. DBSCAN) and evaluation, core hyperparameter meanings, regularization's actual mechanism, the fit/transform API discipline, KNN's prediction mechanics, why CV beats training accuracy for model selection, and what SVM's margin maximization is actually doing.
+A second scikit-learn practice set, built the same way as this hub's NCA-GENL community bank. Topics were checked against a real YouTube scikit-learn-interview-prep video, then written up here as fully original multiple-choice questions — every option and explanation below is original, not copied from the video.
+
+These questions focus on angles the clusters above don't already drill in depth: clustering algorithm choice (KMeans vs. DBSCAN) and evaluation, core hyperparameter meanings, how regularization actually works, the fit/transform API discipline, KNN's prediction mechanics, why CV beats training accuracy for model selection, and what SVM's margin maximization is actually doing.
 
 <script type="application/json" class="topic-quiz-data" data-title="scikit-learn Practice (Set 2)">
 [

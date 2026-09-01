@@ -1,6 +1,10 @@
 # Time Series Analysis — Trend, Seasonality & Forecasting, With Real Numbers
 
-Every other doc on this hub treats rows as independent — shuffle them, split them randomly, no problem. Time series breaks that assumption on purpose: order IS the information, today's value is correlated with yesterday's, and shuffling before a train/test split isn't just unconventional here, it's a real, damaging form of the data leakage covered in `common-issues-failure-modes.md` — the model would train on data from *after* the point it's supposed to be predicting. This doc builds one small, fully worked example — 8 quarters of data with a known trend and known seasonal pattern baked in by construction — and reuses it through every section, the same "simulate data with a known true answer and check the method recovers it" discipline already used in `stats-scipy-practice.md`.
+Every other doc in this hub treats rows as independent. Shuffle them, split them randomly, no problem. Time series breaks that rule on purpose.
+
+Order IS the information. Today's value is correlated with yesterday's. If you shuffle before a train/test split, you're not just doing something unconventional — you're leaking data from the future into training. That's the same data leakage problem covered in `common-issues-failure-modes.md`, just a more damaging version of it: the model would train on data from *after* the point it's supposed to be predicting.
+
+This doc builds one small worked example — 8 quarters of data, with a known trend and a known seasonal pattern baked in on purpose — and reuses it in every section. This is the same trick `stats-scipy-practice.md` uses: simulate data with a known true answer, then check whether the method actually recovers it.
 
 ## The running example
 
@@ -12,7 +16,7 @@ Seasonal (repeats every 4):  +10,  -5, -10,  +5, +10,  -5, -10,  +5
 Raw = Trend + Seasonal:      110, 100, 100, 120, 130, 120, 120, 140
                               t0   t1   t2   t3   t4   t5   t6   t7
 ```
-(Real data also has random noise on top; it's left out here specifically so the decomposition below can be checked against an exact known answer, not an approximate one.)
+(Real data also has random noise on top. It's left out here on purpose, so the decomposition below can be checked against an exact known answer instead of an approximate one.)
 
 ## Decomposition — pulling Trend, Seasonal, and Residual back apart
 
@@ -28,49 +32,58 @@ DETRENDED  ──▶ [ average the detrended values at each season position ] �
 RESIDUAL (should look like structureless noise, if the model fit well)
 ```
 
-**Step 1 — recover the trend** with a centered 4-point moving average (4 = the period). Averaging 4 consecutive quarters cancels the seasonal swing out, leaving just the trend level:
+**Step 1 — recover the trend.** Use a centered 4-point moving average (4 because the period is 4). Averaging 4 consecutive quarters cancels the seasonal swing out, leaving just the trend level.
+
+First, average each window of 4:
 ```
 CMA(t=1..4) = avg(raw[0..3]) = avg(110,100,100,120) = 107.5   → centered at t=1.5
 CMA(t=2..5) = avg(raw[1..4]) = avg(100,100,120,130) = 112.5   → centered at t=2.5
 CMA(t=3..6) = avg(raw[2..5]) = avg(100,120,130,120) = 117.5   → centered at t=3.5
 CMA(t=4..7) = avg(raw[3..6]) = avg(120,130,120,120) = 122.5   → centered at t=4.5
 CMA(t=5..8) = avg(raw[4..7]) = avg(130,120,120,140) = 127.5   → centered at t=5.5
-
-then average adjacent pairs to land back on whole time steps:
+```
+Notice each window lands on a half-step (t=1.5, t=2.5, ...), not a whole time step. So the next step averages adjacent pairs to land back on whole numbers:
+```
 Trend(t=2) = avg(107.5, 112.5) = 110.0   (true trend was 110 ✓)
 Trend(t=3) = avg(112.5, 117.5) = 115.0   (true trend was 115 ✓)
 Trend(t=4) = avg(117.5, 122.5) = 120.0   (true trend was 120 ✓)
 Trend(t=5) = avg(122.5, 127.5) = 125.0   (true trend was 125 ✓)
 ```
-Exact recovery, for t=2..5. Notice t=0, 1, 6, 7 have **no trend value at all** — a centered moving average always loses points at both ends of the series (there aren't enough neighbors to average around them), which is a real, unavoidable property of this method, not a bug in this example.
+Exact recovery, for t=2 through t=5.
 
-**Step 2 — recover the seasonal component** from what's left over (`raw − trend`), at the 4 points where trend exists:
+Notice t=0, 1, 6, and 7 have **no trend value at all**. A centered moving average always loses points at both ends of the series — there simply aren't enough neighbors to average around them. That's a real, unavoidable property of this method. It's not a bug in this example.
+
+**Step 2 — recover the seasonal component.** Look at what's left over (`raw − trend`), at the 4 points where trend exists:
 ```
 t=2: 100 − 110 = −10   (true seasonal: −10 ✓)
 t=3: 120 − 115 = +5    (true seasonal: +5 ✓)
 t=4: 130 − 120 = +10   (true seasonal: +10 ✓)
 t=5: 120 − 125 = −5    (true seasonal: −5 ✓)
 ```
-Exact recovery again. (With more years of data, you'd average all "Q1"s together, all "Q2"s together, etc. to get one stable seasonal value per position instead of just reading it off directly — here one cycle is enough to see it exactly, since there's no noise.)
+Exact recovery again. With more years of data, you'd average all the "Q1"s together, all the "Q2"s together, and so on, to get one stable seasonal value per position instead of just reading it off directly. Here, one cycle is enough to see it exactly, since there's no noise.
 
-**Step 3 — the residual** is whatever's left: `raw − trend − seasonal`. In this constructed example it comes out to exactly 0 everywhere trend exists — which is the whole point of building it this way: a residual that isn't structureless noise (if it still trends, or still oscillates) means the decomposition missed something real.
+**Step 3 — the residual.** Whatever's left over: `raw − trend − seasonal`. In this constructed example it comes out to exactly 0 everywhere trend exists. That's the whole point of building the example this way — a residual that isn't structureless noise (if it still trends, or still oscillates) means the decomposition missed something real.
 
 ## Stationarity — why almost every classical model needs it
 
-A series is **stationary** if its mean, variance, and autocorrelation structure stay constant over time — no trend, no growing/shrinking spread, no systematic seasonal swing. Classical forecasting models (ARIMA and its relatives) are built on the mathematical assumption that the underlying process doesn't change shape over time; feed one a series with a rising trend and its forecasts will systematically miss, because it has no built-in concept of "and it keeps rising."
+A series is **stationary** if its mean, variance, and autocorrelation structure stay constant over time. No trend. No growing or shrinking spread. No systematic seasonal swing.
 
-**Our raw series is NOT stationary** — its mean is clearly rising (roughly 110 in the first half, roughly 130 in the second). The formal check is the **Augmented Dickey-Fuller (ADF) test**: null hypothesis = "this series has a unit root" — "unit root" being the technical name for the wandering, trend-carrying behavior that makes a series non-stationary; you don't need the algebra behind the term, just that the null means *non-stationary*. A small p-value lets you reject that and treat the series as stationary. (The hypothesis-testing mechanics — null hypothesis, p-value, rejection — are `stats-scipy-practice.md`'s whole subject.) In practice: `statsmodels.tsa.stattools.adfuller(series)`.
+Classical forecasting models (ARIMA and its relatives) assume the underlying process doesn't change shape over time. Feed one a series with a rising trend, and its forecasts will systematically miss — it has no built-in concept of "and it keeps rising."
 
-**The fix is differencing** — instead of modeling the raw values, model the change from one step to the next.
+**Our raw series is NOT stationary.** Its mean is clearly rising — roughly 110 in the first half, roughly 130 in the second half.
+
+The formal check is the **Augmented Dickey-Fuller (ADF) test**. Its null hypothesis is "this series has a unit root." Unit root is just the technical name for the wandering, trend-carrying behavior that makes a series non-stationary — you don't need the algebra behind the term, just that the null hypothesis means *non-stationary*. A small p-value lets you reject that, and treat the series as stationary. (The general mechanics of hypothesis testing — null hypothesis, p-value, rejection — are `stats-scipy-practice.md`'s whole subject, if you need a refresher.) In practice: `statsmodels.tsa.stattools.adfuller(series)`.
+
+**The fix is differencing.** Instead of modeling the raw values, model the change from one step to the next.
 
 ```
 diff(t) = raw(t) − raw(t−1)
 raw:   110, 100, 100, 120, 130, 120, 120, 140
 diff:      −10,   0,  20,  10, −10,   0,  20
 ```
-The linear trend (constant +5/quarter) collapses to a constant, but the seasonal ripple is still visibly there, oscillating. **First differencing removes trend, not seasonality** — those are two different problems needing two different tools.
+The linear trend (a constant +5/quarter) collapses down to a constant. But the seasonal ripple is still visibly there, oscillating. **First differencing removes trend, not seasonality.** Those are two different problems, and they need two different tools.
 
-**Seasonal differencing** (subtract the value from one full period ago, not one step ago) removes the seasonal pattern instead:
+**Seasonal differencing** removes the seasonal pattern instead — subtract the value from one full period ago, not just one step ago:
 ```
 diff4(t) = raw(t) − raw(t−4)
 t=4: 130 − 110 = 20
@@ -78,40 +91,49 @@ t=5: 120 − 100 = 20
 t=6: 120 − 100 = 20
 t=7: 140 − 120 = 20
 ```
-Every value comes out to exactly **20** — because the seasonal component is identical every cycle (it cancels itself out) and the trend advances by exactly `5 × 4 = 20` over any 4-quarter span. A perfectly flat, genuinely stationary result. This is the "S" and the seasonal "D" in `SARIMA(p,d,q)(P,D,Q,period)` — plain differencing handles trend, seasonal differencing handles the repeating pattern, and real series with both often need both.
+Every value comes out to exactly **20**. Why? The seasonal component is identical every cycle, so it cancels itself out completely, and the trend advances by exactly `5 × 4 = 20` over any 4-quarter span. The result is a perfectly flat, genuinely stationary series.
+
+This is the "S" and the seasonal "D" in `SARIMA(p,d,q)(P,D,Q,period)`. Plain differencing handles trend. Seasonal differencing handles the repeating pattern. Real series often have both, and need both fixes.
 
 ## Autocorrelation (ACF) and Partial Autocorrelation (PACF)
 
-**Autocorrelation** measures how correlated the series is with a lagged copy of itself — "how much does knowing today's value tell you about tomorrow's." Computed exactly like the Pearson correlation in `stats-scipy-practice.md`, just between the series and a shifted copy of itself:
+**Autocorrelation** measures how correlated the series is with a lagged copy of itself. In plain words: how much does knowing today's value tell you about tomorrow's? It's computed exactly like the Pearson correlation from `stats-scipy-practice.md`, just between the series and a shifted copy of itself:
 ```
 r(lag) = Σ (x_t − mean)(x_{t−lag} − mean)  /  Σ (x_t − mean)²
 ```
 
-**Worked lag-1 example on the raw series** (mean = 117.5):
+**A worked lag-1 example on the raw series** (mean = 117.5). First, the deviations from the mean:
 ```
 deviations: −7.5, −17.5, −17.5, 2.5, 12.5, 2.5, 2.5, 22.5
-
+```
+Then the numerator — multiply each deviation by the deviation one step before it, and add:
+```
 numerator   = (−17.5)(−7.5) + (−17.5)(−17.5) + (2.5)(−17.5) + (12.5)(2.5)
             + (2.5)(12.5) + (2.5)(2.5) + (22.5)(2.5)
             = 131.25 + 306.25 − 43.75 + 31.25 + 31.25 + 6.25 + 56.25 = 518.75
+```
+Then the denominator — just the sum of every squared deviation:
+```
 denominator = 7.5² + 17.5² + 17.5² + 2.5² + 12.5² + 2.5² + 2.5² + 22.5² = 1350
-
+```
+Divide the two:
+```
 r(1) = 518.75 / 1350 ≈ 0.38
 ```
-A real, hand-computable number — though honestly, 8 points is far too few for a trustworthy autocorrelation estimate; real diagnosis plots this across many lags (a "correlogram") on 50+ points, not one lag on 8.
+That's a real, hand-computable number. But honestly, 8 points is far too few for a trustworthy autocorrelation estimate. Real diagnosis plots this across many lags at once (a "correlogram") on 50+ points, not just one lag on 8 points.
 
-**Why compute this at all** — it's how you pick the `p` and `q` in ARIMA, via a well-established (and worth memorizing) reading:
+**Why compute this at all?** Because it's how you pick the `p` and `q` in ARIMA. There's a well-established reading, worth memorizing:
 
 | Process | ACF shape | PACF shape |
 |---|---|---|
 | AR(p) — depends on its own past VALUES | decays gradually | cuts off sharply after lag p |
 | MA(q) — depends on past forecast ERRORS | cuts off sharply after lag q | decays gradually |
 
-The "cuts off sharply" one tells you the order — a sharp PACF cutoff after lag 2 suggests AR(2); a sharp ACF cutoff after lag 1 suggests MA(1).
+Whichever plot "cuts off sharply" tells you the order. A sharp PACF cutoff after lag 2 suggests AR(2). A sharp ACF cutoff after lag 1 suggests MA(1).
 
 ## Classical forecasting models
 
-**Simple exponential smoothing** — each forecast is a weighted blend of the newest observation and the previous smoothed estimate:
+**Simple exponential smoothing.** Each forecast is a weighted blend of the newest observation and the previous smoothed estimate:
 ```
 S(t) = α·x(t) + (1−α)·S(t−1)
 ```
@@ -121,31 +143,39 @@ S(1) = 0.3×100 + 0.7×110 = 30 + 77   = 107.0
 S(2) = 0.3×100 + 0.7×107 = 30 + 74.9 = 104.9
 S(3) = 0.3×120 + 0.7×104.9 = 36 + 73.43 = 109.43
 ```
-Notice the smoothed value visibly lags behind the raw series' actual swings — that lag is the direct cost of smoothing. A higher `α` tracks real changes faster but is noisier (closer to just repeating the raw data); a lower `α` is smoother but slower to react to a genuine shift. (**Double** exponential smoothing / Holt's method adds a trend term; **triple**/Holt-Winters adds a seasonal term on top of that — the same idea, layered.)
+Notice the smoothed value visibly lags behind the raw series' actual swings. That lag is the direct cost of smoothing. A higher `α` tracks real changes faster, but is noisier — closer to just repeating the raw data. A lower `α` is smoother, but slower to react to a genuine shift.
 
-**ARIMA(p, d, q)** — three separate knobs, each solving one problem already covered above, combined into one model:
-- **`d`** (Integrated) — how many times to difference the series to make it stationary. Comes directly from the stationarity section: 0 if already stationary, 1 if first-differencing fixed it, etc.
-- **`p`** (AutoRegressive) — how many of its own past values the model regresses on (uses as inputs in a linear formula, like features in a regression). Read off the PACF cutoff.
-- **`q`** (Moving Average) — how many past forecast *errors* the model regresses on — "how wrong was I recently" becomes an input to the next prediction. Read off the ACF cutoff.
+(**Double** exponential smoothing, also called Holt's method, adds a trend term on top of this. **Triple**, also called Holt-Winters, adds a seasonal term too. Same idea, just layered.)
 
-So `ARIMA(1,1,1)` means: difference once to remove trend, then predict using 1 lag of the (differenced) series and 1 lag of past forecast error. `auto_arima` (the `pmdarima` package) automates this search rather than reading ACF/PACF plots by eye — worth knowing it exists, but understanding what it's searching *over* is what the ACF/PACF section above is for.
+**ARIMA(p, d, q).** Three separate knobs, each solving one problem already covered above, combined into one model:
+- **`d` (Integrated)** — how many times to difference the series to make it stationary. Comes directly from the stationarity section above: 0 if it's already stationary, 1 if first-differencing fixed it, and so on.
+- **`p` (AutoRegressive)** — how many of its own past values the model regresses on. Think of these past values as features in a regression, just from the series itself. Read this off the PACF cutoff.
+- **`q` (Moving Average)** — how many past forecast *errors* the model regresses on. In plain words: "how wrong was I recently" becomes an input to the next prediction. Read this off the ACF cutoff.
 
-**Honest modern note**: for a lot of real business forecasting (especially with multiple known external drivers — promotions, holidays, price), gradient-boosted trees or a neural net fed engineered lag/rolling-window features (see `pandas-practice.md`'s `.diff()`/`.shift()`) often beat classical ARIMA in practice, and Meta's **Prophet** library automates trend+seasonality decomposition specifically to be robust to messy real-world data (missing days, holiday effects) with less manual tuning than ARIMA. ARIMA is still the right thing to *understand* first — it's the model that makes "trend," "seasonality," and "stationarity" concrete rather than abstract.
+So `ARIMA(1,1,1)` means: difference once to remove trend, then predict using 1 lag of the (differenced) series and 1 lag of past forecast error.
+
+`auto_arima` (from the `pmdarima` package) automates this search instead of reading ACF/PACF plots by eye. Worth knowing it exists — but understanding what it's actually searching *over* is what the ACF/PACF section above is for.
+
+**Honest modern note.** For a lot of real business forecasting — especially with multiple known external drivers like promotions, holidays, or price — gradient-boosted trees or a neural net fed engineered lag/rolling-window features (see `pandas-practice.md`'s `.diff()`/`.shift()`) often beat classical ARIMA in practice. Meta's **Prophet** library automates trend+seasonality decomposition specifically to be robust to messy real-world data — missing days, holiday effects — with less manual tuning than ARIMA needs.
+
+Still, ARIMA is the right thing to *understand* first. It's the model that makes "trend," "seasonality," and "stationarity" concrete instead of abstract.
 
 ## Evaluating a forecast correctly
 
-**The single most important rule: split chronologically, never randomly.** A random train/test split lets the model train on data from *after* the point it's being asked to predict — for a plain tabular model that's a subtle leakage risk (`common-issues-failure-modes.md`); for a time series model it's not subtle at all, since the entire model is built on "what came before predicts what comes next," and a random split casually hands it the actual future.
+**The single most important rule: split chronologically, never randomly.**
 
-**Walk-forward (expanding window) validation** — the standard fix, train only on the past relative to each test point, then slide forward:
+A random train/test split lets the model train on data from *after* the point it's being asked to predict. For a plain tabular model, that's a subtle leakage risk (`common-issues-failure-modes.md`). For a time series model, it's not subtle at all — the entire model is built on "what came before predicts what comes next," and a random split just hands it the actual future.
+
+**Walk-forward (expanding window) validation** is the standard fix. Train only on the past relative to each test point, then slide forward:
 ```
 Fold 1:  [ train: t0 t1 t2 ]              [ test: t3 ]
 Fold 2:  [ train: t0 t1 t2 t3 ]           [ test: t4 ]
 Fold 3:  [ train: t0 t1 t2 t3 t4 ]        [ test: t5 ]
 Fold 4:  [ train: t0 t1 t2 t3 t4 t5 ]     [ test: t6 ]
 ```
-Each fold's training window only ever grows forward in time and never includes anything from its own test point onward — the time-series equivalent of `sklearn.model_selection.TimeSeriesSplit`.
+Each fold's training window only grows forward in time. It never includes anything from its own test point onward. This is the time-series equivalent of `sklearn.model_selection.TimeSeriesSplit`.
 
-**MAPE (Mean Absolute Percentage Error)** — the most commonly reported forecast-accuracy metric, because it's scale-independent (a % error, comparable across series with totally different units/magnitudes):
+**MAPE (Mean Absolute Percentage Error)** is the most commonly reported forecast-accuracy metric, because it's scale-independent — a percentage error, so it's comparable across series with totally different units or magnitudes:
 ```
 MAPE = average( |actual − forecast| / |actual| ) × 100
 
@@ -154,31 +184,30 @@ actual = [120, 130], forecast = [115, 140]
 |130−140|/130 = 10/130  = 0.0769
 MAPE = average(0.0417, 0.0769) × 100 ≈ 5.93%
 ```
-(RMSE is the other common option — same formula as everywhere else on this hub, just applied to forecast errors instead of model residuals; it's in absolute units rather than a percentage, so it's less comparable across series but more sensitive to a few very large misses.)
+(RMSE is the other common option. Same formula as everywhere else on this hub, just applied to forecast errors instead of model residuals. It's in absolute units rather than a percentage, so it's less comparable across series, but more sensitive to a few very large misses.)
 
 ## Practice Q&A (Self-Test)
 
 ### Why does first-differencing remove the trend in the worked example but leave the seasonal swing still visibly there?
-First-differencing computes `raw(t) − raw(t−1)`. The trend is linear (constant +5 per quarter), so subtracting consecutive values cancels it down to that same constant every time. The seasonal component isn't constant step-to-step — it's a repeating pattern (`+10, −5, −10, +5, ...`) — so subtracting adjacent values doesn't cancel it, it just shifts it into a different (still oscillating) shape. Removing a repeating pattern specifically requires differencing at a lag equal to the period (seasonal differencing), not lag 1.
+First-differencing computes `raw(t) − raw(t−1)`. The trend is linear — a constant +5 per quarter — so subtracting consecutive values cancels it down to that same constant every time. The seasonal component isn't constant step-to-step. It's a repeating pattern (`+10, −5, −10, +5, ...`), so subtracting adjacent values doesn't cancel it out — it just shifts it into a different, still-oscillating shape. Removing a repeating pattern specifically needs differencing at a lag equal to the period (seasonal differencing), not lag 1.
 
 ### The centered moving average in the decomposition example produces no trend value for t=0, 1, 6, or 7. Why is that unavoidable, not a bug?
-A centered moving average of window size 4 needs neighbors on both sides to average around a given point — at the very start or end of the series, there simply aren't enough real neighboring points to complete the window. This is a structural property of centered moving averages, not a coding mistake; it's part of why decomposition-based methods need a reasonably long series relative to the seasonal period to be useful at all.
+A centered moving average with window size 4 needs neighbors on both sides to average around a given point. At the very start or end of the series, there simply aren't enough real neighboring points to complete the window. This is a structural property of centered moving averages, not a coding mistake. It's part of why decomposition-based methods need a reasonably long series relative to the seasonal period to be useful at all.
 
 ### A PACF plot cuts off sharply after lag 2, and the ACF plot decays gradually across many lags. What ARIMA order does this suggest, and why that one specifically and not the reverse?
-This points to AR(2) — `p=2`, `q=0`. A sharp PACF cutoff after lag p is the signature of an autoregressive process of order p (once you've accounted for the direct effect of the p most recent values, nothing further back adds new direct information, which is exactly what "partial" autocorrelation isolates); a gradually decaying ACF is consistent with that same AR structure, since each lag's raw correlation still carries some indirect echo of the trend propagating through the AR terms. The reverse pattern (ACF cuts off sharply, PACF decays gradually) is the signature of an MA process instead.
+This points to AR(2) — `p=2`, `q=0`. A sharp PACF cutoff after lag p is the signature of an autoregressive process of order p: once you've accounted for the direct effect of the p most recent values, nothing further back adds new direct information, which is exactly what "partial" autocorrelation isolates. A gradually decaying ACF is consistent with that same AR structure, since each lag's raw correlation still carries some indirect echo of the trend propagating through the AR terms. The reverse pattern — ACF cuts off sharply, PACF decays gradually — is the signature of an MA process instead.
 
 ### Why is a random 80/20 train/test split actively worse for time series than it is for, say, a tabular churn-prediction dataset?
-For an ordinary tabular dataset, rows are assumed independent, so a random split is a reasonable way to get a representative test set. A time series is built on the assumption that order carries information — a random split lets some training rows sit chronologically AFTER some test rows, meaning the model can train on data from the actual future relative to what it's being scored on. That's not just an unfair advantage the way ordinary leakage is — it directly defeats the entire premise being tested (can this model predict what hasn't happened yet), since it never actually has to.
+For an ordinary tabular dataset, rows are assumed independent, so a random split is a reasonable way to get a representative test set. A time series is built on the assumption that order carries information. A random split lets some training rows sit chronologically AFTER some test rows — meaning the model can train on data from the actual future relative to what it's being scored on. That's not just an unfair advantage the way ordinary leakage is. It directly defeats the entire premise being tested — can this model predict what hasn't happened yet — since it never actually has to.
 
 ### Why would you check the PACF/ACF plots at all instead of just always running `auto_arima` and accepting whatever order it picks?
-`auto_arima` automates a search over plausible (p,d,q) combinations by minimizing an information criterion (like AIC), which is fast and often good enough — but it's a search over a space, not an understanding of why a particular order fits. Reading the ACF/PACF yourself tells you *why* the process behaves the way it does (a genuine AR(2) dependency vs. an MA(1) shock structure), which matters when the automated search picks something surprising, when you need to explain the model's behavior to someone else, or when the series has a structural break `auto_arima` doesn't know to flag.
-
+`auto_arima` automates a search over plausible (p,d,q) combinations by minimizing an information criterion like AIC. That's fast and often good enough. But it's a search over a space, not an understanding of why a particular order fits. Reading the ACF/PACF yourself tells you *why* the process behaves the way it does — a genuine AR(2) dependency versus an MA(1) shock structure — which matters when the automated search picks something surprising, when you need to explain the model's behavior to someone else, or when the series has a structural break that `auto_arima` doesn't know to flag.
 
 ---
 
 ## Video-Sourced Practice MCQs (Set 2)
 
-A second practice set for Time Series, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube ARIMA-interview-prep video, then written up as fully original multiple-choice questions here. These cover ground the sections above don't already go deep on -- Box-Cox variance stabilization, why ACF/PACF order-picking still needs joint verification, the parsimony principle and AIC as a formal tool for it, exactly what "white noise residuals" means and what autocorrelated residuals imply, and why ARIMA is preferred for short-term horizons specifically (versus regression for longer ones).
+A second practice set for Time Series, built the same way as this hub's NCA-GENL community bank: topics checked against a real YouTube ARIMA-interview-prep video, then written up as fully original multiple-choice questions here. These cover ground the sections above don't already go deep on: Box-Cox variance stabilization, why ACF/PACF order-picking still needs joint verification, the parsimony principle and AIC as a formal tool for it, exactly what "white noise residuals" means and what autocorrelated residuals imply, and why ARIMA is preferred for short-term horizons specifically (versus regression for longer ones).
 
 <script type="application/json" class="topic-quiz-data" data-title="Time Series Analysis (Set 2)">
 [
